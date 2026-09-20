@@ -30,20 +30,37 @@ jobs:
         run: npm run build
 
       - name: Sync Capacitor iOS
-        run: npx cap sync ios
+        run: |
+          npx cap sync ios
+          cd ios/App
+          if [ -f "Podfile" ]; then
+            pod install || true
+          fi
 
       - name: Build iOS App Archive
         run: |
           cd ios/App
-          xcodebuild -project App.xcodeproj \
-                     -scheme App \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     -archivePath App.xcarchive \
-                     archive \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO
+          if [ -d "App.xcworkspace" ]; then
+            xcodebuild -workspace App.xcworkspace \
+                       -scheme App \
+                       -destination 'generic/platform=iOS' \
+                       -configuration Release \
+                       -archivePath App.xcarchive \
+                       archive \
+                       CODE_SIGN_IDENTITY="" \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGNING_ALLOWED=NO
+          else
+            xcodebuild -project App.xcodeproj \
+                       -scheme App \
+                       -destination 'generic/platform=iOS' \
+                       -configuration Release \
+                       -archivePath App.xcarchive \
+                       archive \
+                       CODE_SIGN_IDENTITY="" \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGNING_ALLOWED=NO
+          fi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
