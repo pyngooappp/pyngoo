@@ -35,6 +35,9 @@ jobs:
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
+      - name: Re-apply AdMob Swift Patch After Sync
+        run: node scratch/patch_admob.cjs
+
       - name: Select Official Xcode Release
         uses: maxim-lobanov/setup-xcode@v1
         with:

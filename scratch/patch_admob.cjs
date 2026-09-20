@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 function processDir(dir) {
+  if (!fs.existsSync(dir)) return;
   const files = fs.readdirSync(dir);
   for (const file of files) {
     const fullPath = path.join(dir, file);
@@ -11,39 +12,28 @@ function processDir(dir) {
       let content = fs.readFileSync(fullPath, 'utf8');
       let original = content;
 
-      // Patch call.reject("msg") -> call.reject("msg", nil, nil, nil)
+      // 1. Fix call.reject(...) calls to pass explicit typed nil for ambiguous Swift 5 overloads
       content = content.replace(/call\.reject\(([^,\)]+)\)/g, (match, p1) => {
-        return `call.reject(${p1}, nil, nil, nil)`;
+        if (p1.includes('nil as String?')) return match;
+        return `call.reject(${p1}, nil as String?, nil as Error?, nil)`;
       });
 
-      // Patch call.getString("key") -> call.getString("key", nil)
+      // 2. Fix call.getString("key") calls where 2nd argument is required by JSTypes in Capacitor 8
       content = content.replace(/call\.getString\(([^,\)]+)\)/g, (match, p1) => {
-        return `call.getString(${p1}, nil)`;
+        if (p1.includes(',')) return match;
+        return `call.getString(${p1}, "")`;
       });
 
-      // Patch call.getBool("key") -> call.getBool("key", nil)
+      // 3. Fix call.getBool("key") calls
       content = content.replace(/call\.getBool\(([^,\)]+)\)/g, (match, p1) => {
-        return `call.getBool(${p1}, nil)`;
+        if (p1.includes(',')) return match;
+        return `call.getBool(${p1}, false)`;
       });
 
-      // Patch call.getInt("key") -> call.getInt("key", nil)
+      // 4. Fix call.getInt("key") calls
       content = content.replace(/call\.getInt\(([^,\)]+)\)/g, (match, p1) => {
-        return `call.getInt(${p1}, nil)`;
-      });
-
-      // Patch call.getFloat("key") -> call.getFloat("key", nil)
-      content = content.replace(/call\.getFloat\(([^,\)]+)\)/g, (match, p1) => {
-        return `call.getFloat(${p1}, nil)`;
-      });
-
-      // Patch call.getObject("key") -> call.getObject("key", nil)
-      content = content.replace(/call\.getObject\(([^,\)]+)\)/g, (match, p1) => {
-        return `call.getObject(${p1}, nil)`;
-      });
-
-      // Patch call.getArray("key") -> call.getArray("key", nil)
-      content = content.replace(/call\.getArray\(([^,\)]+)\)/g, (match, p1) => {
-        return `call.getArray(${p1}, nil)`;
+        if (p1.includes(',')) return match;
+        return `call.getInt(${p1}, 0)`;
       });
 
       if (content !== original) {
@@ -54,9 +44,9 @@ function processDir(dir) {
   }
 }
 
-const targetDir = path.join(__dirname, '..', 'node_modules', '@capacitor-community', 'admob', 'ios', 'Sources', 'AdMobPlugin');
-if (fs.existsSync(targetDir)) {
-  processDir(targetDir);
-} else {
-  console.log('Target directory not found:', targetDir);
-}
+const targets = [
+  path.join(__dirname, '..', 'node_modules', '@capacitor-community', 'admob'),
+  path.join(__dirname, '..', 'ios')
+];
+
+targets.forEach(processDir);
