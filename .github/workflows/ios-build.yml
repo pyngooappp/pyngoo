@@ -57,9 +57,9 @@ jobs:
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           
-          # Extract UUID & Name from the provisioning profile plist
-          PROV_UUID=$(security cms -D -i $PP_PATH | grep -A1 UUID | grep string | sed 's/<[^>]*>//g' | tr -d ' \t')
-          PROV_NAME=$(security cms -D -i $PP_PATH | grep -A1 "<key>Name</key>" | grep string | head -n1 | sed 's/<[^>]*>//g' | sed 's/^[ \t]*//')
+          # Extract UUID & Name from the provisioning profile plist cleanly without tabs
+          PROV_UUID=$(security cms -D -i $PP_PATH | grep -A1 "<key>UUID</key>" | grep string | head -n1 | sed 's/<[^>]*>//g' | tr -d '\r\n\t ')
+          PROV_NAME=$(security cms -D -i $PP_PATH | grep -A1 "<key>Name</key>" | grep string | head -n1 | sed 's/<[^>]*>//g' | tr -d '\r\n\t' | sed 's/^ *//;s/ *$//')
 
           echo "Found Provisioning Profile: Name='$PROV_NAME', UUID='$PROV_UUID'"
           
