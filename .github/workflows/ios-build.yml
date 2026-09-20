@@ -56,7 +56,18 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | tr -d '"')
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          
+          # Extract UUID & Name from the provisioning profile plist
+          PROV_UUID=$(security cms -D -i $PP_PATH | grep -A1 UUID | grep string | sed 's/<[^>]*>//g' | tr -d ' \t')
+          PROV_NAME=$(security cms -D -i $PP_PATH | grep -A1 "<key>Name</key>" | grep string | head -n1 | sed 's/<[^>]*>//g' | sed 's/^[ \t]*//')
+
+          echo "Found Provisioning Profile: Name='$PROV_NAME', UUID='$PROV_UUID'"
+          
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/${PROV_UUID}.mobileprovision
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.mobileprovision
+
+          echo "PROV_UUID=$PROV_UUID" >> $GITHUB_ENV
+          echo "PROV_NAME=$PROV_NAME" >> $GITHUB_ENV
 
       - name: Build and Archive iOS App (.ipa)
         run: |
@@ -71,8 +82,13 @@ jobs:
               <string>app-store</string>
               <key>teamID</key>
               <string>FX59PMTS6R</string>
-              <key>compileBitcode</key>
-              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>app.pyngoo.chat</key>
+                  <string>${{ env.PROV_NAME }}</string>
+              </dict>
           </dict>
           </plist>
           EOF
@@ -84,6 +100,9 @@ jobs:
                        -configuration Release \
                        -archivePath App.xcarchive \
                        DEVELOPMENT_TEAM="FX59PMTS6R" \
+                       CODE_SIGN_STYLE="Manual" \
+                       CODE_SIGN_IDENTITY="Apple Distribution" \
+                       PROVISIONING_PROFILE_SPECIFIER="${{ env.PROV_NAME }}" \
                        archive
           else
             xcodebuild -project App.xcodeproj \
@@ -92,6 +111,9 @@ jobs:
                        -configuration Release \
                        -archivePath App.xcarchive \
                        DEVELOPMENT_TEAM="FX59PMTS6R" \
+                       CODE_SIGN_STYLE="Manual" \
+                       CODE_SIGN_IDENTITY="Apple Distribution" \
+                       PROVISIONING_PROFILE_SPECIFIER="${{ env.PROV_NAME }}" \
                        archive
           fi
 
