@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout Code
@@ -30,12 +30,7 @@ jobs:
         run: npx vite build
 
       - name: Sync Capacitor iOS
-        run: |
-          npx cap sync ios
-          cd ios/App
-          if [ -f "Podfile" ]; then
-            pod install || true
-          fi
+        run: npx cap sync ios
 
       - name: Build iOS App (.app)
         run: |
