@@ -12,14 +12,12 @@ function processDir(dir) {
       let content = fs.readFileSync(fullPath, 'utf8');
       let original = content;
 
-      // 1. Fix call.reject(...) calls to pass explicit empty dictionary for 4th parameter [String: Any]
-      // Matches call.reject(...) with 1 argument or previous broken patches
+      // 1. Fix call.reject(...) calls with 100% explicit contextual types for ALL optional parameters
       content = content.replace(/call\.reject\(([^\)]+)\)/g, (match, p1) => {
-        // Extract first string parameter
         const firstArgMatch = p1.match(/^\s*("[^"]+"|\w+)/);
         if (firstArgMatch) {
           const msg = firstArgMatch[1];
-          return `call.reject(${msg}, nil, nil, [:])`;
+          return `call.reject(${msg}, nil as String?, nil as Error?, nil as PluginCallResultData?)`;
         }
         return match;
       });
