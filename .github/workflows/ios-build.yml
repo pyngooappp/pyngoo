@@ -35,18 +35,32 @@ jobs:
       - name: Build iOS App (.app)
         run: |
           cd ios/App
-          xcodebuild -project App.xcodeproj \
-                     -scheme App \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     -derivedDataPath build \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO \
-                     build
+          if [ -d "App.xcworkspace" ]; then
+            xcodebuild -workspace App.xcworkspace \
+                       -scheme App \
+                       -sdk iphonesimulator \
+                       -destination 'generic/platform=iOS Simulator' \
+                       -configuration Release \
+                       -derivedDataPath build \
+                       CODE_SIGNING_ALLOWED=NO \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGN_IDENTITY="" \
+                       build
+          else
+            xcodebuild -project App.xcodeproj \
+                       -scheme App \
+                       -sdk iphonesimulator \
+                       -destination 'generic/platform=iOS Simulator' \
+                       -configuration Release \
+                       -derivedDataPath build \
+                       CODE_SIGNING_ALLOWED=NO \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGN_IDENTITY="" \
+                       build
+          fi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: pyngoo-ios-app
-          path: ios/App/build/Build/Products/Release-iphoneos/App.app
+          path: ios/App/build/Build/Products/Release-iphonesimulator/App.app
