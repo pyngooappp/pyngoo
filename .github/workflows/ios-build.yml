@@ -26,6 +26,9 @@ jobs:
       - name: Install Dependencies
         run: npm install --legacy-peer-deps --force
 
+      - name: Patch AdMob Plugin for Xcode 16.2 Swift Compatibility
+        run: node scratch/patch_admob.cjs
+
       - name: Build Web App
         env:
           VITE_SUPABASE_URL: https://rdqcwzosmikusketghyq.supabase.co
