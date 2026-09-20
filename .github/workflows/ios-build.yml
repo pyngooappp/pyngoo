@@ -1,4 +1,4 @@
-name: Build and Deploy to TestFlight
+name: Build iOS App
 
 on:
   push:
@@ -68,7 +68,6 @@ jobs:
           path: ios/App/build/Build/Products/Debug-iphonesimulator/App.app
 
       - name: Upload Build to TestFlight
-        if: secrets.APP_STORE_PRIVATE_KEY != ''
         uses: apple-actions/upload-testflight-build@v1
         with:
           app-path: ios/App/build/Build/Products/Debug-iphonesimulator/App.app
