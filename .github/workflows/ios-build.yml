@@ -27,43 +27,26 @@ jobs:
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcWN3em9zbWlrdXNrZXRnaHlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDY2OTQsImV4cCI6MjEwMjcyMjY5NH0.bWBNSXqz3aLCsst0JxBTLt1tbFfCygv0WzUeGasvtdg
           VITE_AGORA_APP_ID: 42f01590d5f14201a201b5d85e2f944a
           VITE_AGORA_APP_CERTIFICATE: 22014c05e2db4ee8880e03bf67cdb617
-        run: npm run build
+        run: npx vite build
 
       - name: Sync Capacitor iOS
-        run: |
-          npx cap sync ios
-          cd ios/App
-          if [ -f "Podfile" ]; then
-            pod install || true
-          fi
+        run: npx cap sync ios
 
-      - name: Build iOS App Archive
+      - name: Build iOS App (.app)
         run: |
           cd ios/App
-          if [ -d "App.xcworkspace" ]; then
-            xcodebuild -workspace App.xcworkspace \
-                       -scheme App \
-                       -destination 'generic/platform=iOS' \
-                       -configuration Release \
-                       -archivePath App.xcarchive \
-                       archive \
-                       CODE_SIGN_IDENTITY="" \
-                       CODE_SIGNING_REQUIRED=NO \
-                       CODE_SIGNING_ALLOWED=NO
-          else
-            xcodebuild -project App.xcodeproj \
-                       -scheme App \
-                       -destination 'generic/platform=iOS' \
-                       -configuration Release \
-                       -archivePath App.xcarchive \
-                       archive \
-                       CODE_SIGN_IDENTITY="" \
-                       CODE_SIGNING_REQUIRED=NO \
-                       CODE_SIGNING_ALLOWED=NO
-          fi
+          xcodebuild -project App.xcodeproj \
+                     -scheme App \
+                     -sdk iphoneos \
+                     -configuration Release \
+                     -derivedDataPath build \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO \
+                     build
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pyngoo-ios-archive
-          path: ios/App/App.xcarchive
+          name: pyngoo-ios-app
+          path: ios/App/build/Build/Products/Release-iphoneos/App.app
