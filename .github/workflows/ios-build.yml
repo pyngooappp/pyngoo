@@ -103,6 +103,7 @@ jobs:
                        CODE_SIGN_STYLE="Manual" \
                        CODE_SIGN_IDENTITY="Apple Distribution" \
                        PROVISIONING_PROFILE_SPECIFIER="${{ env.PROV_NAME }}" \
+                       CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
                        archive
           else
             xcodebuild -project App.xcodeproj \
@@ -114,6 +115,7 @@ jobs:
                        CODE_SIGN_STYLE="Manual" \
                        CODE_SIGN_IDENTITY="Apple Distribution" \
                        PROVISIONING_PROFILE_SPECIFIER="${{ env.PROV_NAME }}" \
+                       CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
                        archive
           fi
 
