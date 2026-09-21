@@ -54,7 +54,7 @@
     (function() {
       var hash = window.location.hash || '';
       var search = window.location.search || '';
-      var targetUrl = 'pyngoo://auth-callback' + hash + (search ? (hash ? '&' : '?') + search.replace(/^\?/, '') : '');
+      var targetUrl = 'pyngoo://auth-callback' + (search || '') + (hash || '');
 
       var btn = document.getElementById('returnBtn');
       if (btn) {

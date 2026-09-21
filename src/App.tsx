@@ -1088,7 +1088,8 @@ function App() {
             queryPart = rawUrl.split('?')[1] || '';
           }
 
-          const combinedParams = new URLSearchParams(hashPart || queryPart);
+          const combinedString = [hashPart, queryPart].filter(Boolean).join('&');
+          const combinedParams = new URLSearchParams(combinedString);
           const accessToken = combinedParams.get('access_token');
           const refreshToken = combinedParams.get('refresh_token');
 
