@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout Code
@@ -71,13 +71,35 @@ jobs:
 
       - name: Build and Archive iOS App (.ipa)
         run: |
-          xcodebuild -version
+          echo "=== Discovering available Xcode versions ==="
+          ls -d /Applications/Xcode* || true
 
+          SELECTED_XCODE=""
+          # Apple requires apps to be built with Xcode 26 / iOS 26 SDK or later (ITMS-90725)
+          for app in /Applications/Xcode_26*.app /Applications/Xcode_16*.app /Applications/Xcode.app; do
+            if [ -d "$app" ]; then
+              echo "Testing $app ..."
+              if "$app/Contents/Developer/usr/bin/xcodebuild" -showsdks 2>&1 | grep -q "iphoneos"; then
+                SELECTED_XCODE="$app"
+                echo "Found matching Xcode with iOS Device SDK: $SELECTED_XCODE"
+                break
+              fi
+            fi
+          done
+
+          if [ -n "$SELECTED_XCODE" ]; then
+            echo "Activating $SELECTED_XCODE..."
+            sudo xcode-select -s "$SELECTED_XCODE/Contents/Developer"
+          fi
+
+          echo "=== Active Xcode Version ==="
+          xcodebuild -version
+          echo "=== Available SDKs ==="
+          xcodebuild -showsdks
 
           cd ios/App
           
           cat <<EOF > ExportOptions.plist
-
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -142,6 +164,7 @@ jobs:
           api-key-id: ${{ secrets.APP_STORE_KEY_ID }}
           api-private-key: ${{ secrets.APP_STORE_PRIVATE_KEY }}
           wait-for-processing: false
+
       - name: Inspect App Store Connect Builds Status
         env:
           KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
@@ -170,24 +193,40 @@ jobs:
           const sig = sign.sign({ key: privateKey, dsaEncoding: 'ieee-p1363' }, 'base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
           const token = header + '.' + payload + '.' + sig;
 
-          https.get('https://api.appstoreconnect.apple.com/v1/apps', {
-            headers: { 'Authorization': 'Bearer ' + token, 'User-Agent': 'NodeJS' }
-          }, res => {
-            let data = '';
-            res.on('data', d => data += d);
-            res.on('end', () => {
-              console.log('=== APP STORE CONNECT /v1/apps STATUS ===', res.statusCode);
+          function apiGet(endpoint, cb) {
+            https.get('https://api.appstoreconnect.apple.com' + endpoint, {
+              headers: { 'Authorization': 'Bearer ' + token, 'User-Agent': 'NodeJS' }
+            }, res => {
+              let data = '';
+              res.on('data', d => data += d);
+              res.on('end', () => cb(res.statusCode, data));
+            });
+          }
+
+          apiGet('/v1/apps', (status, data) => {
+            console.log('=== APP STORE CONNECT /v1/apps STATUS ===', status);
+            try {
+              const json = JSON.parse(data);
+              if (json.data && json.data.length > 0) {
+                json.data.forEach(a => {
+                  console.log('APP:', a.id, '| Name:', a.attributes.name, '| BundleId:', a.attributes.bundleId);
+                });
+              }
+            } catch(e) {}
+
+            apiGet('/v1/builds?filter[app]=6814198055&sort=-uploadedDate&limit=5', (bStatus, bData) => {
+              console.log('=== RECENT TESTFLIGHT BUILDS STATUS ===', bStatus);
               try {
-                const json = JSON.parse(data);
-                if (json.data && json.data.length > 0) {
-                  json.data.forEach(a => {
-                    console.log('APP:', a.id, '| Name:', a.attributes.name, '| BundleId:', a.attributes.bundleId, '| SKU:', a.attributes.sku);
+                const bJson = JSON.parse(bData);
+                if (bJson.data && bJson.data.length > 0) {
+                  bJson.data.forEach(b => {
+                    console.log('BUILD:', b.id, '| Version:', b.attributes.version, '| State:', b.attributes.processingState, '| Uploaded:', b.attributes.uploadedDate);
                   });
                 } else {
-                  console.log('NO APPS FOUND IN THIS ACCOUNT:', JSON.stringify(json, null, 2));
+                  console.log('No builds found yet or still uploading.');
                 }
               } catch(e) {
-                console.log('RAW DATA:', data);
+                console.log('Error parsing builds:', bData);
               }
             });
           });
