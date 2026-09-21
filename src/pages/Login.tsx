@@ -709,6 +709,39 @@ export default function Login({ onLogin }: LoginProps) {
     redirectParams.set('p_auth_mode', currentMode);
 
     const isNative = Capacitor.isNativePlatform();
+
+    // 🍏 iOS Yerel Apple Girişi (Sıfır Safari, Sıfır Tarayıcı Barı - Doğrudan iOS Face ID / Apple Kimliği penceresi)
+    if (provider === 'apple' && isNative && Capacitor.getPlatform() === 'ios') {
+      try {
+        setLoading(true);
+        setError(null);
+        const { AppleSignIn, SignInScope } = await import('@capawesome/capacitor-apple-sign-in');
+        const appleRes = await AppleSignIn.signIn({
+          scopes: [SignInScope.Email, SignInScope.FullName]
+        });
+
+        if (appleRes?.idToken) {
+          const { data: authData, error: authErr } = await supabase.auth.signInWithIdToken({
+            provider: 'apple',
+            token: appleRes.idToken
+          });
+          if (authErr) throw authErr;
+          if (authData?.session) {
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (nativeAppleErr: any) {
+        console.warn("Yerel Apple Giriş hatası veya kullanıcı iptal etti:", nativeAppleErr);
+        const errMsg = (nativeAppleErr?.message || '').toLowerCase();
+        if (errMsg.includes('cancel') || errMsg.includes('iptal') || nativeAppleErr?.code === '1001') {
+          setLoading(false);
+          return;
+        }
+        // İptal edilmediyse yedek güvenli akışa geç
+      }
+    }
+
     // Mobilde HTTPS callback köprüsü üzerinden yönlendir (Harici Safari'ye atmadan uygulama içi alt kart açar)
     const redirectUri = isNative
       ? `https://www.pyngoo.app/oauth-callback.html?${redirectParams.toString()}`
@@ -732,8 +765,7 @@ export default function Login({ onLogin }: LoginProps) {
         setLoading(false);
         await Browser.open({
           url: data.url,
-          presentationStyle: 'popover',
-          windowName: '_blank'
+          presentationStyle: 'popover'
         });
       }
     } catch (err: any) {
@@ -1006,20 +1038,24 @@ export default function Login({ onLogin }: LoginProps) {
 
   return (
     <div className="login-container" style={{
-      minHeight: '100dvh',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       width: '100%',
+      height: '100%',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 'max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)) 16px',
-      position: 'relative',
-      overflowX: 'hidden',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      background: 'radial-gradient(circle at 50% 12%, #141838 0%, #080914 100%)'
+      padding: 'max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px',
+      overflow: 'hidden',
+      overscrollBehavior: 'none',
+      touchAction: 'none',
+      boxSizing: 'border-box'
     }}>
-      <div className="glow-circle glow-1" style={{ opacity: 0.45 }}></div>
-      <div className="glow-circle glow-2" style={{ opacity: 0.45 }}></div>
+      <div className="glow-circle glow-1"></div>
+      <div className="glow-circle glow-2"></div>
 
       {/* Sağ Üst Köşe: Şık Dil Seçici Kapsülü */}
       <div style={{ position: 'absolute', top: 'max(16px, env(safe-area-inset-top))', right: '16px', zIndex: 110 }} ref={dropdownRef}>
@@ -1115,86 +1151,46 @@ export default function Login({ onLogin }: LoginProps) {
         )}
       </div>
 
-      {/* Ana Mobil Kart (Azar / Chamet Stili) */}
-      <div className="login-card" style={{
-        padding: '28px 20px 24px 20px',
-        width: '100%',
-        maxWidth: '400px',
-        borderRadius: '28px',
-        background: 'rgba(15, 17, 36, 0.85)',
-        backdropFilter: 'blur(30px)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        boxShadow: '0 25px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(0, 242, 254, 0.12)',
-        position: 'relative',
-        margin: 'auto 0',
+      <div className="login-card glassmorphism" style={{ 
+        padding: '28px 24px', 
+        width: '92%', 
+        maxWidth: '400px', 
+        borderRadius: '24px',
+        margin: '0 auto',
         boxSizing: 'border-box'
       }}>
-
+        
         {/* Logo ve Başlık */}
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <div style={{ marginBottom: '10px', display: 'inline-block', position: 'relative' }}>
-            <img 
-              src="/logo.png" 
-              alt="Pyngoo" 
-              style={{ 
-                width: '68px', 
-                height: '68px', 
-                borderRadius: '20px',
-                boxShadow: '0 10px 30px rgba(0, 242, 254, 0.4), 0 0 20px rgba(138, 43, 226, 0.3)'
-              }} 
-            />
+        <div className="logo-container" style={{ textAlign: 'center', marginBottom: '16px' }}>
+          <div style={{ marginBottom: '8px' }}>
+            <img src="/logo.png" alt="Pyngoo Logo" className="pyngoo-logo-image" style={{ width: '60px', height: '60px', borderRadius: '16px' }} />
           </div>
-          <h1 style={{ 
-            fontSize: '2.1rem', 
-            margin: 0, 
-            fontWeight: '900', 
-            letterSpacing: '-0.5px',
-            background: 'linear-gradient(135deg, #ffffff 60%, #00f2fe 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
-          }}>
-            Pyngoo
-          </h1>
-          <p style={{ fontSize: '0.84rem', color: 'rgba(255, 255, 255, 0.65)', marginTop: '4px', fontWeight: '500' }}>
+          <h1 style={{ fontSize: '2rem', margin: 0, fontWeight: '900', letterSpacing: '-0.5px' }}>Pyngoo</h1>
+          <p className="subtitle" style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
             {isLoginMode ? t('login_subtitle_signin') : t('login_subtitle_signup')}
           </p>
         </div>
 
-        {/* iOS Segmented Kontrol Stili Sekmeler (Kayıt Ol | Giriş Yap) */}
-        <div style={{
-          display: 'flex',
-          background: 'rgba(0, 0, 0, 0.45)',
-          border: '1px solid rgba(255, 255, 255, 0.10)',
-          padding: '4px',
-          borderRadius: '16px',
-          marginBottom: '20px',
-          gap: '4px'
-        }}>
-          <button
+        {/* Sekmeler: Giriş Yap | Kayıt Ol */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '20px' }}>
+          <button 
             type="button"
             onClick={() => { setIsLoginMode(false); setIsEmailMode(false); setError(null); setSuccess(null); }}
-            style={{
-              flex: 1,
-              padding: '10px 0',
-              borderRadius: '12px',
-              border: 'none',
-              background: !isLoginMode ? 'linear-gradient(135deg, #00f2fe, #4facfe)' : 'transparent',
-              color: !isLoginMode ? '#070a14' : 'rgba(255, 255, 255, 0.65)',
-              fontWeight: '800',
-              fontSize: '0.94rem',
-              cursor: 'pointer',
-              boxShadow: !isLoginMode ? '0 4px 18px rgba(0, 242, 254, 0.35)' : 'none',
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+            style={{ 
+              background: 'transparent', border: 'none', 
+              borderBottom: !isLoginMode ? '2px solid #00f2fe' : '2px solid transparent', 
+              color: !isLoginMode ? '#00f2fe' : 'rgba(255,255,255,0.5)', 
+              fontSize: '1.05rem', fontWeight: '800', paddingBottom: '6px', cursor: 'pointer', transition: 'all 0.2s' 
             }}
           >
             {t('login_signup')}
           </button>
-          <button
+          <button 
             type="button"
-            onClick={() => {
-              setIsLoginMode(true);
-              setIsEmailMode(false);
-              setError(null);
+            onClick={() => { 
+              setIsLoginMode(true); 
+              setIsEmailMode(false); 
+              setError(null); 
               setSuccess(null);
               localStorage.removeItem('pyngoo_just_registered');
               sessionStorage.removeItem('pyngoo_just_signed_up');
@@ -1202,115 +1198,22 @@ export default function Login({ onLogin }: LoginProps) {
               localStorage.removeItem('pending_gender');
               localStorage.removeItem('pending_role');
             }}
-            style={{
-              flex: 1,
-              padding: '10px 0',
-              borderRadius: '12px',
-              border: 'none',
-              background: isLoginMode ? 'linear-gradient(135deg, #00f2fe, #4facfe)' : 'transparent',
-              color: isLoginMode ? '#070a14' : 'rgba(255, 255, 255, 0.65)',
-              fontWeight: '800',
-              fontSize: '0.94rem',
-              cursor: 'pointer',
-              boxShadow: isLoginMode ? '0 4px 18px rgba(0, 242, 254, 0.35)' : 'none',
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+            style={{ 
+              background: 'transparent', border: 'none', 
+              borderBottom: isLoginMode ? '2px solid #00f2fe' : '2px solid transparent', 
+              color: isLoginMode ? '#00f2fe' : 'rgba(255,255,255,0.5)', 
+              fontSize: '1.05rem', fontWeight: '800', paddingBottom: '6px', cursor: 'pointer', transition: 'all 0.2s' 
             }}
           >
             {t('login_signin')}
           </button>
         </div>
 
-        {/* KAYIT OL MODU - DOKUNMATİK ALANLAR (Azar / Chamet Stili Cinsiyet ve Kullanıcı Adı) */}
+        {/* KAYIT OL MODU - ADIM 1 (Kullanıcı Adı, Cinsiyet) */}
         {!isLoginMode && !isEmailMode && (
-          <div style={{ animation: 'fadeIn 0.25s ease', marginBottom: '18px' }}>
+          <div style={{ animation: 'fadeIn 0.3s ease', marginBottom: '18px' }}>
             
-            {/* Cinsiyet Seçimi (2 Büyük Şık Kart - Azar / Tinder Stili) */}
-            <div style={{ display: 'flex', gap: '12px', width: '100%', marginBottom: '14px' }}>
-              <div 
-                onClick={() => {
-                  setGender('erkek');
-                  localStorage.setItem('pending_gender', 'erkek');
-                  localStorage.setItem('pyngoo_gender', 'erkek');
-                  localStorage.setItem('pending_role', 'user');
-                  try {
-                    document.cookie = "p_gen=erkek; path=/; max-age=86400; SameSite=Lax";
-                    document.cookie = "p_role=user; path=/; max-age=86400; SameSite=Lax";
-                  } catch (_) {}
-                }}
-                style={{ 
-                  flex: 1,
-                  padding: '14px 10px',
-                  borderRadius: '18px',
-                  border: gender === 'erkek' ? '2px solid #00f2fe' : '1px solid rgba(255,255,255,0.12)',
-                  background: gender === 'erkek' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(0,0,0,0.35)',
-                  boxShadow: gender === 'erkek' ? '0 0 20px rgba(0, 242, 254, 0.35)' : 'none',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              >
-                <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>👦</span>
-                <span style={{ 
-                  color: gender === 'erkek' ? '#00f2fe' : '#ffffff', 
-                  fontWeight: '800', 
-                  fontSize: '0.92rem' 
-                }}>
-                  {t('login_male')}
-                </span>
-              </div>
-
-              <div 
-                onClick={() => {
-                  setGender('kadin');
-                  localStorage.setItem('pending_gender', 'kadin');
-                  localStorage.setItem('pyngoo_gender', 'kadin');
-                  localStorage.setItem('pending_role', 'streamer');
-                  try {
-                    document.cookie = "p_gen=kadin; path=/; max-age=86400; SameSite=Lax";
-                    document.cookie = "p_role=streamer; path=/; max-age=86400; SameSite=Lax";
-                  } catch (_) {}
-                }}
-                style={{ 
-                  flex: 1,
-                  padding: '14px 10px',
-                  borderRadius: '18px',
-                  border: gender === 'kadin' ? '2px solid #ff2d75' : '1px solid rgba(255,255,255,0.12)',
-                  background: gender === 'kadin' ? 'rgba(255, 45, 117, 0.16)' : 'rgba(0,0,0,0.35)',
-                  boxShadow: gender === 'kadin' ? '0 0 20px rgba(255, 45, 117, 0.35)' : 'none',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '6px',
-                  position: 'relative',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              >
-                <span style={{ 
-                  position: 'absolute', top: '-8px', right: '6px',
-                  background: 'linear-gradient(135deg, #ff2d75, #ff6b8b)',
-                  color: 'white', fontSize: '0.62rem', fontWeight: '900',
-                  padding: '2px 7px', borderRadius: '10px', boxShadow: '0 2px 8px rgba(255,45,117,0.5)'
-                }}>
-                  ✨ AI
-                </span>
-                <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>👧</span>
-                <span style={{ 
-                  color: gender === 'kadin' ? '#ff2d75' : '#ffffff', 
-                  fontWeight: '800', 
-                  fontSize: '0.92rem' 
-                }}>
-                  {t('login_female')}
-                </span>
-              </div>
-            </div>
-
-            {/* Kullanıcı Adı (50px Yükseklik, Modern Pill Input) */}
+            {/* Kullanıcı Adı (Canlı Doğrulama ve Yeşil Tik / Kırmızı Uyarı) */}
             <div style={{ marginBottom: '12px' }}>
               <div style={{ position: 'relative' }}>
                 <input 
@@ -1327,29 +1230,23 @@ export default function Login({ onLogin }: LoginProps) {
                   }}
                   maxLength={20}
                   style={{ 
-                    width: '100%',
-                    height: '50px',
-                    padding: '0 44px 0 16px',
-                    borderRadius: '16px', 
+                    width: '100%', padding: '12px 42px 12px 16px', borderRadius: '12px', 
                     border: nicknameStatus === 'taken' 
                       ? '2px solid #ff2d55' 
                       : nicknameStatus === 'available' 
                       ? '2px solid #2ecc71' 
-                      : '1px solid rgba(255,255,255,0.18)', 
+                      : '1px solid rgba(255,255,255,0.2)', 
                     background: nicknameStatus === 'taken' 
-                      ? 'rgba(255, 45, 85, 0.12)' 
+                      ? 'rgba(255, 45, 85, 0.10)' 
                       : nicknameStatus === 'available' 
-                      ? 'rgba(46, 204, 113, 0.12)' 
-                      : 'rgba(0,0,0,0.35)', 
-                    color: 'white',
-                    fontSize: '0.95rem',
-                    fontWeight: '600',
-                    textAlign: 'center',
-                    outline: 'none',
+                      ? 'rgba(46, 204, 113, 0.10)' 
+                      : 'rgba(0,0,0,0.3)', 
+                    color: 'white', fontSize: '0.95rem',
+                    textAlign: 'center', outline: 'none',
                     boxShadow: nicknameStatus === 'taken' 
-                      ? '0 0 16px rgba(255, 45, 85, 0.35)' 
+                      ? '0 0 14px rgba(255, 45, 85, 0.35)' 
                       : nicknameStatus === 'available' 
-                      ? '0 0 16px rgba(46, 204, 113, 0.35)' 
+                      ? '0 0 14px rgba(46, 204, 113, 0.35)' 
                       : 'none',
                     transition: 'all 0.25s'
                   }}
@@ -1366,64 +1263,99 @@ export default function Login({ onLogin }: LoginProps) {
                     }} />
                   )}
                   {nicknameStatus === 'available' && (
-                    <CheckCircle size={20} color="#2ecc71" style={{ filter: 'drop-shadow(0 0 5px rgba(46,204,113,0.7))' }} />
+                    <CheckCircle size={20} color="#2ecc71" style={{ filter: 'drop-shadow(0 0 4px rgba(46,204,113,0.6))' }} />
                   )}
                   {nicknameStatus === 'taken' && (
-                    <XCircle size={20} color="#ff2d55" style={{ filter: 'drop-shadow(0 0 5px rgba(255,45,85,0.7))' }} />
+                    <XCircle size={20} color="#ff2d55" style={{ filter: 'drop-shadow(0 0 4px rgba(255,45,85,0.6))' }} />
                   )}
                   {nicknameStatus === 'error' && (
-                    <XCircle size={20} color="#f5a623" style={{ filter: 'drop-shadow(0 0 5px rgba(245,166,35,0.7))' }} />
+                    <XCircle size={20} color="#f5a623" style={{ filter: 'drop-shadow(0 0 4px rgba(245,166,35,0.6))' }} />
                   )}
                 </div>
               </div>
 
               {/* Canlı Durum Alt Uyarısı */}
               {nicknameStatus === 'taken' && (
-                <div style={{ color: '#ff416c', fontSize: '0.78rem', marginTop: '6px', textAlign: 'center', fontWeight: '800' }}>
+                <div style={{ color: '#ff416c', fontSize: '0.78rem', marginTop: '5px', textAlign: 'center', fontWeight: '800' }}>
                   {t('login_nickname_taken')}
                 </div>
               )}
               {nicknameStatus === 'available' && (
-                <div style={{ color: '#2ecc71', fontSize: '0.78rem', marginTop: '6px', textAlign: 'center', fontWeight: '800' }}>
+                <div style={{ color: '#2ecc71', fontSize: '0.78rem', marginTop: '5px', textAlign: 'center', fontWeight: '800' }}>
                   {t('login_nickname_available')}
                 </div>
               )}
               {nicknameStatus === 'error' && (
-                <div style={{ color: '#f5a623', fontSize: '0.78rem', marginTop: '6px', textAlign: 'center', fontWeight: '800' }}>
+                <div style={{ color: '#f5a623', fontSize: '0.78rem', marginTop: '5px', textAlign: 'center', fontWeight: '800' }}>
                   {t('login_nickname_check_failed', '⚠️ Kullanıcı adı kontrol edilemedi, lütfen tekrar deneyin.')}
                 </div>
               )}
               {nicknameStatus === 'too_short' && (
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.74rem', marginTop: '5px', textAlign: 'center' }}>
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.74rem', marginTop: '4px', textAlign: 'center' }}>
                   {t('login_nickname_min_chars')}
                 </div>
               )}
             </div>
 
-            {/* 18+ ve Sözleşme Onayı (Minimalist Satır) */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '10px', 
-              textAlign: 'left', 
-              background: 'rgba(0,0,0,0.25)', 
-              padding: '10px 14px', 
-              borderRadius: '14px', 
-              border: '1px solid rgba(255,255,255,0.06)' 
-            }}>
+            {/* Cinsiyet Butonları */}
+            <div style={{ display: 'flex', gap: '10px', width: '100%', marginBottom: '12px' }}>
+              <button 
+                type="button"
+                onClick={() => {
+                  setGender('erkek');
+                  localStorage.setItem('pending_gender', 'erkek');
+                  localStorage.setItem('pyngoo_gender', 'erkek');
+                  localStorage.setItem('pending_role', 'user');
+                  try {
+                    document.cookie = "p_gen=erkek; path=/; max-age=86400; SameSite=Lax";
+                    document.cookie = "p_role=user; path=/; max-age=86400; SameSite=Lax";
+                  } catch (_) {}
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px',
+                  border: gender === 'erkek' ? '2px solid #00f2fe' : '1px solid rgba(255,255,255,0.2)',
+                  background: gender === 'erkek' ? 'rgba(0, 242, 254, 0.2)' : 'rgba(0,0,0,0.25)',
+                  color: gender === 'erkek' ? '#00f2fe' : 'white', cursor: 'pointer', fontWeight: '800',
+                  fontSize: '0.92rem'
+                }}
+              >
+                👦 {t('login_male')}
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  setGender('kadin');
+                  localStorage.setItem('pending_gender', 'kadin');
+                  localStorage.setItem('pyngoo_gender', 'kadin');
+                  localStorage.setItem('pending_role', 'streamer');
+                  try {
+                    document.cookie = "p_gen=kadin; path=/; max-age=86400; SameSite=Lax";
+                    document.cookie = "p_role=streamer; path=/; max-age=86400; SameSite=Lax";
+                  } catch (_) {}
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px',
+                  border: gender === 'kadin' ? '2px solid #ff416c' : '1px solid rgba(255,255,255,0.2)',
+                  background: gender === 'kadin' ? 'rgba(255, 65, 108, 0.2)' : 'rgba(0,0,0,0.25)',
+                  color: gender === 'kadin' ? '#ff416c' : 'white', cursor: 'pointer', fontWeight: '800',
+                  fontSize: '0.92rem'
+                }}
+              >
+                👧 {t('login_female')}
+              </button>
+            </div>
+
+            {/* 18+ ve Sözleşme Onayı */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left', background: 'rgba(0,0,0,0.2)', padding: '8px 10px', borderRadius: '10px' }}>
               <input 
                 type="checkbox" 
                 id="kvkk" 
                 checked={isTermsAccepted} 
                 onChange={(e) => setIsTermsAccepted(e.target.checked)} 
-                style={{ cursor: 'pointer', width: '18px', height: '18px', accentColor: '#00f2fe' }}
+                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
               />
-              <label htmlFor="kvkk" style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', lineHeight: '1.4' }}>
-                <span style={{ color: '#00f2fe', fontWeight: '900', marginRight: '4px' }}>[18+]</span>
-                <span onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} style={{ textDecoration: 'underline', color: '#00f2fe' }}>{t('login_terms_label_terms')}</span>
-                {t('login_terms_label_and')}
-                <span onClick={(e) => { e.preventDefault(); setShowKvkkModal(true); }} style={{ textDecoration: 'underline', color: '#00f2fe' }}>{t('login_terms_label_privacy')}</span>
-                {t('login_terms_label_confirm')}
+              <label htmlFor="kvkk" style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', lineHeight: '1.3' }}>
+                <span style={{ color: '#00f2fe', fontWeight: 'bold' }}>[18+]</span> <span onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} style={{ textDecoration: 'underline', color: '#00f2fe' }}>{t('login_terms_label_terms')}</span>{t('login_terms_label_and')}<span onClick={(e) => { e.preventDefault(); setShowKvkkModal(true); }} style={{ textDecoration: 'underline', color: '#00f2fe' }}>{t('login_terms_label_privacy')}</span>{t('login_terms_label_confirm')}
               </label>
             </div>
           </div>
@@ -1451,18 +1383,17 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
         )}
 
-        {/* E-POSTA FORMU (isEmailMode true olduğunda açılır) */}
+        {/* E-POSTA FORMU */}
         {isEmailMode ? (
-          <form onSubmit={handleEmailFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', animation: 'fadeIn 0.25s ease' }}>
+          <form onSubmit={handleEmailFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <input 
               type="email" 
               placeholder={t('login_email')} 
               value={email}
               onChange={e => setEmail(e.target.value)}
               style={{ 
-                width: '100%', height: '50px', padding: '0 16px', borderRadius: '16px', 
-                border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', 
-                color: 'white', fontSize: '0.95rem', outline: 'none' 
+                width: '100%', padding: '13px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.2)', 
+                background: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '0.95rem', outline: 'none' 
               }}
               autoFocus
             />
@@ -1472,20 +1403,18 @@ export default function Login({ onLogin }: LoginProps) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               style={{ 
-                width: '100%', height: '50px', padding: '0 16px', borderRadius: '16px', 
-                border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', 
-                color: 'white', fontSize: '0.95rem', outline: 'none' 
+                width: '100%', padding: '13px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.2)', 
+                background: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '0.95rem', outline: 'none' 
               }}
             />
             <button 
               type="submit" 
               disabled={loading}
               style={{ 
-                width: '100%', height: '52px', borderRadius: '16px', border: 'none',
+                width: '100%', padding: '14px', borderRadius: '14px', border: 'none',
                 background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
                 color: '#050510', fontSize: '1rem', fontWeight: '900', cursor: 'pointer',
-                boxShadow: '0 8px 25px rgba(0, 242, 254, 0.4)', marginTop: '4px',
-                transition: 'all 0.2s'
+                boxShadow: '0 8px 25px rgba(0, 242, 254, 0.35)', marginTop: '4px'
               }}
             >
               {loading ? t('login_processing') : (!isLoginMode ? `🚀 ${t('login_signup')}` : `🔑 ${t('login_signin')}`)}
@@ -1494,7 +1423,7 @@ export default function Login({ onLogin }: LoginProps) {
               type="button" 
               onClick={() => { setIsEmailMode(false); setError(null); }}
               style={{ 
-                background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', 
+                background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', 
                 cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '6px' 
               }}
             >
@@ -1502,83 +1431,47 @@ export default function Login({ onLogin }: LoginProps) {
             </button>
           </form>
         ) : (
-          /* SOSYAL GİRİŞ BUTONLARI (Azar / Native iOS Mobil Buton Mimarisi) */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
-            {/* 🍏 APPLE İLE GİRİŞ / KAYIT BUTONU (AKTİF VE ÇALIŞIR DURUMDA!) */}
+          /* SOSYAL GİRİŞ BUTONLARI (Orijinal Google, Apple, E-posta Logolu) */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button 
               type="button"
               onClick={() => handleOAuthLogin('apple')}
               style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                gap: '10px', 
-                width: '100%',
-                height: '52px', 
-                borderRadius: '16px', 
-                border: '1px solid rgba(255,255,255,0.25)', 
-                background: '#000000', 
-                color: '#ffffff', 
-                fontWeight: '800', 
-                fontSize: '0.98rem', 
-                cursor: 'pointer',
-                boxShadow: '0 4px 18px rgba(0,0,0,0.5)',
-                transition: 'all 0.2s'
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', 
+                padding: '13px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.25)', 
+                background: '#000', color: 'white', fontWeight: '800', fontSize: '0.95rem', cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.4)', transition: 'all 0.2s'
               }}
             >
               <AppleIcon />
               <span>{isLoginMode ? t('login_btn_apple_signin') : t('login_btn_apple_signup')}</span>
             </button>
 
-            {/* 🔴 GOOGLE İLE GİRİŞ / KAYIT BUTONU (BEYAZ YEREL KART) */}
             <button 
               type="button"
               onClick={() => handleOAuthLogin('google')}
               style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                gap: '12px', 
-                width: '100%',
-                height: '52px', 
-                borderRadius: '16px', 
-                border: 'none', 
-                background: '#ffffff', 
-                color: '#111111', 
-                fontWeight: '800', 
-                fontSize: '0.98rem', 
-                cursor: 'pointer',
-                boxShadow: '0 4px 20px rgba(255,255,255,0.18)',
-                transition: 'all 0.2s'
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', 
+                padding: '13px', borderRadius: '14px', border: 'none', background: 'white', 
+                color: '#111', fontWeight: '800', fontSize: '0.95rem', cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(255,255,255,0.15)', transition: 'all 0.2s'
               }}
             >
               <GoogleIcon />
               <span>{isLoginMode ? t('login_btn_google_signin') : t('login_btn_google_signup')}</span>
             </button>
 
-            {/* ✉️ E-POSTA İLE DEVAM ET BUTONU */}
             <button 
               type="button"
               onClick={handleOpenEmailMode}
               style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                gap: '10px', 
-                width: '100%',
-                height: '50px', 
-                borderRadius: '16px', 
-                border: '1px solid rgba(0, 242, 254, 0.35)', 
-                background: 'rgba(0, 242, 254, 0.08)', 
-                color: '#ffffff', 
-                fontWeight: '800', 
-                fontSize: '0.95rem', 
-                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', 
+                padding: '13px', borderRadius: '14px', border: '1px solid rgba(0, 242, 254, 0.4)', 
+                background: 'rgba(0, 242, 254, 0.10)', color: 'white', fontWeight: '800', fontSize: '0.95rem', cursor: 'pointer',
                 transition: 'all 0.2s'
               }}
             >
-              <Mail size={19} color="#00f2fe" />
+              <Mail size={20} color="#00f2fe" />
               <span>{isLoginMode ? t('login_btn_email_signin') : t('login_btn_email_signup')}</span>
             </button>
           </div>

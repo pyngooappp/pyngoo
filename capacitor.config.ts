@@ -7,6 +7,9 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https'
   },
+  ios: {
+    scrollEnabled: false
+  },
   plugins: {
     AdMob: {
       appId: 'ca-app-pub-6163702675931285~1338244734'
