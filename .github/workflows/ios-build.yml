@@ -166,21 +166,21 @@ jobs:
           const sig = sign.sign({ key: privateKey, dsaEncoding: 'ieee-p1363' }, 'base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
           const token = header + '.' + payload + '.' + sig;
 
-          https.get('https://api.appstoreconnect.apple.com/v1/builds?include=app&limit=10', {
+          https.get('https://api.appstoreconnect.apple.com/v1/apps', {
             headers: { 'Authorization': 'Bearer ' + token, 'User-Agent': 'NodeJS' }
           }, res => {
             let data = '';
             res.on('data', d => data += d);
             res.on('end', () => {
-              console.log('=== APP STORE CONNECT API STATUS ===', res.statusCode);
+              console.log('=== APP STORE CONNECT /v1/apps STATUS ===', res.statusCode);
               try {
                 const json = JSON.parse(data);
                 if (json.data && json.data.length > 0) {
-                  json.data.forEach(b => {
-                    console.log('BUILD:', b.id, '| Version:', b.attributes.version, '| State:', b.attributes.processingState, '| Uploaded:', b.attributes.uploadedDate, '| MinOS:', b.attributes.minOsVersion);
+                  json.data.forEach(a => {
+                    console.log('APP:', a.id, '| Name:', a.attributes.name, '| BundleId:', a.attributes.bundleId, '| SKU:', a.attributes.sku);
                   });
                 } else {
-                  console.log('API DATA EMPTY OR ERROR:', JSON.stringify(json, null, 2));
+                  console.log('NO APPS FOUND IN THIS ACCOUNT:', JSON.stringify(json, null, 2));
                 }
               } catch(e) {
                 console.log('RAW DATA:', data);
