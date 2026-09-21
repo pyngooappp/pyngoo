@@ -4,11 +4,14 @@ const config: CapacitorConfig = {
   appId: 'app.pyngoo.chat',
   appName: 'Pyngoo',
   webDir: 'dist',
+  backgroundColor: '#0f0c29',
   server: {
     androidScheme: 'https'
   },
   ios: {
-    scrollEnabled: false
+    scrollEnabled: false,
+    contentInset: 'always',
+    backgroundColor: '#0f0c29'
   },
   plugins: {
     AdMob: {
