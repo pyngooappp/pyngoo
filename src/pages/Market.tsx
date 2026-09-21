@@ -693,6 +693,8 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       color: '#fff',
       paddingBottom: '110px',
       overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
+      touchAction: 'pan-y',
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       {/* 1. ÜST BAR & BAŞLIK */}

@@ -9,7 +9,7 @@ const config: CapacitorConfig = {
     androidScheme: 'https'
   },
   ios: {
-    scrollEnabled: false,
+    scrollEnabled: true,
     contentInset: 'always',
     backgroundColor: '#0f0c29'
   },

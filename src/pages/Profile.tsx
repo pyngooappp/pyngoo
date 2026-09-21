@@ -390,7 +390,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
   }
 
   return (
-    <div className="home-container" style={{ paddingBottom: '110px', overflowY: 'auto' }}>
+    <div className="home-container" style={{ paddingBottom: '110px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
       
       {/* 1. PROFİL KART BAŞLIĞI */}
       <header className="home-header glassmorphism" style={{
