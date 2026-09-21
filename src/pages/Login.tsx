@@ -1094,6 +1094,89 @@ export default function Login({ onLogin }: LoginProps) {
     startCamera();
   };
 
+  const renderLanguageDropdown = () => (
+    <div style={{ marginBottom: '12px', position: 'relative', width: '100%' }} ref={dropdownRef}>
+      <div 
+        onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
+        style={{
+          width: '100%', padding: '10px 14px', borderRadius: '12px',
+          border: isCountryDropdownOpen ? '1px solid #00f2fe' : '1px solid rgba(255,255,255,0.2)',
+          background: 'rgba(21, 22, 42, 0.95)', color: '#fff', fontSize: '0.90rem', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: isCountryDropdownOpen ? '0 0 10px rgba(0,242,254,0.25)' : 'none',
+          boxSizing: 'border-box',
+          transition: 'all 0.2s'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {selectedCountryItem.code === 'tr' ? (
+            <TurkishFlag />
+          ) : (
+            <img 
+              src={selectedCountryItem.flagUrl} 
+              alt="" 
+              style={{ width: '22px', height: '15px', borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }} 
+            />
+          )}
+          <span style={{ fontWeight: '700' }}>{selectedCountryItem.name}</span>
+        </div>
+        <ChevronDown size={18} color="rgba(255,255,255,0.7)" style={{ transform: isCountryDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      </div>
+
+      {isCountryDropdownOpen && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 5px)', left: 0, right: 0,
+          background: 'rgba(19, 20, 40, 0.98)', border: '1px solid rgba(255,255,255,0.2)',
+          backdropFilter: 'blur(20px)',
+          borderRadius: '14px', maxHeight: '210px', overflowY: 'auto',
+          zIndex: 150, boxShadow: '0 12px 35px rgba(0,0,0,0.9)',
+          padding: '4px',
+          boxSizing: 'border-box'
+        }}>
+          {COUNTRIES.map((c) => (
+            <div
+              key={c.code}
+              onClick={() => {
+                setSelectedCountry(c.code);
+                i18n.changeLanguage(c.code);
+                localStorage.setItem('i18nextLng', c.code);
+                localStorage.setItem('pending_language', c.code);
+                document.documentElement.lang = c.code;
+                setIsCountryDropdownOpen(false);
+              }}
+              style={{
+                padding: '9px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                borderRadius: '8px',
+                background: selectedCountry === c.code ? 'rgba(0, 242, 254, 0.18)' : 'transparent',
+                color: selectedCountry === c.code ? '#00f2fe' : '#ffffff',
+                fontSize: '0.88rem',
+                fontWeight: selectedCountry === c.code ? '800' : '500',
+                transition: 'background 0.15s'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = selectedCountry === c.code ? 'rgba(0, 242, 254, 0.18)' : 'transparent'; }}
+            >
+              {c.code === 'tr' ? (
+                <TurkishFlag />
+              ) : (
+                <img 
+                  src={c.flagUrl} 
+                  alt="" 
+                  style={{ width: '22px', height: '15px', borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }} 
+                />
+              )}
+              <span>{c.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="login-container" style={{
       position: 'fixed',
@@ -1114,100 +1197,6 @@ export default function Login({ onLogin }: LoginProps) {
     }}>
       <div className="glow-circle glow-1"></div>
       <div className="glow-circle glow-2"></div>
-
-      {/* Sağ Üst Köşe: Şık Dil Seçici Kapsülü */}
-      <div style={{ position: 'absolute', top: 'max(16px, env(safe-area-inset-top))', right: '16px', zIndex: 110 }} ref={dropdownRef}>
-        <button
-          type="button"
-          onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(255, 255, 255, 0.08)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '24px',
-            padding: '6px 14px',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: '0.82rem',
-            fontWeight: '700',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-            transition: 'all 0.2s'
-          }}
-        >
-          {selectedCountryItem.code === 'tr' ? (
-            <TurkishFlag />
-          ) : (
-            <img 
-              src={selectedCountryItem.flagUrl} 
-              alt="" 
-              style={{ width: '20px', height: '14px', borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }} 
-            />
-          )}
-          <span>{selectedCountryItem.code.toUpperCase()}</span>
-          <ChevronDown size={14} color="rgba(255,255,255,0.7)" style={{ transform: isCountryDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-        </button>
-
-        {isCountryDropdownOpen && (
-          <div style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            width: '200px',
-            background: 'rgba(19, 21, 44, 0.95)',
-            backdropFilter: 'blur(24px)',
-            border: '1px solid rgba(255, 255, 255, 0.18)',
-            borderRadius: '16px',
-            maxHeight: '260px',
-            overflowY: 'auto',
-            zIndex: 120,
-            boxShadow: '0 12px 35px rgba(0,0,0,0.85)',
-            padding: '6px'
-          }}>
-            {COUNTRIES.map((c) => (
-              <div
-                key={c.code}
-                onClick={() => {
-                  setSelectedCountry(c.code);
-                  i18n.changeLanguage(c.code);
-                  localStorage.setItem('i18nextLng', c.code);
-                  localStorage.setItem('pending_language', c.code);
-                  document.documentElement.lang = c.code;
-                  setIsCountryDropdownOpen(false);
-                }}
-                style={{
-                  padding: '9px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  cursor: 'pointer',
-                  borderRadius: '10px',
-                  background: selectedCountry === c.code ? 'rgba(0, 242, 254, 0.18)' : 'transparent',
-                  color: selectedCountry === c.code ? '#00f2fe' : '#ffffff',
-                  fontSize: '0.86rem',
-                  fontWeight: selectedCountry === c.code ? '700' : '500',
-                  transition: 'background 0.15s'
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = selectedCountry === c.code ? 'rgba(0, 242, 254, 0.18)' : 'transparent'; }}
-              >
-                {c.code === 'tr' ? (
-                  <TurkishFlag />
-                ) : (
-                  <img 
-                    src={c.flagUrl} 
-                    alt="" 
-                    style={{ width: '20px', height: '14px', borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }} 
-                  />
-                )}
-                <span>{c.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       <div className="login-card glassmorphism" style={{ 
         padding: '28px 24px', 
@@ -1403,6 +1392,9 @@ export default function Login({ onLogin }: LoginProps) {
               </button>
             </div>
 
+            {/* Orijinal Dil Seçici (Cinsiyet Seçiminin Altında, Sözleşme Onayının Üstünde) */}
+            {renderLanguageDropdown()}
+
             {/* 18+ ve Sözleşme Onayı */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left', background: 'rgba(0,0,0,0.2)', padding: '8px 10px', borderRadius: '10px' }}>
               <input 
@@ -1532,6 +1524,13 @@ export default function Login({ onLogin }: LoginProps) {
               <Mail size={20} color="#00f2fe" />
               <span>{isLoginMode ? t('login_btn_email_signin') : t('login_btn_email_signup')}</span>
             </button>
+          </div>
+        )}
+
+        {/* Giriş Yap Modunda Kart İçi Dil Seçici */}
+        {isLoginMode && (
+          <div style={{ marginTop: '14px' }}>
+            {renderLanguageDropdown()}
           </div>
         )}
 

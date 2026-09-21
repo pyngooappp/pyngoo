@@ -21,6 +21,7 @@ import ModeratorPanel from './pages/ModeratorPanel';
 import { updateSeoForLanguage } from './utils/seoService';
 import { detectUserDefaultLanguage } from './utils/i18n';
 import { sendNewRegistrationToTelegram } from './utils/telegramAlert';
+import { NetworkStatusModal } from './components/NetworkStatusModal';
 
 // Modül seviyesinde cihaz sahiplik zaman damgası (re-render'larda ASLA sıfırlanmaz!)
 let moduleLastSessionClaimedAt = 0;
@@ -1456,116 +1457,127 @@ function App() {
   }
 
   if (loading) {
-    return <div className="loading-screen"><div className="spinner"></div></div>;
+    return (
+      <>
+        <div className="loading-screen"><div className="spinner"></div></div>
+        <NetworkStatusModal />
+      </>
+    );
   }
 
   // Başka Cihazdan Giriş Yapıldığında Gösterilecek Güvenlik Modalı (Tek Oturum Kontrolü)
   if (sessionTerminated) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: '#0a0a14',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        color: '#fff',
-        textAlign: 'center'
-      }}>
+      <>
         <div style={{
-          maxWidth: '440px',
-          width: '100%',
-          background: 'rgba(255,255,255,0.03)',
-          padding: '40px 28px',
-          borderRadius: '24px',
-          border: '1px solid rgba(255,107,0,0.35)',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(20px)'
+          minHeight: '100vh',
+          background: '#0a0a14',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          color: '#fff',
+          textAlign: 'center'
         }}>
           <div style={{
-            width: '74px', height: '74px', borderRadius: '50%',
-            background: 'rgba(255,107,0,0.15)', border: '2px solid #ff6b00',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 20px auto'
+            maxWidth: '440px',
+            width: '100%',
+            background: 'rgba(255,255,255,0.03)',
+            padding: '40px 28px',
+            borderRadius: '24px',
+            border: '1px solid rgba(255,107,0,0.35)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
+            backdropFilter: 'blur(20px)'
           }}>
-            <Smartphone size={38} color="#ff6b00" />
+            <div style={{
+              width: '74px', height: '74px', borderRadius: '50%',
+              background: 'rgba(255,107,0,0.15)', border: '2px solid #ff6b00',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px auto'
+            }}>
+              <Smartphone size={38} color="#ff6b00" />
+            </div>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: '800', marginBottom: '12px', color: '#fff' }}>
+              {t('session_conflict_title')}
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '28px' }}>
+              {t('session_conflict_desc')}
+            </p>
+            <button
+              onClick={() => {
+                localStorage.setItem('pyngoo_force_claim_device', 'true');
+                setSessionTerminated(false);
+                setShowAuth(true);
+              }}
+              style={{
+                width: '100%',
+                padding: '14px 28px', borderRadius: '14px',
+                background: 'linear-gradient(135deg, #ff6b00, #ff8800)',
+                border: 'none',
+                color: '#fff', cursor: 'pointer', fontWeight: '800',
+                fontSize: '1rem',
+                boxShadow: '0 8px 20px rgba(255,107,0,0.35)'
+              }}
+            >
+              {t('session_conflict_btn')}
+            </button>
           </div>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: '800', marginBottom: '12px', color: '#fff' }}>
-            {t('session_conflict_title')}
-          </h2>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '28px' }}>
-            {t('session_conflict_desc')}
-          </p>
-          <button
-            onClick={() => {
-              localStorage.setItem('pyngoo_force_claim_device', 'true');
-              setSessionTerminated(false);
-              setShowAuth(true);
-            }}
-            style={{
-              width: '100%',
-              padding: '14px 28px', borderRadius: '14px',
-              background: 'linear-gradient(135deg, #ff6b00, #ff8800)',
-              border: 'none',
-              color: '#fff', cursor: 'pointer', fontWeight: '800',
-              fontSize: '1rem',
-              boxShadow: '0 8px 20px rgba(255,107,0,0.35)'
-            }}
-          >
-            {t('session_conflict_btn')}
-          </button>
         </div>
-      </div>
+        <NetworkStatusModal />
+      </>
     );
   }
 
   // Kullanıcı Yasaklandıysa (Banlı Hesap Ekranı)
   if (userProfile?.is_banned) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: '#0a0a14',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        color: '#fff',
-        textAlign: 'center'
-      }}>
+      <>
         <div style={{
-          maxWidth: '440px',
-          background: 'rgba(255,255,255,0.03)',
-          padding: '40px 28px',
-          borderRadius: '24px',
-          border: '1px solid rgba(255,45,85,0.3)',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+          minHeight: '100vh',
+          background: '#0a0a14',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          color: '#fff',
+          textAlign: 'center'
         }}>
           <div style={{
-            width: '74px', height: '74px', borderRadius: '50%',
-            background: 'rgba(255,45,85,0.2)', border: '2px solid #ff2d55',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 20px auto'
+            maxWidth: '440px',
+            background: 'rgba(255,255,255,0.03)',
+            padding: '40px 28px',
+            borderRadius: '24px',
+            border: '1px solid rgba(255,45,85,0.3)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
           }}>
-            <ShieldAlert size={38} color="#ff2d55" />
+            <div style={{
+              width: '74px', height: '74px', borderRadius: '50%',
+              background: 'rgba(255,45,85,0.2)', border: '2px solid #ff2d55',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px auto'
+            }}>
+              <ShieldAlert size={38} color="#ff2d55" />
+            </div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '12px' }}>
+              {t('banned_title')}
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '28px' }}>
+              {t('banned_desc')}
+            </p>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '12px 28px', borderRadius: '14px',
+                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff', cursor: 'pointer', fontWeight: '700'
+              }}
+            >
+              {t('profile_logout')}
+            </button>
           </div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '12px' }}>
-            {t('banned_title')}
-          </h2>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '28px' }}>
-            {t('banned_desc')}
-          </p>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '12px 28px', borderRadius: '14px',
-              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-              color: '#fff', cursor: 'pointer', fontWeight: '700'
-            }}
-          >
-            {t('profile_logout')}
-          </button>
         </div>
-      </div>
+        <NetworkStatusModal />
+      </>
     );
   }
 
@@ -1676,7 +1688,12 @@ function App() {
 
   if (!userId) {
     if (!showAuth && !Capacitor.isNativePlatform()) {
-      return <LandingPage onStartApp={() => setShowAuth(true)} />;
+      return (
+        <>
+          <LandingPage onStartApp={() => setShowAuth(true)} />
+          <NetworkStatusModal />
+        </>
+      );
     }
 
     return (
@@ -1706,25 +1723,29 @@ function App() {
           </div>
         )}
         <Login onLogin={handleAuthSuccess} />
+        <NetworkStatusModal />
       </div>
     );
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout userId={userId} />}>
-          <Route index element={<Home userId={userId} />} />
-          <Route path="explore" element={<Explore userId={userId} />} />
-          <Route path="chats" element={<Chats userId={userId} />} />
-          <Route path="wallet" element={<Wallet />} />
-          <Route path="market" element={<Market userId={userId} />} />
-          <Route path="profile" element={<Profile userId={userId} onLogout={handleLogout} />} />
-          <Route path="host-center" element={<HostCenter userId={userId} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout userId={userId} />}>
+            <Route index element={<Home userId={userId} />} />
+            <Route path="explore" element={<Explore userId={userId} />} />
+            <Route path="chats" element={<Chats userId={userId} />} />
+            <Route path="wallet" element={<Wallet />} />
+            <Route path="market" element={<Market userId={userId} />} />
+            <Route path="profile" element={<Profile userId={userId} onLogout={handleLogout} />} />
+            <Route path="host-center" element={<HostCenter userId={userId} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      <NetworkStatusModal />
+    </>
   );
 }
 

@@ -113,8 +113,8 @@ const translations: Record<string, LegalContent> = {
       sec4Desc: 'Apple Guideline 5.1.1(v) ve Google Play kuralları gereği profilinizden "Hesabımı Sil" dediğiniz anda veritabanındaki tüm profiliniz, mesajlarınız ve arkadaşlıklarınız kalıcı olarak silinir.'
     },
     kvkk: {
-      sec1Title: '1. Veri Sorumlusu',
-      sec1Desc: '6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) ve Avrupa Genel Veri Koruma Tüzüğü (GDPR) kapsamında veri sorumlusu Pyngoo ekibidir.',
+      sec1Title: '1. Veri Sorumlusu ve Hizmet Sağlayıcı',
+      sec1Desc: '6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) ve Avrupa Genel Veri Koruma Tüzüğü (GDPR) kapsamında; resmi şirketleşme tescil süreci tamamlanana kadar platformun tüm operasyonel, teknik ve yasal veri sorumluluğu Pyngoo Yönetimi ve Geliştirici Ekibi ("Pyngoo Management", destek@pyngoo.app) tarafından üstlenilmekte ve yürütülmektedir.',
       sec2Title: '2. İlgili Kişi Hakları',
       sec2Desc: 'Kullanıcılarımız diledikleri zaman kişisel verilerinin işlenip işlenmediğini öğrenme, yanlış verileri düzelttirme, verilerinin silinmesini talep etme hakkına sahiptir.',
       sec3Title: '3. İletişim & Destek',
@@ -173,8 +173,8 @@ const translations: Record<string, LegalContent> = {
       sec4Desc: 'In compliance with Apple Guideline 5.1.1(v) and Google Play policies, deleting your account permanently purges your profile, messages, and friendships from our database.'
     },
     kvkk: {
-      sec1Title: '1. Data Controller',
-      sec1Desc: 'Under GDPR and relevant international data protection laws, the Pyngoo team acts as the data controller for personal information processed through the application.',
+      sec1Title: '1. Data Controller & Service Operator',
+      sec1Desc: 'Under GDPR and applicable international data protection frameworks, all operational, technical, and data controller responsibilities for Pyngoo are officially managed by the Pyngoo Platform Operations & Development Team ("Pyngoo Management", contact: destek@pyngoo.app) prior to formal corporate registry completion.',
       sec2Title: '2. Data Subject Rights',
       sec2Desc: 'Users retain the right to access, rectify, or request total erasure of their stored personal data at any time.',
       sec3Title: '3. Contact & Support',

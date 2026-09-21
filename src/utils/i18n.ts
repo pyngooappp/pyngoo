@@ -681,7 +681,11 @@ const enTranslation = {
       "photo_err_invalid_signature": "Security alert: File does not have a valid image signature.",
       "photo_err_read_failed": "Photo file could not be read or is corrupted.",
       "photo_err_corrupted": "Image content could not be decoded. Please upload another photo.",
-      "photo_err_processing": "An error occurred while processing the image."
+      "photo_err_processing": "An error occurred while processing the image.",
+      "offline_modal_title": "Internet Connection Lost",
+      "offline_modal_desc": "There was a tiny hiccup in your connection. As soon as your internet returns, you can jump right back into the chat! 🌐✨",
+      "offline_modal_retry": "Try Again",
+      "offline_modal_checking": "Checking Connection..."
 };
 
 const trTranslation = {
@@ -1350,7 +1354,11 @@ const trTranslation = {
       "photo_err_invalid_signature": "Güvenlik uyarısı: Dosya geçerli bir resim formatına sahip değil.",
       "photo_err_read_failed": "Fotoğraf dosyası okunamadı veya bozuk.",
       "photo_err_corrupted": "Görsel içeriği çözümlenemedi. Lütfen farklı bir resim yükleyin.",
-      "photo_err_processing": "Görsel işleme sırasında hata oluştu."
+      "photo_err_processing": "Görsel işleme sırasında hata oluştu.",
+      "offline_modal_title": "İnternet Bağlantısı Kesildi",
+      "offline_modal_desc": "Bağlantınızda minik bir kopukluk oldu. İnternetiniz geri geldiğinde sohbet keyfine kaldığınız yerden devam edeceksiniz! 🌐✨",
+      "offline_modal_retry": "Tekrar Dene",
+      "offline_modal_checking": "Bağlantı Kontrol Ediliyor..."
 };
 
 const resources = {
@@ -1675,7 +1683,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 Erneut scannen",
       "login_ai_face_not_recognized": "⚠️ Gesicht nicht erkannt oder nicht gut sichtbar. Bitte blicken Sie in einem gut beleuchteten Bereich direkt in die Kamera.",
       "login_ai_models_loading": "Modelle werden geladen...",
-      "live_counter_badge": "{{count}}+ Personen Online"
+      "live_counter_badge": "{{count}}+ Personen Online",
+      "offline_modal_title": "Internetverbindung unterbrochen",
+      "offline_modal_desc": "Es gab einen kleinen Verbindungsabbruch. Sobald Ihr Internet zurück ist, geht der Chat sofort weiter! 🌐✨",
+      "offline_modal_retry": "Erneut versuchen",
+      "offline_modal_checking": "Verbindung wird geprüft..."
     }
   },
   fr: {
@@ -1997,7 +2009,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 Scanner à nouveau",
       "login_ai_face_not_recognized": "⚠️ Visage non détecté ou non clairement visible. Veuillez regarder directement la caméra dans un endroit bien éclairé.",
       "login_ai_models_loading": "Chargement des modèles...",
-      "live_counter_badge": "{{count}}+ personnes en ligne"
+      "live_counter_badge": "{{count}}+ personnes en ligne",
+      "offline_modal_title": "Connexion Internet perdue",
+      "offline_modal_desc": "Une petite interruption de connexion s’est produite. Dès que votre réseau sera rétabli, vous reprendrez votre chat ! 🌐✨",
+      "offline_modal_retry": "Réessayer",
+      "offline_modal_checking": "Vérification de la connexion..."
     }
   },
   es: {
@@ -2307,7 +2323,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 Escanear de nuevo",
       "login_ai_face_not_recognized": "⚠️ Rostro no detectado o no visible claramente. Por favor, mire directamente a la cámara en un área bien iluminada.",
       "login_ai_models_loading": "Cargando modelos...",
-      "live_counter_badge": "{{count}}+ personas en línea"
+      "live_counter_badge": "{{count}}+ personas en línea",
+      "offline_modal_title": "Conexión a Internet perdida",
+      "offline_modal_desc": "Hubo una pequeña interrupción en tu conexión. ¡En cuanto vuelva internet, volverás a disfrutar del chat! 🌐✨",
+      "offline_modal_retry": "Reintentar",
+      "offline_modal_checking": "Comprobando conexión..."
     }
   },
   ru: {
@@ -2629,7 +2649,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 Сканировать снова",
       "login_ai_face_not_recognized": "⚠️ Лицо не обнаружено или плохо видно. Пожалуйста, смотрите прямо в камеру в хорошо освещенном месте.",
       "login_ai_models_loading": "Загрузка моделей...",
-      "live_counter_badge": "{{count}}+ человек онлайн"
+      "live_counter_badge": "{{count}}+ человек онлайн",
+      "offline_modal_title": "Соединение с интернетом потеряно",
+      "offline_modal_desc": "Произошел небольшой сбой связи. Как только интернет восстановится, вы сразу вернетесь к общению! 🌐✨",
+      "offline_modal_retry": "Повторить попытку",
+      "offline_modal_checking": "Проверка подключения..."
     }
   },
   ar: {
@@ -2951,7 +2975,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 إعادة المسح",
       "login_ai_face_not_recognized": "⚠️ لم يتم اكتشاف الوجه أو أنه غير واضح. يرجى النظر مباشرة إلى الكاميرا في منطقة جيدة الإضاءة.",
       "login_ai_models_loading": "تحميل النماذج...",
-      "live_counter_badge": "أكثر من {{count}} متصل الآن"
+      "live_counter_badge": "أكثر من {{count}} متصل الآن",
+      "offline_modal_title": "انقطع الاتصال بالإنترنت",
+      "offline_modal_desc": "حدث انقطاع بسيط في اتصالك. بمجرد عودة الإنترنت، ستعود لمواصلة المحادثة على الفور! 🌐✨",
+      "offline_modal_retry": "إعادة المحاولة",
+      "offline_modal_checking": "جاري فحص الاتصال..."
     }
   },
   az: {
@@ -3273,7 +3301,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 Yenidən Skan Et",
       "login_ai_face_not_recognized": "⚠️ Üz aşkar edilmədi və ya aydın görünmür. Zəhmət olmasa yaxşı işıqlandırılmış yerdə birbaşa kameraya baxın.",
       "login_ai_models_loading": "Modellər yüklənir...",
-      "live_counter_badge": "{{count}}+ Nəfər Çevrimiçi"
+      "live_counter_badge": "{{count}}+ Nəfər Çevrimiçi",
+      "offline_modal_title": "İnternet Bağlantısı Kəsildi",
+      "offline_modal_desc": "Bağlantınızda kiçik bir fasilə yarandı. İnternetiniz bərpa olunan kimi söhbətə qaldığınız yerdən davam edəcəksiniz! 🌐✨",
+      "offline_modal_retry": "Yenidən Cəhd Et",
+      "offline_modal_checking": "Bağlantı Yoxlanılır..."
     }
   },
   it: {
@@ -3595,7 +3627,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 Scansiona di nuovo",
       "login_ai_face_not_recognized": "⚠️ Volto non rilevato o non chiaramente visibile. Si prega di guardare direttamente la fotocamera in un'area ben illuminata.",
       "login_ai_models_loading": "Caricamento dei modelli...",
-      "live_counter_badge": "{{count}}+ persone online"
+      "live_counter_badge": "{{count}}+ persone online",
+      "offline_modal_title": "Connessione Internet interrotta",
+      "offline_modal_desc": "C’è stata una piccola interruzione della connessione. Non appena internet sarà di nuovo attivo, riprenderai subito a chattare! 🌐✨",
+      "offline_modal_retry": "Riprova",
+      "offline_modal_checking": "Verifica connessione..."
     }
   },
   pt: {
@@ -3919,7 +3955,11 @@ const resources = {
       "login_ai_btn_retry": "🔄 Escanear novamente",
       "login_ai_face_not_recognized": "⚠️ Rosto não detectado ou não visível claramente. Olhe diretamente para a câmera em uma área bem iluminada.",
       "login_ai_models_loading": "Carregando modelos...",
-      "live_counter_badge": "{{count}}+ pessoas online"
+      "live_counter_badge": "{{count}}+ pessoas online",
+      "offline_modal_title": "Conexão com a Internet perdida",
+      "offline_modal_desc": "Houve uma pequena interrupção na conexão. Assim que a internet voltar, você continuará a conversa de onde parou! 🌐✨",
+      "offline_modal_retry": "Tentar novamente",
+      "offline_modal_checking": "Verificando conexão..."
     }
   }
 };
