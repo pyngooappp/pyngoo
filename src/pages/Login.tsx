@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
+import { InAppAuth } from '@ccatto/capacitor-inapp-auth';
 import { supabase } from '../lib/supabase';
 import { Mail, Camera, ArrowLeft, ShieldCheck, CheckCircle, ChevronDown, XCircle, Check, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -764,9 +765,8 @@ export default function Login({ onLogin }: LoginProps) {
       if (isNative && data?.url) {
         // 🍏 iOS için Apple'ın ASWebAuthenticationSession yerel kimlik doğrulama penceresini kullan
         // (Sıfır Safari uygulaması, sıfır alt tarayıcı barı, sıfır X butonu - işlem bitince otomatik kapanır!)
-        if (Capacitor.isPluginAvailable('InAppAuth')) {
+        if (Capacitor.getPlatform() === 'ios') {
           try {
-            const { InAppAuth } = await import('@ccatto/capacitor-inapp-auth');
             const authRes = await InAppAuth.start({
               url: data.url,
               callbackScheme: 'pyngoo'
@@ -801,11 +801,8 @@ export default function Login({ onLogin }: LoginProps) {
             return;
           } catch (inAppErr: any) {
             console.warn("[InAppAuth] Hata veya iptal:", inAppErr);
-            const errMsg = (inAppErr?.message || String(inAppErr)).toLowerCase();
-            if (errMsg.includes('cancel') || inAppErr === 'CANCELED') {
-              setLoading(false);
-              return;
-            }
+            setLoading(false);
+            return; // iOS'ta ASLA Safari Browser.open çağrılmaz!
           }
         }
 
