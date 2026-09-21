@@ -1093,8 +1093,22 @@ function App() {
 
           const combinedString = [hashPart, queryPart].filter(Boolean).join('&');
           const combinedParams = new URLSearchParams(combinedString);
+          const code = combinedParams.get('code');
           const accessToken = combinedParams.get('access_token');
           const refreshToken = combinedParams.get('refresh_token');
+
+          if (code) {
+            console.log('[CapApp] Deep link üzerinden PKCE code yakalandı, oturum kuruluyor...');
+            try {
+              const res = await supabase.auth.exchangeCodeForSession(code);
+              if (res.data?.session) {
+                await handleSession(res.data.session, 'SIGNED_IN');
+                return;
+              }
+            } catch (err) {
+              console.warn('[CapApp] exchangeCodeForSession hatası:', err);
+            }
+          }
 
           if (accessToken) {
             console.log('[CapApp] Deep link üzerinden access_token yakalandı, oturum kuruluyor...');

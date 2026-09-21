@@ -743,9 +743,10 @@ export default function Login({ onLogin }: LoginProps) {
       }
     }
 
-    // Mobilde HTTPS callback köprüsü üzerinden yönlendir (Harici Safari'ye atmadan uygulama içi alt kart açar)
+    // Mobilde doğrudan sistem şeması pyngoo://auth-callback ile yönlendir!
+    // Asla web sayfası (oauth-callback.html) açılmaz; böylece HTTP 302 yanıtında sistem popup'ı ANINDA otomatik kapanır!
     const redirectUri = isNative
-      ? `https://www.pyngoo.app/oauth-callback.html?${redirectParams.toString()}`
+      ? `pyngoo://auth-callback?${redirectParams.toString()}`
       : `${window.location.origin}/?${redirectParams.toString()}`;
 
     try {
@@ -785,10 +786,18 @@ export default function Login({ onLogin }: LoginProps) {
               }
 
               const combinedParams = new URLSearchParams([hashPart, queryPart].filter(Boolean).join('&'));
+              const code = combinedParams.get('code');
               const accessToken = combinedParams.get('access_token');
               const refreshToken = combinedParams.get('refresh_token');
 
-              if (accessToken) {
+              if (code) {
+                const { data: codeData, error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+                if (codeErr) throw codeErr;
+                if (codeData?.session) {
+                  setLoading(false);
+                  return;
+                }
+              } else if (accessToken) {
                 await supabase.auth.setSession({
                   access_token: accessToken,
                   refresh_token: refreshToken || ''
