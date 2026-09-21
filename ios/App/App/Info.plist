@@ -68,5 +68,11 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Canlı görüntülü sohbet ve yapay zeka yüz doğrulaması için kamera erişimi gereklidir.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Canlı sesli ve görüntülü sohbet edebilmeniz için mikrofon erişimi gereklidir.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Profil fotoğrafı seçebilmeniz için fotoğraf kitaplığına erişim gereklidir.</string>
 </dict>
 </plist>
