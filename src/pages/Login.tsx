@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import { supabase } from '../lib/supabase';
 import { Mail, Camera, ArrowLeft, ShieldCheck, CheckCircle, ChevronDown, XCircle, Check, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -706,20 +708,34 @@ export default function Login({ onLogin }: LoginProps) {
     redirectParams.set('auth_mode', currentMode);
     redirectParams.set('p_auth_mode', currentMode);
 
-    const redirectUri = `${window.location.origin}/?${redirectParams.toString()}`;
+    const isNative = Capacitor.isNativePlatform();
+    // Mobilde HTTPS callback köprüsü üzerinden yönlendir (Harici Safari'ye atmadan uygulama içi alt kart açar)
+    const redirectUri = isNative
+      ? `https://www.pyngoo.app/oauth-callback.html?${redirectParams.toString()}`
+      : `${window.location.origin}/?${redirectParams.toString()}`;
 
     try {
       setLoading(true);
       setError(null);
       const optionsPayload: any = {
-        redirectTo: redirectUri
+        redirectTo: redirectUri,
+        skipBrowserRedirect: isNative
       };
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider,
         options: optionsPayload
       });
       if (error) throw error;
+
+      if (isNative && data?.url) {
+        setLoading(false);
+        await Browser.open({
+          url: data.url,
+          presentationStyle: 'popover',
+          windowName: '_blank'
+        });
+      }
     } catch (err: any) {
       setError(err.message || t('login_err_oauth_failed'));
       setLoading(false);

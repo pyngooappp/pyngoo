@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
 import { supabase } from './lib/supabase';
 import { ShieldAlert, Smartphone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -1063,9 +1065,80 @@ function App() {
       }
     });
 
+    // 3. Mobil Uygulama Deep Link (pyngoo://auth-callback) Dinleyicisi (In-App OAuth Dönüşü)
+    let appUrlSub: any = null;
+    if (Capacitor.isNativePlatform()) {
+      appUrlSub = CapApp.addListener('appUrlOpen', async (data) => {
+        console.log('[CapApp] appUrlOpen alındı:', data.url);
+        try {
+          await Browser.close();
+        } catch (_) {}
+
+        try {
+          const rawUrl = data.url;
+          if (!rawUrl) return;
+
+          let hashPart = '';
+          let queryPart = '';
+          if (rawUrl.includes('#')) {
+            const splitHash = rawUrl.split('#');
+            hashPart = splitHash[1] || '';
+            queryPart = splitHash[0].includes('?') ? splitHash[0].split('?')[1] : '';
+          } else if (rawUrl.includes('?')) {
+            queryPart = rawUrl.split('?')[1] || '';
+          }
+
+          const combinedParams = new URLSearchParams(hashPart || queryPart);
+          const accessToken = combinedParams.get('access_token');
+          const refreshToken = combinedParams.get('refresh_token');
+
+          if (accessToken) {
+            console.log('[CapApp] Deep link üzerinden access_token yakalandı, oturum kuruluyor...');
+            if (refreshToken) {
+              try {
+                const res = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+                if (res.data?.session) {
+                  await handleSession(res.data.session, 'SIGNED_IN');
+                  return;
+                }
+              } catch (_) {}
+            }
+
+            const payload = parseJwt(accessToken);
+            if (payload && payload.sub) {
+              const activeSession = {
+                access_token: accessToken,
+                refresh_token: refreshToken || '',
+                expires_at: payload.exp || Math.floor(Date.now() / 1000) + 3600,
+                expires_in: 3600,
+                token_type: 'bearer',
+                user: {
+                  id: payload.sub,
+                  email: payload.email || payload.user_metadata?.email || '',
+                  app_metadata: payload.app_metadata || {},
+                  user_metadata: payload.user_metadata || {},
+                  aud: payload.aud || 'authenticated',
+                  role: payload.role || 'authenticated'
+                }
+              };
+              try {
+                localStorage.setItem('sb-rdqcwzosmikusketghyq-auth-token', JSON.stringify(activeSession));
+              } catch (_) {}
+              await handleSession(activeSession, 'SIGNED_IN');
+            }
+          }
+        } catch (err) {
+          console.error('[CapApp] appUrlOpen işleme hatası:', err);
+        }
+      });
+    }
+
     return () => {
       clearTimeout(safetyTimer);
       subscription.unsubscribe();
+      if (appUrlSub) {
+        appUrlSub.then((s: any) => s.remove()).catch(() => {});
+      }
     };
   }, []);
 

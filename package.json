@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.1.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.5.1",
     "@supabase/supabase-js": "^2.112.3",
     "agora-rtc-sdk-ng": "^4.24.7",
