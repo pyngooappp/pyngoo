@@ -5,6 +5,7 @@ import {
   Upload, Camera, X, Check, DollarSign, Wallet, Coins
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { validateAndSanitizeImage } from '../utils/imageSecurity';
 
 interface StreamerRecruitmentModalProps {
   isOpen: boolean;
@@ -31,52 +32,22 @@ export default function StreamerRecruitmentModal({
 
   if (!isOpen) return null;
 
-  // Fotoğraf Yükleme ve Canvas ile Optimize Etme
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Fotoğraf Yükleme ve Canvas ile Optimize Etme (Askeri Düzeyde Güvenlik)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadError(null);
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Dosya boyutu kontrolü (maks 15MB)
-    if (file.size > 15 * 1024 * 1024) {
-      setUploadError(t('streamer_err_size', 'Fotoğraf boyutu çok büyük. Lütfen daha küçük bir görsel seçin.'));
-      return;
+    try {
+      const result = await validateAndSanitizeImage(file, 600, 0.88);
+      if (!result.valid || !result.sanitizedDataUrl) {
+        setUploadError(t(result.errorKey || 'photo_err_invalid_type', result.errorFallback || 'Lütfen geçerli bir resim dosyası seçin.'));
+        return;
+      }
+      setUploadedPhoto(result.sanitizedDataUrl);
+    } catch (_) {
+      setUploadError(t('photo_err_processing', 'Görsel işleme sırasında hata oluştu.'));
     }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 600;
-        const MAX_HEIGHT = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-          setUploadedPhoto(dataUrl);
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
   };
 
   // Yayıncı Profilini Kaydet & Keşfette En Üste Çıkar

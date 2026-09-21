@@ -675,7 +675,13 @@ const enTranslation = {
       "streamer_badge_you": "✨ YOUR STREAM",
       "streamer_home_banner_title": "Become a Streamer & Earn Money!",
       "streamer_home_banner_btn": "Start Now 👑",
-      "login_already_registered_notice": "⚠️ You already have a registered account with this email. Logged in with your existing profile!"
+      "login_already_registered_notice": "⚠️ You already have a registered account with this email. Logged in with your existing profile!",
+      "photo_err_too_large": "Photo file size is too large (Maximum 15MB).",
+      "photo_err_invalid_type": "Please select a valid image file (JPG, PNG, or WEBP).",
+      "photo_err_invalid_signature": "Security alert: File does not have a valid image signature.",
+      "photo_err_read_failed": "Photo file could not be read or is corrupted.",
+      "photo_err_corrupted": "Image content could not be decoded. Please upload another photo.",
+      "photo_err_processing": "An error occurred while processing the image."
 };
 
 const trTranslation = {
@@ -1338,7 +1344,13 @@ const trTranslation = {
       "streamer_badge_live": "🔴 CANLI YAYINCI",
       "streamer_badge_you": "✨ SENİN YAYININ",
       "streamer_home_banner_title": "Yayıncı Ol, Elmas Topla & Para Kazan!",
-      "streamer_home_banner_btn": "Hemen Başla 👑"
+      "streamer_home_banner_btn": "Hemen Başla 👑",
+      "photo_err_too_large": "Fotoğraf boyutu çok büyük (Maksimum 15MB).",
+      "photo_err_invalid_type": "Lütfen geçerli bir resim dosyası seçin (JPG, PNG veya WEBP).",
+      "photo_err_invalid_signature": "Güvenlik uyarısı: Dosya geçerli bir resim formatına sahip değil.",
+      "photo_err_read_failed": "Fotoğraf dosyası okunamadı veya bozuk.",
+      "photo_err_corrupted": "Görsel içeriği çözümlenemedi. Lütfen farklı bir resim yükleyin.",
+      "photo_err_processing": "Görsel işleme sırasında hata oluştu."
 };
 
 const resources = {

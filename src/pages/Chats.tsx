@@ -630,13 +630,16 @@ export default function Chats({ userId }: ChatsProps) {
   }
 
   return (
-    <div className="home-container" style={{ paddingBottom: '100px', display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="home-container" style={{ display: 'flex', height: '100%', width: '100%', overflow: 'hidden' }}>
       
       {/* Sol Taraf: Arkadaş Listesi (Mobilde activeChat yoksa tam ekran) */}
       <div style={{ 
         width: activeChat ? '30%' : '100%', 
         borderRight: '1px solid rgba(255,255,255,0.1)', 
         overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y',
+        paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
         display: (window.innerWidth < 768 && activeChat) ? 'none' : 'block' // Mobilde mesajlaşırken listeyi gizle
       }}>
         <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -946,7 +949,7 @@ export default function Chats({ userId }: ChatsProps) {
           </div>
 
           {/* Mesaj Listesi */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
+          <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
             {messages.map(msg => {
               const isMine = msg.sender_id === userId;
               return (
@@ -1090,7 +1093,7 @@ export default function Chats({ userId }: ChatsProps) {
               e.preventDefault();
               if (messageText.trim()) handleSendMessage();
             }}
-            style={{ padding: '15px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)', display: 'flex', gap: '10px' }}
+            style={{ padding: '12px 16px calc(78px + env(safe-area-inset-bottom, 0px)) 16px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(20, 18, 38, 0.95)', display: 'flex', gap: '10px' }}
           >
             {profile?.gender === 'erkek' && (
               <button 

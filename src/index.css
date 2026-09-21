@@ -21,21 +21,22 @@
 
 html {
   background-color: #0f0c29;
-  overscroll-behavior: none;
-  overscroll-behavior-y: none;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
   background-color: #0f0c29;
   background: linear-gradient(135deg, var(--primary-bg), var(--secondary-bg), var(--accent-color));
   color: var(--text-main);
-  min-height: 100vh;
-  min-height: -webkit-fill-available;
-  overscroll-behavior: none;
-  overscroll-behavior-y: none;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   -khtml-user-select: none;
@@ -51,17 +52,23 @@ img, video {
 }
 
 #root {
+  width: 100%;
+  height: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .app-wrapper {
+  width: 100%;
+  height: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
   position: relative;
   padding-top: env(safe-area-inset-top, 0px);
+  overflow: hidden;
 }
 
 /* Glassmorphism utilities */
@@ -691,9 +698,13 @@ img, video {
 .main-content {
   flex: 1;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+  overscroll-behavior-y: contain;
 }
 
 .bottom-nav {

@@ -24,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import LegalModal, { type LegalModalType } from '../components/LegalModal';
 import FeedbackModal from '../components/FeedbackModal';
 import { fetchBlockedUsers, unblockUser, type BlockedUserItem } from '../utils/blockService';
+import { validateAndSanitizeImage } from '../utils/imageSecurity';
 
 interface ProfileProps {
   userId: string;
@@ -146,71 +147,24 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
     setShowPhotoModal(false);
   };
 
-  const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhotoError(null);
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 25 * 1024 * 1024) {
-      setPhotoError('Fotoğraf boyutu 25MB\'dan küçük olmalıdır.');
-      return;
-    }
-
     setIsUploadingPhoto(true);
-    const reader = new FileReader();
-    reader.onerror = () => {
-      setPhotoError('Görsel dosyası okunamadı. Lütfen farklı bir fotoğraf deneyin.');
-      setIsUploadingPhoto(false);
-    };
-    reader.onload = (event) => {
-      const rawDataUrl = event.target?.result as string;
-      if (!rawDataUrl) {
-        setPhotoError('Görsel verisi alınamadı.');
+    try {
+      const result = await validateAndSanitizeImage(file, 640, 0.88);
+      if (!result.valid || !result.sanitizedDataUrl) {
+        setPhotoError(t(result.errorKey || 'photo_err_invalid_type', result.errorFallback || 'Lütfen geçerli bir resim dosyası seçin.'));
         setIsUploadingPhoto(false);
         return;
       }
-
-      const img = new Image();
-      img.onerror = () => {
-        applyPhoto(rawDataUrl);
-      };
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const MAX_DIM = 640;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_DIM) {
-              height *= MAX_DIM / width;
-              width = MAX_DIM;
-            }
-          } else {
-            if (height > MAX_DIM) {
-              width *= MAX_DIM / height;
-              height = MAX_DIM;
-            }
-          }
-
-          canvas.width = Math.round(width);
-          canvas.height = Math.round(height);
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const optimized = canvas.toDataURL('image/jpeg', 0.88);
-            applyPhoto(optimized);
-          } else {
-            applyPhoto(rawDataUrl);
-          }
-        } catch (err) {
-          console.warn('Canvas sıkıştırma hatası, ham görsel kullanılıyor:', err);
-          applyPhoto(rawDataUrl);
-        }
-      };
-      img.src = rawDataUrl;
-    };
-    reader.readAsDataURL(file);
+      applyPhoto(result.sanitizedDataUrl);
+    } catch (_) {
+      setPhotoError(t('photo_err_processing', 'Görsel işleme sırasında hata oluştu.'));
+      setIsUploadingPhoto(false);
+    }
   };
 
   const handleOpenBlockedModal = async () => {
@@ -390,7 +344,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
   }
 
   return (
-    <div className="home-container" style={{ paddingBottom: '110px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+    <div className="home-container" style={{ paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))', width: '100%' }}>
       
       {/* 1. PROFİL KART BAŞLIĞI */}
       <header className="home-header glassmorphism" style={{

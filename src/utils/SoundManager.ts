@@ -2,15 +2,62 @@ class SoundManager {
   private audioContext: AudioContext | null = null;
   private radarInterval: number | null = null;
   private isSearching: boolean = false;
+  private isUnlocked: boolean = false;
 
-  private getContext() {
+  constructor() {
+    this.initUnlockListener();
+  }
+
+  // iOS WKWebView ve Safari için ilk kullanıcı dokunuşunda ses kanalını kalıcı olarak açar
+  public initUnlockListener() {
+    if (typeof window === 'undefined' || this.isUnlocked) return;
+
+    const unlock = () => {
+      try {
+        const ctx = this.getContext();
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+        // iOS Web Audio pipeline kilidini 1 örneklemeli sessiz tampon ile aç
+        if (ctx) {
+          const buffer = ctx.createBuffer(1, 1, 22050);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          source.start(0);
+        }
+        this.isUnlocked = true;
+      } catch (_) {}
+
+      const events = ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'];
+      events.forEach((e) => window.removeEventListener(e, unlock));
+    };
+
+    const events = ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'];
+    events.forEach((e) => window.addEventListener(e, unlock, { once: true, passive: true }));
+  }
+
+  private getContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        this.audioContext = new AudioCtx();
+      }
     }
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      this.audioContext.resume().catch(() => {});
     }
-    return this.audioContext;
+    return this.audioContext as AudioContext;
+  }
+
+  private async ensureActiveContext(): Promise<AudioContext | null> {
+    const ctx = this.getContext();
+    if (ctx && ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch (_) {}
+    }
+    return ctx;
   }
 
   // Eşleşme Aranıyor (Sihirli Yükseliş + Sonar Ping İkilisi)
@@ -58,8 +105,9 @@ class SoundManager {
     pingOsc.stop(pingTime + 0.5);
   }
 
-  public startRadar() {
+  public async startRadar() {
     this.isSearching = true;
+    await this.ensureActiveContext();
     
     // Aramaya başlar başlamaz ilk sesleri çal (Whoosh + Ping)
     this.playDoublePing();
@@ -79,9 +127,9 @@ class SoundManager {
   }
 
   // Eşleşme Bulundu (Success Chime)
-  public playMatchFound() {
+  public async playMatchFound() {
     this.stopRadar();
-    const ctx = this.getContext();
+    const ctx = (await this.ensureActiveContext()) || this.getContext();
     
     // Çift tonlu armonik bir zil sesi oluştur
     const playTone = (freq: number, startTime: number, duration: number) => {

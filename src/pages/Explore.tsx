@@ -461,8 +461,8 @@ export default function Explore({ userId }: ExploreProps) {
 
   return (
     <div className="explore-container" style={{
-      minHeight: '100vh',
-      paddingBottom: '90px',
+      width: '100%',
+      paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
       background: 'linear-gradient(180deg, #0b0c16 0%, #121324 100%)',
       color: '#fff'
     }}>

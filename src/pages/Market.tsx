@@ -688,13 +688,10 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      width: '100%',
       background: 'radial-gradient(circle at top, #1c1d3b 0%, #0c0d1a 100%)',
       color: '#fff',
-      paddingBottom: '110px',
-      overflowY: 'auto',
-      WebkitOverflowScrolling: 'touch',
-      touchAction: 'pan-y',
+      paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       {/* 1. ÜST BAR & BAŞLIK */}
