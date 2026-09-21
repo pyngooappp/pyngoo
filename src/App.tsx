@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { supabase } from './lib/supabase';
 import { ShieldAlert, Smartphone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -127,6 +128,11 @@ function App() {
       const p = window.location.pathname;
       const s = window.location.search;
       const h = window.location.hash;
+
+      // Mobil uygulamada (Capacitor iOS/Android) web tanıtım sayfası (LandingPage) gösterilmez; doğrudan Kayıt Ol / Giriş Yap açılır!
+      if (Capacitor.isNativePlatform()) {
+        return true;
+      }
 
       // Eğer email_taken veya deleted veya not_found veya açık mod parametresi varsa Auth ekranı KESİNLİKLE açılmalıdır!
       if (
@@ -1578,34 +1584,36 @@ function App() {
   };
 
   if (!userId) {
-    if (!showAuth) {
+    if (!showAuth && !Capacitor.isNativePlatform()) {
       return <LandingPage onStartApp={() => setShowAuth(true)} />;
     }
 
     return (
       <div className="app-wrapper" style={{ position: 'relative' }}>
-        <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 100 }}>
-          <button 
-            type="button"
-            onClick={() => {
-              setShowAuth(false);
-              try {
-                window.history.replaceState({}, document.title, '/');
-              } catch (_) {}
-            }}
-            style={{ 
-              background: 'rgba(255,255,255,0.1)', 
-              border: '1px solid rgba(255,255,255,0.2)', 
-              color: 'white', 
-              padding: '6px 14px', 
-              borderRadius: '20px', 
-              cursor: 'pointer', 
-              fontSize: '0.85rem' 
-            }}
-          >
-            {t('landing_back_btn')}
-          </button>
-        </div>
+        {!Capacitor.isNativePlatform() && (
+          <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 100 }}>
+            <button 
+              type="button"
+              onClick={() => {
+                setShowAuth(false);
+                try {
+                  window.history.replaceState({}, document.title, '/');
+                } catch (_) {}
+              }}
+              style={{ 
+                background: 'rgba(255,255,255,0.1)', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                color: 'white', 
+                padding: '6px 14px', 
+                borderRadius: '20px', 
+                cursor: 'pointer', 
+                fontSize: '0.85rem' 
+              }}
+            >
+              {t('landing_back_btn')}
+            </button>
+          </div>
+        )}
         <Login onLogin={handleAuthSuccess} />
       </div>
     );
