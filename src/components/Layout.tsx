@@ -815,7 +815,7 @@ export default function Layout({ userId }: LayoutProps) {
           </div>
         )}
         {!isCallActive && (
-          <nav className="bottom-nav glassmorphism" style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '0 8px' }}>
+          <nav className="bottom-nav glassmorphism">
             <NavLink 
               to="/" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}

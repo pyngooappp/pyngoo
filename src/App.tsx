@@ -181,6 +181,9 @@ function App() {
     if (!isLiveOAuthReturn) {
       localStorage.removeItem('pyngoo_force_claim_device');
       sessionStorage.removeItem('pyngoo_force_claim_device');
+      if (Capacitor.isNativePlatform()) {
+        try { Browser.close(); } catch (_) {}
+      }
     }
   }, []);
 

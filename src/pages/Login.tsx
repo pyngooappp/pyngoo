@@ -806,11 +806,16 @@ export default function Login({ onLogin }: LoginProps) {
           }
         }
 
-        setLoading(false);
-        await Browser.open({
-          url: data.url,
-          presentationStyle: 'popover'
-        });
+        // Android platformu için Browser.open (iOS'ta asla çağrılmaz)
+        if (Capacitor.getPlatform() === 'android') {
+          setLoading(false);
+          await Browser.open({
+            url: data.url,
+            presentationStyle: 'popover'
+          });
+        } else {
+          setLoading(false);
+        }
       }
     } catch (err: any) {
       setError(err.message || t('login_err_oauth_failed'));
