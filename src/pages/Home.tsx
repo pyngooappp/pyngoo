@@ -464,11 +464,16 @@ export default function Home({ userId }: HomeProps) {
   };
 
   const startSearching = async () => {
-    const hasPermission = await checkMediaPermissions();
-    if (!hasPermission || !profile) return;
-
-    setIsSearching(true);
+    // 1. Dokunma anında SESİ VE RADARI ANINDA SENKRON BAŞLAT (iOS gesture kilidini anında kırar)
     soundManager.startRadar();
+    setIsSearching(true);
+
+    const hasPermission = await checkMediaPermissions();
+    if (!hasPermission || !profile) {
+      soundManager.stopRadar();
+      setIsSearching(false);
+      return;
+    }
     
     try {
       // 1. Bekleyen biri var mı diye kontrol et

@@ -50,72 +50,81 @@ class SoundManager {
     return this.audioContext as AudioContext;
   }
 
-  private async ensureActiveContext(): Promise<AudioContext | null> {
-    const ctx = this.getContext();
-    if (ctx && ctx.state === 'suspended') {
-      try {
-        await ctx.resume();
-      } catch (_) {}
-    }
-    return ctx;
-  }
-
-  // Eşleşme Aranıyor (Sihirli Yükseliş + Sonar Ping İkilisi)
+  // Eşleşme Aranıyor (Derin Yükselen Whoosh + Kristal Sonar Ping İkilisi)
   private playDoublePing() {
     if (!this.isSearching) return;
     
-    const ctx = this.getContext();
-    const now = ctx.currentTime;
-    
-    // 1. SES: Alttan yükselen sihirli ses (Whoosh)
-    const sweepOsc = ctx.createOscillator();
-    const sweepGain = ctx.createGain();
-    
-    sweepOsc.type = 'sine';
-    sweepOsc.frequency.setValueAtTime(400, now);
-    sweepOsc.frequency.exponentialRampToValueAtTime(1200, now + 0.4);
-    
-    sweepGain.gain.setValueAtTime(0, now);
-    sweepGain.gain.linearRampToValueAtTime(0.15, now + 0.1);
-    sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-    
-    sweepOsc.connect(sweepGain);
-    sweepGain.connect(ctx.destination);
-    
-    sweepOsc.start(now);
-    sweepOsc.stop(now + 0.6);
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+      
+      // 1. SES: Alttan yükselen sinematik sihirli ses (Whoosh)
+      // Çift osilatör (Triangle + Sine) ile zengin ve dolgun frekans
+      const sweepOsc = ctx.createOscillator();
+      const sweepGain = ctx.createGain();
+      
+      sweepOsc.type = 'triangle';
+      sweepOsc.frequency.setValueAtTime(280, now);
+      sweepOsc.frequency.exponentialRampToValueAtTime(760, now + 0.35);
+      
+      sweepGain.gain.setValueAtTime(0, now);
+      sweepGain.gain.linearRampToValueAtTime(0.32, now + 0.08);
+      sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      
+      sweepOsc.connect(sweepGain);
+      sweepGain.connect(ctx.destination);
+      
+      sweepOsc.start(now);
+      sweepOsc.stop(now + 0.45);
 
-    // 2. SES: Radar/Sonar Ping sesi (Whoosh'tan hemen sonra çalar)
-    const pingTime = now + 0.4;
-    const pingOsc = ctx.createOscillator();
-    const pingGain = ctx.createGain();
+      // 2. SES: Kristal Berraklığında Radar / Sonar Ping (Acoustic Chime Ping)
+      // Çift armonik: Temel frekans (1046.5Hz = C6) + 5. derece (1567.98Hz = G6)
+      const pingTime = now + 0.30;
+      [1046.5, 1567.98].forEach((freq, idx) => {
+        const pingOsc = ctx.createOscillator();
+        const pingGain = ctx.createGain();
 
-    pingOsc.type = 'sine';
-    pingOsc.frequency.setValueAtTime(880, pingTime); // A5 nota
-    pingOsc.frequency.exponentialRampToValueAtTime(440, pingTime + 0.1);
+        pingOsc.type = idx === 0 ? 'sine' : 'triangle';
+        pingOsc.frequency.setValueAtTime(freq, pingTime);
+        pingOsc.frequency.exponentialRampToValueAtTime(freq * 0.88, pingTime + 0.22);
 
-    pingGain.gain.setValueAtTime(0, pingTime);
-    pingGain.gain.linearRampToValueAtTime(0.5, pingTime + 0.05);
-    pingGain.gain.exponentialRampToValueAtTime(0.001, pingTime + 0.5);
+        const peakVol = idx === 0 ? 0.48 : 0.25;
+        pingGain.gain.setValueAtTime(0, pingTime);
+        pingGain.gain.linearRampToValueAtTime(peakVol, pingTime + 0.025);
+        pingGain.gain.exponentialRampToValueAtTime(0.001, pingTime + 0.55);
 
-    pingOsc.connect(pingGain);
-    pingGain.connect(ctx.destination);
+        pingOsc.connect(pingGain);
+        pingGain.connect(ctx.destination);
 
-    pingOsc.start(pingTime);
-    pingOsc.stop(pingTime + 0.5);
+        pingOsc.start(pingTime);
+        pingOsc.stop(pingTime + 0.55);
+      });
+    } catch (_) {}
   }
 
-  public async startRadar() {
+  // Senkron başlatma: Kullanıcı butona dokunur dokunmaz gecikmesiz çalışır
+  public startRadar() {
     this.isSearching = true;
-    await this.ensureActiveContext();
+    try {
+      const ctx = this.getContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    } catch (_) {}
     
-    // Aramaya başlar başlamaz ilk sesleri çal (Whoosh + Ping)
+    // Aramaya başlar başlamaz ilk sesleri hemen çal (Whoosh + Ping)
     this.playDoublePing();
     
-    // Sonra her 2.5 saniyede bir aynı ikiliyi tekrarla (Süre uzatıldı)
+    if (this.radarInterval) {
+      clearInterval(this.radarInterval);
+    }
     this.radarInterval = window.setInterval(() => {
       this.playDoublePing();
-    }, 2500) as unknown as number;
+    }, 2200) as unknown as number;
   }
 
   public stopRadar() {
@@ -126,34 +135,48 @@ class SoundManager {
     }
   }
 
-  // Eşleşme Bulundu (Success Chime)
-  public async playMatchFound() {
+  // Eşleşme Bulundu (Kristal Çan / Canlı Başarı Akoru)
+  public playMatchFound() {
     this.stopRadar();
-    const ctx = (await this.ensureActiveContext()) || this.getContext();
-    
-    // Çift tonlu armonik bir zil sesi oluştur
-    const playTone = (freq: number, startTime: number, duration: number) => {
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
+    try {
+      const ctx = this.getContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      
+      if (ctx) {
+        const playChime = (freq: number, startTime: number, duration: number, vol = 0.38) => {
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
 
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + startTime);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + startTime);
 
-      gainNode.gain.setValueAtTime(0, ctx.currentTime + startTime);
-      gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + startTime + 0.1);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startTime + duration);
+          gainNode.gain.setValueAtTime(0, ctx.currentTime + startTime);
+          gainNode.gain.linearRampToValueAtTime(vol, ctx.currentTime + startTime + 0.04);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startTime + duration);
 
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
 
-      osc.start(ctx.currentTime + startTime);
-      osc.stop(ctx.currentTime + startTime + duration);
-    };
+          osc.start(ctx.currentTime + startTime);
+          osc.stop(ctx.currentTime + startTime + duration);
+        };
 
-    // Major akor çal (C5, E5, G5)
-    playTone(523.25, 0, 1.0); // C5
-    playTone(659.25, 0.1, 1.0); // E5
-    playTone(783.99, 0.2, 1.5); // G5
+        // Sıcak ve etkileyici C-Major arpeggio akoru (C5, E5, G5, C6)
+        playChime(523.25, 0, 0.9, 0.35);     // C5
+        playChime(659.25, 0.10, 0.9, 0.38);  // E5
+        playChime(783.99, 0.20, 1.0, 0.42);  // G5
+        playChime(1046.50, 0.32, 1.6, 0.55); // C6
+      }
+    } catch (_) {}
+
+    // HTML5 Audio yedek bildirim tetikleyicisi
+    try {
+      const audio = new Audio('/pingoo.mp3');
+      audio.volume = 0.85;
+      audio.play().catch(() => {});
+    } catch (_) {}
   }
 
   // Altın Satın Alma ve Hediye Şıngırtısı (Gold Coin Chime)
