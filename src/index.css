@@ -19,6 +19,11 @@
   font-family: 'Outfit', sans-serif;
 }
 
+html, body {
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+}
+
 body {
   background: linear-gradient(135deg, var(--primary-bg), var(--secondary-bg), var(--accent-color));
   color: var(--text-main);

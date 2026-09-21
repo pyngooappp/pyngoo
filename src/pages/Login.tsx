@@ -762,6 +762,53 @@ export default function Login({ onLogin }: LoginProps) {
       if (error) throw error;
 
       if (isNative && data?.url) {
+        // 🍏 iOS için Apple'ın ASWebAuthenticationSession yerel kimlik doğrulama penceresini kullan
+        // (Sıfır Safari uygulaması, sıfır alt tarayıcı barı, sıfır X butonu - işlem bitince otomatik kapanır!)
+        if (Capacitor.isPluginAvailable('InAppAuth')) {
+          try {
+            const { InAppAuth } = await import('@ccatto/capacitor-inapp-auth');
+            const authRes = await InAppAuth.start({
+              url: data.url,
+              callbackScheme: 'pyngoo'
+            });
+
+            if (authRes?.url) {
+              const rawUrl = authRes.url;
+              let hashPart = '';
+              let queryPart = '';
+              if (rawUrl.includes('#')) {
+                const splitHash = rawUrl.split('#');
+                hashPart = splitHash[1] || '';
+                queryPart = splitHash[0].includes('?') ? splitHash[0].split('?')[1] : '';
+              } else if (rawUrl.includes('?')) {
+                queryPart = rawUrl.split('?')[1] || '';
+              }
+
+              const combinedParams = new URLSearchParams([hashPart, queryPart].filter(Boolean).join('&'));
+              const accessToken = combinedParams.get('access_token');
+              const refreshToken = combinedParams.get('refresh_token');
+
+              if (accessToken) {
+                await supabase.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: refreshToken || ''
+                });
+                setLoading(false);
+                return;
+              }
+            }
+            setLoading(false);
+            return;
+          } catch (inAppErr: any) {
+            console.warn("[InAppAuth] Hata veya iptal:", inAppErr);
+            const errMsg = (inAppErr?.message || String(inAppErr)).toLowerCase();
+            if (errMsg.includes('cancel') || inAppErr === 'CANCELED') {
+              setLoading(false);
+              return;
+            }
+          }
+        }
+
         setLoading(false);
         await Browser.open({
           url: data.url,
