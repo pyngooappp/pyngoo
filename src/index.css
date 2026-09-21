@@ -61,6 +61,7 @@ img, video {
   display: flex;
   flex-direction: column;
   position: relative;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 /* Glassmorphism utilities */
@@ -698,14 +699,16 @@ img, video {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 80px;
+  height: calc(65px + env(safe-area-inset-bottom, 0px));
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 16px env(safe-area-inset-bottom, 0px) 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 100;
-  background: rgba(15, 12, 41, 0.85); /* primary-bg dark */
+  background: rgba(15, 12, 41, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 /* --- GÖRÜNTÜLÜ & SESLİ GÖRÜŞME SIRASINDA ALT DOCK GİZLEME VE TAM EKRAN KORUMASI --- */
