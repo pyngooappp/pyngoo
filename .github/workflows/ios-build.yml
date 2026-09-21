@@ -71,9 +71,22 @@ jobs:
 
       - name: Build and Archive iOS App (.ipa)
         run: |
+          # Force official release Xcode to avoid beta iOS 18.5 SDK rejection (ITMS-90725)
+          echo "Available Xcode versions:"
+          ls -d /Applications/Xcode*
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+          fi
+          xcodebuild -version
+
           cd ios/App
           
           cat <<EOF > ExportOptions.plist
+
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
