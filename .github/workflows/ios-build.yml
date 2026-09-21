@@ -138,6 +138,55 @@ jobs:
           api-key-id: ${{ secrets.APP_STORE_KEY_ID }}
           api-private-key: ${{ secrets.APP_STORE_PRIVATE_KEY }}
           wait-for-processing: false
-          uses-non-exempt-encryption: false
+      - name: Inspect App Store Connect Builds Status
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+          PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+        run: |
+          node -e "
+          const crypto = require('crypto');
+          const https = require('https');
+
+          function b64Url(s) {
+            return Buffer.from(s).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+          }
+
+          const keyId = process.env.KEY_ID;
+          const issuerId = process.env.ISSUER_ID;
+          const privateKey = process.env.PRIVATE_KEY;
+
+          const now = Math.floor(Date.now() / 1000);
+          const header = b64Url(JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' }));
+          const payload = b64Url(JSON.stringify({ iss: issuerId, iat: now, exp: now + 1200, aud: 'appstoreconnect-v1' }));
+          
+          const sign = crypto.createSign('SHA256');
+          sign.update(header + '.' + payload);
+          sign.end();
+          const sig = sign.sign({ key: privateKey, dsaEncoding: 'ieee-p1363' }, 'base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+          const token = header + '.' + payload + '.' + sig;
+
+          https.get('https://api.appstoreconnect.apple.com/v1/builds?include=app&limit=10', {
+            headers: { 'Authorization': 'Bearer ' + token, 'User-Agent': 'NodeJS' }
+          }, res => {
+            let data = '';
+            res.on('data', d => data += d);
+            res.on('end', () => {
+              console.log('=== APP STORE CONNECT API STATUS ===', res.statusCode);
+              try {
+                const json = JSON.parse(data);
+                if (json.data && json.data.length > 0) {
+                  json.data.forEach(b => {
+                    console.log('BUILD:', b.id, '| Version:', b.attributes.version, '| State:', b.attributes.processingState, '| Uploaded:', b.attributes.uploadedDate, '| MinOS:', b.attributes.minOsVersion);
+                  });
+                } else {
+                  console.log('API DATA EMPTY OR ERROR:', JSON.stringify(json, null, 2));
+                }
+              } catch(e) {
+                console.log('RAW DATA:', data);
+              }
+            });
+          });
+          "
 
 
