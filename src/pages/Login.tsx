@@ -743,10 +743,10 @@ export default function Login({ onLogin }: LoginProps) {
       }
     }
 
-    // Mobilde doğrudan sistem şeması pyngoo://auth-callback ile yönlendir!
-    // Asla web sayfası (oauth-callback.html) açılmaz; böylece HTTP 302 yanıtında sistem popup'ı ANINDA otomatik kapanır!
+    // Mobilde doğrudan temiz sistem şeması pyngoo://auth-callback ile yönlendir!
+    // Supabase panelindeki whitelist ile birebir eşleşmesi için sorgu parametresi (query param) ASLA eklenmez!
     const redirectUri = isNative
-      ? `pyngoo://auth-callback?${redirectParams.toString()}`
+      ? 'pyngoo://auth-callback'
       : `${window.location.origin}/?${redirectParams.toString()}`;
 
     try {
