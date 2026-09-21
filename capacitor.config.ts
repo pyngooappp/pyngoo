@@ -9,7 +9,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     AdMob: {
-      appId: 'ca-app-pub-6163702675931285~8012675744'
+      appId: 'ca-app-pub-6163702675931285~1338244734'
     }
   }
 };
