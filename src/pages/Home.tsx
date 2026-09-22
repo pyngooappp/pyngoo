@@ -567,7 +567,7 @@ export default function Home({ userId }: HomeProps) {
   }
 
   return (
-    <div className="home-container" style={{ paddingBottom: '100px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+    <div className="home-container home-match-screen">
       
       {/* Günlük Ödül Pop-up'ı */}
       {showDailyRewards && profile && (
@@ -801,15 +801,16 @@ export default function Home({ userId }: HomeProps) {
           </div>
         ) : (
           <div className="match-prompt">
-            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            {/* Üst Bölüm: Canlı Sayaç ve Yayıncı Uyarıları */}
+            <div className="match-prompt-top">
               {/* KADIN YAYINCI GİRİŞİNDE MOLA UYARISI BANNERI */}
               {isFemaleStreamer && !streamerOnline && !dismissBreakAlert && (
                 <div style={{
                   width: '100%',
                   maxWidth: '460px',
-                  margin: '0 auto 12px auto',
-                  padding: '16px 18px',
-                  borderRadius: '22px',
+                  margin: '0 auto 8px auto',
+                  padding: '14px 16px',
+                  borderRadius: '20px',
                   background: 'linear-gradient(135deg, rgba(255, 152, 0, 0.16) 0%, rgba(255, 65, 108, 0.14) 50%, rgba(20, 20, 32, 0.95) 100%)',
                   border: '1.5px solid rgba(255, 152, 0, 0.65)',
                   boxShadow: '0 10px 30px rgba(255, 152, 0, 0.25)',
@@ -821,49 +822,49 @@ export default function Home({ userId }: HomeProps) {
                     onClick={() => setDismissBreakAlert(true)}
                     style={{
                       position: 'absolute',
-                      top: '12px',
-                      right: '12px',
+                      top: '10px',
+                      right: '10px',
                       background: 'rgba(255, 255, 255, 0.12)',
                       border: 'none',
                       color: 'rgba(255, 255, 255, 0.75)',
-                      width: '26px',
-                      height: '26px',
+                      width: '24px',
+                      height: '24px',
                       borderRadius: '50%',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '0.85rem'
+                      fontSize: '0.8rem'
                     }}
                     title="Kapat"
                   >
                     ✕
                   </button>
 
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                     <div style={{
-                      width: '44px',
-                      height: '44px',
-                      borderRadius: '14px',
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '12px',
                       background: 'linear-gradient(135deg, #ff9800, #ff5722)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '1.45rem',
+                      fontSize: '1.3rem',
                       flexShrink: 0,
                       boxShadow: '0 4px 15px rgba(255, 152, 0, 0.45)'
                     }}>
                       ☕
                     </div>
 
-                    <div style={{ flex: 1, paddingRight: '20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '1rem', fontWeight: '900', color: '#fff' }}>
+                    <div style={{ flex: 1, paddingRight: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+                        <span style={{ fontSize: '0.94rem', fontWeight: '900', color: '#fff' }}>
                           {t('streamer_break_title', 'Şu an moladasın!')}
                         </span>
                         <span style={{
-                          fontSize: '0.68rem',
-                          padding: '2px 8px',
+                          fontSize: '0.65rem',
+                          padding: '2px 7px',
                           borderRadius: '8px',
                           background: 'rgba(255, 152, 0, 0.25)',
                           border: '1px solid rgba(255, 152, 0, 0.55)',
@@ -875,10 +876,10 @@ export default function Home({ userId }: HomeProps) {
                       </div>
 
                       <p style={{
-                        margin: '0 0 12px 0',
-                        fontSize: '0.82rem',
+                        margin: '0 0 10px 0',
+                        fontSize: '0.78rem',
                         color: 'rgba(255, 255, 255, 0.85)',
-                        lineHeight: '1.4'
+                        lineHeight: '1.35'
                       }}>
                         {t('streamer_break_desc', 'Aramaları kabul etmek ve Keşfet vitrininde en üstte çevrim içi görünmek için hemen canlıya geç.')}
                       </p>
@@ -887,25 +888,25 @@ export default function Home({ userId }: HomeProps) {
                         onClick={handleGoLiveImmediately}
                         style={{
                           width: '100%',
-                          padding: '11px 16px',
-                          borderRadius: '14px',
+                          padding: '10px 14px',
+                          borderRadius: '12px',
                           background: 'linear-gradient(135deg, #00e676 0%, #00b0ff 100%)',
                           border: 'none',
                           color: '#061727',
                           fontWeight: '900',
-                          fontSize: '0.94rem',
+                          fontSize: '0.88rem',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '8px',
-                          boxShadow: '0 6px 22px rgba(0, 230, 118, 0.45)',
+                          boxShadow: '0 6px 20px rgba(0, 230, 118, 0.4)',
                           transition: 'all 0.2s ease'
                         }}
                       >
                         <span style={{
-                          width: '8px',
-                          height: '8px',
+                          width: '7px',
+                          height: '7px',
                           borderRadius: '50%',
                           background: '#061727',
                           boxShadow: '0 0 8px rgba(6, 23, 39, 0.8)'
@@ -922,19 +923,19 @@ export default function Home({ userId }: HomeProps) {
                 <div style={{
                   width: '100%',
                   maxWidth: '460px',
-                  margin: '0 auto 12px auto',
-                  padding: '12px 18px',
-                  borderRadius: '16px',
+                  margin: '0 auto 8px auto',
+                  padding: '10px 16px',
+                  borderRadius: '14px',
                   background: 'linear-gradient(135deg, rgba(0, 230, 118, 0.22), rgba(0, 176, 255, 0.22))',
                   border: '1.5px solid #00e676',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '10px',
+                  gap: '8px',
                   color: '#00e676',
                   fontWeight: '800',
-                  fontSize: '0.88rem',
-                  boxShadow: '0 4px 20px rgba(0, 230, 118, 0.35)'
+                  fontSize: '0.84rem',
+                  boxShadow: '0 4px 18px rgba(0, 230, 118, 0.3)'
                 }}>
                   <span>🎉</span>
                   <span>{t('streamer_live_success_toast', 'Harika! Canlıya geçtin, Keşfet vitrininde en üsttesin!')}</span>
@@ -947,16 +948,16 @@ export default function Home({ userId }: HomeProps) {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '7px 16px',
-                  borderRadius: '20px',
+                  padding: '6px 14px',
+                  borderRadius: '18px',
                   background: 'rgba(0, 230, 118, 0.12)',
                   border: '1px solid rgba(0, 230, 118, 0.4)',
                   color: '#00e676',
-                  fontSize: '0.82rem',
+                  fontSize: '0.78rem',
                   fontWeight: '800',
-                  marginBottom: '8px'
+                  marginBottom: '4px'
                 }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e676', boxShadow: '0 0 8px #00e676' }}></span>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#00e676', boxShadow: '0 0 8px #00e676' }}></span>
                   <span>{t('streamer_home_live_badge', '🟢 Canlıdasın (Aramalar Açık)')}</span>
                   <button
                     onClick={() => {
@@ -973,7 +974,7 @@ export default function Home({ userId }: HomeProps) {
                       border: 'none',
                       color: '#ffb74d',
                       cursor: 'pointer',
-                      fontSize: '0.78rem',
+                      fontSize: '0.75rem',
                       fontWeight: '700',
                       textDecoration: 'underline',
                       marginLeft: '6px'
@@ -983,8 +984,6 @@ export default function Home({ userId }: HomeProps) {
                   </button>
                 </div>
               )}
-
-
 
               {/* KADIN KULLANICI İÇİN AFİLLİ YAYINCI OL BANNERI (Yalnızca henüz yayıncı değilse) */}
               {profile?.gender === 'kadin' && !isFemaleStreamer && (
@@ -997,128 +996,134 @@ export default function Home({ userId }: HomeProps) {
                     background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.28), rgba(255, 215, 0, 0.32))',
                     border: '1.5px solid rgba(255, 215, 0, 0.8)',
                     color: '#fff',
-                    padding: '9px 22px',
-                    borderRadius: '22px',
-                    fontSize: '0.86rem',
+                    padding: '8px 18px',
+                    borderRadius: '20px',
+                    fontSize: '0.82rem',
                     fontWeight: '900',
                     cursor: 'pointer',
-                    boxShadow: '0 4px 18px rgba(46, 204, 113, 0.35)',
-                    transition: 'all 0.2s'
+                    boxShadow: '0 4px 16px rgba(46, 204, 113, 0.35)',
+                    transition: 'all 0.2s',
+                    marginBottom: '4px'
                   }}
                 >
-                  <span style={{ fontSize: '1.1rem' }}>💵</span>
+                  <span style={{ fontSize: '1rem' }}>💵</span>
                   <span>
                     💰 {t('streamer_become_host_banner', 'Yayıncı Ol & Nakit Para Kazan!')}
                   </span>
-                  <span style={{ fontSize: '0.9rem', color: '#ffd700' }}>➔</span>
+                  <span style={{ fontSize: '0.85rem', color: '#ffd700' }}>➔</span>
                 </button>
               )}
 
               {/* Canlı Odalar & Aktif Çevrimiçi Kullanıcı Rozeti */}
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2px', marginBottom: '2px' }}>
                 <LivePulseCounter />
               </div>
             </div>
 
-            <h3>{t('home_ready')}</h3>
-            <p>{chatMode === 'video' ? t('home_ready_desc_video') : t('home_ready_desc_voice')}</p>
-            
-            {micError && (
-              <div style={{ 
-                color: '#ff6b6b', 
-                background: 'rgba(255, 107, 107, 0.12)', 
-                border: '1px solid rgba(255, 107, 107, 0.35)',
-                padding: '14px 18px', 
-                borderRadius: '12px', 
-                marginBottom: '20px', 
-                fontWeight: '500',
-                fontSize: '0.92rem',
-                lineHeight: '1.5',
-                textAlign: 'left'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                  <span style={{ fontSize: '1.2rem', marginTop: '1px' }}>⚠️</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#ff7675' }}>
-                      {mediaErrorType === 'not_found_video' && t('home_device_not_found_video')}
-                      {mediaErrorType === 'not_found_audio' && t('home_device_not_found_audio')}
-                      {mediaErrorType === 'in_use' && t('home_device_in_use')}
-                      {(!mediaErrorType || mediaErrorType === 'denied') && t('home_mic_camera_permission_err')}
+            {/* Orta Bölüm: Başlık, Modlar ve Dil Seçimi */}
+            <div className="match-prompt-center">
+              <h3>{t('home_ready')}</h3>
+              <p>{chatMode === 'video' ? t('home_ready_desc_video') : t('home_ready_desc_voice')}</p>
+              
+              {micError && (
+                <div style={{ 
+                  color: '#ff6b6b', 
+                  background: 'rgba(255, 107, 107, 0.12)', 
+                  border: '1px solid rgba(255, 107, 107, 0.35)',
+                  padding: '10px 14px', 
+                  borderRadius: '12px', 
+                  marginBottom: '12px', 
+                  fontWeight: '500',
+                  fontSize: '0.85rem',
+                  lineHeight: '1.4',
+                  textAlign: 'left'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <span style={{ fontSize: '1.1rem', marginTop: '1px' }}>⚠️</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '3px', color: '#ff7675' }}>
+                        {mediaErrorType === 'not_found_video' && t('home_device_not_found_video')}
+                        {mediaErrorType === 'not_found_audio' && t('home_device_not_found_audio')}
+                        {mediaErrorType === 'in_use' && t('home_device_in_use')}
+                        {(!mediaErrorType || mediaErrorType === 'denied') && t('home_mic_camera_permission_err')}
+                      </div>
+                      {mediaErrorType === 'not_found_video' && (
+                        <div style={{ fontSize: '0.78rem', color: '#ffd2d2', marginTop: '4px' }}>
+                          💡 <b>Çözüm:</b> Kameranız yoksa alttaki <b>"🎙️ Sesli Sohbet"</b> seçeneğine tıklayıp hemen sadece sesle eşleşebilirsiniz!
+                        </div>
+                      )}
+                      {mediaErrorType === 'denied' && (
+                        <div style={{ fontSize: '0.78rem', color: '#ffd2d2', marginTop: '4px' }}>
+                          💡 <b>Çözüm:</b> Tarayıcının en üstündeki kilit 🔒 simgesine tıklayın, Kamera ve Mikrofonu "İzin Ver" yapıp sayfayı yenileyin.
+                        </div>
+                      )}
                     </div>
-                    {mediaErrorType === 'not_found_video' && (
-                      <div style={{ fontSize: '0.82rem', color: '#ffd2d2', marginTop: '6px' }}>
-                        💡 <b>Çözüm:</b> Kameranız yoksa alttaki <b>"🎙️ Sesli Sohbet"</b> seçeneğine tıklayıp hemen sadece sesle eşleşebilirsiniz!
-                      </div>
-                    )}
-                    {mediaErrorType === 'denied' && (
-                      <div style={{ fontSize: '0.82rem', color: '#ffd2d2', marginTop: '6px' }}>
-                        💡 <b>Çözüm:</b> Tarayıcının en üstündeki kilit 🔒 simgesine tıklayın, Kamera ve Mikrofonu "İzin Ver" yapıp sayfayı yenileyin.
-                      </div>
-                    )}
                   </div>
                 </div>
+              )}
+
+              {/* 📹 Görüntülü / 🎙️ Sesli Mod Seçimi */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '10px' }}>
+                <button 
+                  onClick={() => { setChatMode('video'); setMicError(false); setMediaErrorType(null); }}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', gap: '7px', padding: '8px 16px', borderRadius: '14px',
+                    background: chatMode === 'video' ? 'linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.25))' : 'rgba(255,255,255,0.05)',
+                    border: chatMode === 'video' ? '2px solid #00f2fe' : '1px solid rgba(255,255,255,0.15)',
+                    color: 'white', cursor: 'pointer', transition: '0.3s',
+                    boxShadow: chatMode === 'video' ? '0 0 15px rgba(0, 242, 254, 0.3)' : 'none'
+                  }}
+                >
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{t('mode_video')}</span>
+                </button>
+                <button 
+                  onClick={() => { setChatMode('voice'); setMicError(false); setMediaErrorType(null); }}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', gap: '7px', padding: '8px 16px', borderRadius: '14px',
+                    background: chatMode === 'voice' ? 'linear-gradient(135deg, rgba(255, 65, 108, 0.25), rgba(255, 75, 43, 0.25))' : 'rgba(255,255,255,0.05)',
+                    border: chatMode === 'voice' ? '2px solid #ff416c' : '1px solid rgba(255,255,255,0.15)',
+                    color: 'white', cursor: 'pointer', transition: '0.3s',
+                    boxShadow: chatMode === 'voice' ? '0 0 15px rgba(255, 65, 108, 0.3)' : 'none'
+                  }}
+                >
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{t('mode_voice')}</span>
+                </button>
               </div>
-            )}
 
-            {/* 📹 Görüntülü / 🎙️ Sesli Mod Seçimi */}
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
-              <button 
-                onClick={() => { setChatMode('video'); setMicError(false); setMediaErrorType(null); }}
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '14px',
-                  background: chatMode === 'video' ? 'linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.25))' : 'rgba(255,255,255,0.05)',
-                  border: chatMode === 'video' ? '2px solid #00f2fe' : '1px solid rgba(255,255,255,0.15)',
-                  color: 'white', cursor: 'pointer', transition: '0.3s',
-                  boxShadow: chatMode === 'video' ? '0 0 15px rgba(0, 242, 254, 0.3)' : 'none'
-                }}
-              >
-                <span style={{ fontSize: '0.95rem', fontWeight: 'bold' }}>{t('mode_video')}</span>
-              </button>
-              <button 
-                onClick={() => { setChatMode('voice'); setMicError(false); setMediaErrorType(null); }}
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '14px',
-                  background: chatMode === 'voice' ? 'linear-gradient(135deg, rgba(255, 65, 108, 0.25), rgba(255, 75, 43, 0.25))' : 'rgba(255,255,255,0.05)',
-                  border: chatMode === 'voice' ? '2px solid #ff416c' : '1px solid rgba(255,255,255,0.15)',
-                  color: 'white', cursor: 'pointer', transition: '0.3s',
-                  boxShadow: chatMode === 'voice' ? '0 0 15px rgba(255, 65, 108, 0.3)' : 'none'
-                }}
-              >
-                <span style={{ fontSize: '0.95rem', fontWeight: 'bold' }}>{t('mode_voice')}</span>
-              </button>
+              {/* Dil Filtresi Seçimi */}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '6px' }}>
+                <button 
+                  onClick={() => setLanguageFilter('same')}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '12px',
+                    background: languageFilter === 'same' ? 'rgba(255, 65, 108, 0.2)' : 'transparent',
+                    border: languageFilter === 'same' ? '2px solid #ff416c' : '1px solid rgba(255,255,255,0.2)',
+                    color: 'white', cursor: 'pointer', transition: '0.3s'
+                  }}
+                >
+                  <span style={{ fontSize: '0.84rem', fontWeight: 'bold' }}>{t('home_filter_lang')}</span>
+                </button>
+                <button 
+                  onClick={() => setLanguageFilter('all')}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '12px',
+                    background: languageFilter === 'all' ? 'rgba(79, 172, 254, 0.2)' : 'transparent',
+                    border: languageFilter === 'all' ? '2px solid #4facfe' : '1px solid rgba(255,255,255,0.2)',
+                    color: 'white', cursor: 'pointer', transition: '0.3s'
+                  }}
+                >
+                  <span style={{ fontSize: '0.84rem', fontWeight: 'bold' }}>{t('home_filter_all')}</span>
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '20px' }}>
-              <button 
-                onClick={() => setLanguageFilter('same')}
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', borderRadius: '12px',
-                  background: languageFilter === 'same' ? 'rgba(255, 65, 108, 0.2)' : 'transparent',
-                  border: languageFilter === 'same' ? '2px solid #ff416c' : '1px solid rgba(255,255,255,0.2)',
-                  color: 'white', cursor: 'pointer', transition: '0.3s'
-                }}
-              >
-                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{t('home_filter_lang')}</span>
-              </button>
-              <button 
-                onClick={() => setLanguageFilter('all')}
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', borderRadius: '12px',
-                  background: languageFilter === 'all' ? 'rgba(79, 172, 254, 0.2)' : 'transparent',
-                  border: languageFilter === 'all' ? '2px solid #4facfe' : '1px solid rgba(255,255,255,0.2)',
-                  color: 'white', cursor: 'pointer', transition: '0.3s'
-                }}
-              >
-                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{t('home_filter_all')}</span>
+            {/* Alt Bölüm: Büyüleyici Eşleşme Butonu */}
+            <div className="match-prompt-bottom">
+              <button onClick={startSearching} className="match-btn pulse-animation">
+                {chatMode === 'video' ? <Video size={34} /> : <Mic size={34} />}
+                <span>{t('home_match_btn')}</span>
               </button>
             </div>
-
-            <button onClick={startSearching} className="match-btn pulse-animation">
-              {chatMode === 'video' ? <Video size={36} /> : <Mic size={36} />}
-              <span>{t('home_match_btn')}</span>
-            </button>
-            
-            {/* GELİŞTİRİCİ TEST BUTONLARI - Tamamen kaldırıldı */}
           </div>
         )}
       </main>
