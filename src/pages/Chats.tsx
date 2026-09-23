@@ -963,7 +963,9 @@ export default function Chats({ userId }: ChatsProps) {
                       : (isMine ? 'linear-gradient(135deg, #4facfe, #00f2fe)' : 'rgba(255,255,255,0.1)'),
                     color: 'white',
                     border: msg.gift_emoji ? '1px solid rgba(255,255,255,0.2)' : 'none',
-                    textAlign: msg.gift_emoji ? 'center' : 'left'
+                    textAlign: msg.gift_emoji ? 'center' : 'left',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'anywhere'
                   }}>
                     {msg.gift_emoji ? (
                       <div>

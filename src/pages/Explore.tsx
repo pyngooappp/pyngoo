@@ -692,8 +692,8 @@ export default function Explore({ userId }: ExploreProps) {
         maxWidth: '1200px',
         margin: '0 auto',
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-        gap: '16px'
+        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+        gap: '12px'
       }}>
         {filteredList.map((creator, index) => (
           <div
@@ -720,7 +720,7 @@ export default function Explore({ userId }: ExploreProps) {
             onClick={() => recordProfileView(creator.id)}
           >
             {/* Foto ve Ust Rozetler */}
-            <div style={{ position: 'relative', width: '100%', height: '330px', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', width: '100%', height: '200px', overflow: 'hidden' }}>
               <img
                 src={creator.avatar}
                 alt={creator.name}

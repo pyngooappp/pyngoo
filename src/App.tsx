@@ -590,11 +590,28 @@ function App() {
           );
 
           if (!hasExplicitRegisterSubmission && !isOmer) {
-            console.warn("App.tsx: Kullanıcının Pyngoo profili bulunamadı ve Giriş Yap modundan bağlandı. Supabase Auth kaydı temizleniyor, oturum kapatılıp Kayıt Ol sekmesine yönlendiriliyor.");
-            try {
+            // KRİTİK KURAL: "Giriş Yap" modunda (isExplicitLoginMode=true) hesap asla silinmez!
+            // Profil DB'den gelmemiş olabilir (geçici ağ hatası, Supabase nano pool dolumu, vb.).
+            // "Kayıt Ol" modunda ise gerçekten yeni hesap açılıyor: o zaman temizlik yapılır.
+            const shouldDeleteAuthAccount = !isExplicitLoginMode && (
+              // Gerçekten yeni bir OAuth sign-up girişimi ama kayıt bayrakları yok
+              isOAuthUser && !localStorage.getItem('pyngoo_just_registered') && !sessionStorage.getItem('pyngoo_just_signed_up')
+            );
+
+            console.warn("App.tsx: Kullanıcının Pyngoo profili bulunamadı.", 
+              "isExplicitLoginMode:", isExplicitLoginMode,
+              "shouldDeleteAuthAccount:", shouldDeleteAuthAccount,
+              "isOAuthUser:", isOAuthUser,
+              "authMode:", authMode
+            );
+
+            if (shouldDeleteAuthAccount) {
               // Oturumdaki geçici auth kullanıcısını sil ki auth.users tablosunda sahte/artık hesap kalmasın
-              await supabase.rpc('delete_user_account');
-            } catch (_) {}
+              // Yalnızca "Kayıt Ol" akışında gerçekten yeni OAuth denemesi iken çalışır
+              try {
+                await supabase.rpc('delete_user_account');
+              } catch (_) {}
+            }
             try { await supabase.auth.signOut(); } catch (_) {}
 
             localStorage.removeItem('pending_nickname');
@@ -619,6 +636,7 @@ function App() {
             }
             return;
           }
+
 
           const pendingLanguage = urlLang || localStorage.getItem('pending_language') || session.user?.user_metadata?.preferred_language || (navigator.language?.startsWith('tr') ? 'tr' : 'en');
           const finalName = pendingNickname ? pendingNickname.trim() : (isOmer ? 'omer' : '');
