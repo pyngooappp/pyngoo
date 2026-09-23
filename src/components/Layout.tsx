@@ -18,7 +18,7 @@ export default function Layout({ userId }: LayoutProps) {
     const savedStr = localStorage.getItem(`pyngoo_user_profile_${userId}`);
     let p: any = null;
     try { p = savedStr ? JSON.parse(savedStr) : null; } catch (_) { p = null; }
-    const checkOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+    const checkOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
     const checkApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
     if (p && checkOmer) {
       p.gender = 'erkek';
@@ -31,7 +31,7 @@ export default function Layout({ userId }: LayoutProps) {
     return p;
   });
 
-  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
   const isApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
   const [gender, setGender] = useState<string>(() => {
@@ -124,7 +124,7 @@ export default function Layout({ userId }: LayoutProps) {
           return;
         }
 
-        const isThisOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+        const isThisOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
         const isThisApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
         if (isThisOmer) {

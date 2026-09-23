@@ -92,7 +92,7 @@
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Size özel ve kaliteli reklam deneyimi sunabilmek için izin gereklidir.</string>
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-6163702675931285~1338244734</string>
+	<string>ca-app-pub-6163702675031285~1338244734</string>
 	<key>GADIsAdManagerApp</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>

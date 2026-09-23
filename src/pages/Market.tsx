@@ -485,7 +485,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
 
   // Profil Verisini Çek & Canlı Bakiye Takibi
   useEffect(() => {
-    const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+    const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
     if (!isOmer && profile?.gender === 'kadin') {
       navigate('/wallet', { replace: true });
       return;
@@ -536,7 +536,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     };
   }, [userId, navigate]);
 
-  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
   // Yalnızca profili kesin olarak kadın olan kullanıcılar için Altın Marketi kapalıdır
   if (!isOmer && profile?.gender === 'kadin') {
     return null;

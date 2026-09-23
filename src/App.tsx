@@ -378,13 +378,6 @@ function App() {
                             session?.user?.app_metadata?.provider === 'apple' ||
                             Boolean(session?.user?.identities?.some((id: any) => id.provider === 'google' || id.provider === 'apple'));
 
-        // GÜVENLİK: access_token/refresh_token adres çubuğunda ASLA beklememeli.
-        // Aşağıdaki profil/DB kontrolleri (ağ gecikmesi, RPC, vb.) bitmeden önce, token'ı
-        // URL'den HEMEN temizle (session zaten yukarıda supabase.auth ile yakalandı).
-        if (isOAuthRedirect && typeof window !== 'undefined' && window.history?.replaceState) {
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search.replace(/([?&])(code)=[^&]*&?/, '$1').replace(/[?&]$/, ''));
-        }
-
         const isExplicitLogin = isOAuthRedirect ||
                                 isOAuthUser ||
                                 localStorage.getItem('pyngoo_force_claim_device') === 'true' || 
@@ -547,6 +540,7 @@ function App() {
         try { savedProfile = savedStr ? JSON.parse(savedStr) : null; } catch (_) {}
 
         const isOmer = uid === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || 
+                       uid === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c' ||
                        session.user?.email === 'omersahin1623@hotmail.com' || 
                        session.user?.email === 'cosmicdreamersleep@gmail.com';
 
@@ -723,9 +717,16 @@ function App() {
           const isBrandNewProfileJustCreated = sessionStorage.getItem(`pyngoo_just_created_profile_${uid}`) === 'true';
           sessionStorage.removeItem(`pyngoo_just_created_profile_${uid}`);
 
-          const enteredNickname = urlNick || cookieNick || localStorage.getItem('pending_nickname');
+          const isExplicitLoginMode = authMode === 'login' || 
+                                     urlParams.get('mode') === 'login' || 
+                                     hashParams.get('mode') === 'login' ||
+                                     urlParams.get('auth_mode') === 'login' ||
+                                     urlParams.get('p_auth_mode') === 'login' ||
+                                     cookieAuthMode === 'login';
 
-          const isRegisterIntent = Boolean(
+          const enteredNickname = !isExplicitLoginMode ? (urlNick || cookieNick || localStorage.getItem('pending_nickname')) : null;
+
+          const isRegisterIntent = !isExplicitLoginMode && Boolean(
             authMode === 'register' ||
             urlParams.get('mode') === 'register' ||
             hashParams.get('mode') === 'register' ||
@@ -735,13 +736,14 @@ function App() {
             localStorage.getItem('pyngoo_just_registered') === 'true' ||
             sessionStorage.getItem('pyngoo_just_signed_up') === 'true' ||
             localStorage.getItem('pyngoo_auth_mode') === 'register' ||
-            sessionStorage.getItem('pyngoo_auth_mode') === 'register' ||
-            Boolean(localStorage.getItem('pending_nickname'))
+            sessionStorage.getItem('pyngoo_auth_mode') === 'register'
           );
 
-          // EĞER KULLANICI ZATEN KAYITLI İSE (Önceden var olan profil) VE "KAYIT OL" SEKMESİNDEN GİRMEYE ÇALIŞTIYSA (veya farklı bir isimle kayıt açmaya çalıştıysa):
-          // SİSTEM HİÇBİR ŞEKİLDE ESKİ PROFİLE OTOMATİK SOKMAZ! Oturumu ve tüm auth token'larını derhal yok eder, email_taken uyarısı verir.
+          // EĞER KULLANICI ZATEN KAYITLI İSE (Önceden var olan profil) VE "KAYIT OL" SEKMESİNDEN GİRMEYE ÇALIŞTIYSA:
+          // SİSTEM HİÇBİR ŞEKİLDE ESKİ PROFİLE OTOMATİK SOKMAZ! Oturumu derhal yok eder, email_taken uyarısı verir.
+          // ANCAK "GİRİŞ YAP" SEKMESİNDEYSE (isExplicitLoginMode=true) KULLANICI NORMAL GİRİŞ YAPIYORDUR, ASLA ENGELLEME!
           const isBlockedExistingProfile = Boolean(
+            !isExplicitLoginMode &&
             !isBrandNewProfileJustCreated &&
             currentProfile &&
             currentProfile.role !== 'deleted' &&
@@ -751,7 +753,7 @@ function App() {
             )
           );
 
-          console.warn("PYNGOO_DEBUG: mevcut profil dalı -> isRegisterIntent:", isRegisterIntent, "isBrandNewProfileJustCreated:", isBrandNewProfileJustCreated, "isBlockedExistingProfile:", isBlockedExistingProfile, "enteredNickname:", enteredNickname, "authMode:", authMode);
+          console.warn("PYNGOO_DEBUG: mevcut profil dalı -> isExplicitLoginMode:", isExplicitLoginMode, "isRegisterIntent:", isRegisterIntent, "isBrandNewProfileJustCreated:", isBrandNewProfileJustCreated, "isBlockedExistingProfile:", isBlockedExistingProfile, "enteredNickname:", enteredNickname, "authMode:", authMode);
 
           if (isBlockedExistingProfile) {
             console.warn(`App.tsx: Kullanıcının zaten var olan aktif profili var (@${currentProfile.display_name}). Kayıt Ol sekmesinden giriş denemesi engellendi.`);
@@ -1634,7 +1636,7 @@ function App() {
     let savedProfile: any = null;
     try { savedProfile = savedStr ? JSON.parse(savedStr) : null; } catch (_) {}
 
-    const isOmer = id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+    const isOmer = id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || id === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
     const isApoo = id === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
     const isKadin = !isOmer && !isApoo && (localStorage.getItem('pyngoo_gender') === 'kadin' || 

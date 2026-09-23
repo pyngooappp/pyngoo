@@ -35,7 +35,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(() => {
-    const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+    const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
     const isApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
     const savedStr = localStorage.getItem(`pyngoo_user_profile_${userId}`);
@@ -220,7 +220,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
         }
 
         if (data && isMounted) {
-          const isThisOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+          const isThisOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
           const isThisApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
           if (isThisOmer) {

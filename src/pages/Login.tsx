@@ -577,44 +577,48 @@ export default function Login({ onLogin }: LoginProps) {
           const authUid = data.session.user.id;
 
           // Veritabanında profil kontrolü: Silinmiş veya veritabanında olmayan hesaplar
-          const { data: checkProf, error: checkErr } = await supabase
-            .from('profiles')
-            .select('id, role, is_banned')
-            .eq('id', authUid)
-            .maybeSingle();
+          let checkProf: any = null;
+          let checkErr: any = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const res = await supabase
+              .from('profiles')
+              .select('id, role, is_banned')
+              .eq('id', authUid)
+              .maybeSingle();
+            checkProf = res.data;
+            checkErr = res.error;
+            if (checkProf || !checkErr) break;
+            await new Promise(r => setTimeout(r, 500));
+          }
 
           if (checkProf?.role === 'deleted') {
             try { await supabase.rpc('delete_user_account'); } catch (_) {}
             await supabase.auth.signOut();
-            const devId = localStorage.getItem('pyngoo_client_device_id');
-            localStorage.clear();
-            sessionStorage.clear();
-            if (devId) localStorage.setItem('pyngoo_client_device_id', devId);
             setShowAccountDeletedModal(true);
-            setIsLoginMode(false); // Kayıt Ol sekmesine geçir
+            setIsLoginMode(false);
             setIsEmailMode(true);
-            return;
-          }
-
-          if (checkErr || !checkProf) {
-            await supabase.auth.signOut();
-            const devId = localStorage.getItem('pyngoo_client_device_id');
-            localStorage.clear();
-            sessionStorage.clear();
-            if (devId) localStorage.setItem('pyngoo_client_device_id', devId);
-            setShowNotFoundModal(true);
-            setIsLoginMode(false); // Kayıt Ol sekmesine geçir
             setLoading(false);
             return;
           }
 
           if (checkProf?.is_banned === true) {
             await supabase.auth.signOut();
-            const devId = localStorage.getItem('pyngoo_client_device_id');
-            localStorage.clear();
-            sessionStorage.clear();
-            if (devId) localStorage.setItem('pyngoo_client_device_id', devId);
-            alert(t('account_banned_alert'));
+            setError(t('account_banned_alert', 'Hesabınız askıya alınmıştır.'));
+            setLoading(false);
+            return;
+          }
+
+          if (!checkProf && !checkErr) {
+            await supabase.auth.signOut();
+            setShowNotFoundModal(true);
+            setIsLoginMode(false);
+            setLoading(false);
+            return;
+          }
+
+          if (checkErr && !checkProf) {
+            setError(t('login_err_server_busy', "⚠️ Sunucuya şu an ulaşılamıyor. Lütfen birkaç saniye sonra tekrar deneyin."));
+            setLoading(false);
             return;
           }
 
@@ -1226,7 +1230,15 @@ export default function Login({ onLogin }: LoginProps) {
         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '20px' }}>
           <button 
             type="button"
-            onClick={() => { setIsLoginMode(false); setIsEmailMode(false); setError(null); setSuccess(null); }}
+            onClick={() => { 
+              setIsLoginMode(false); 
+              setIsEmailMode(false); 
+              setError(null); 
+              setSuccess(null); 
+              localStorage.setItem('pyngoo_auth_mode', 'register');
+              sessionStorage.setItem('pyngoo_auth_mode', 'register');
+              document.cookie = "p_auth_mode=register; path=/; max-age=600; SameSite=Lax";
+            }}
             style={{ 
               background: 'transparent', border: 'none', 
               borderBottom: !isLoginMode ? '2px solid #00f2fe' : '2px solid transparent', 
@@ -1243,6 +1255,10 @@ export default function Login({ onLogin }: LoginProps) {
               setIsEmailMode(false); 
               setError(null); 
               setSuccess(null);
+              localStorage.setItem('pyngoo_auth_mode', 'login');
+              sessionStorage.setItem('pyngoo_auth_mode', 'login');
+              document.cookie = "p_auth_mode=login; path=/; max-age=600; SameSite=Lax";
+              document.cookie = "p_nick=; path=/; max-age=0";
               localStorage.removeItem('pyngoo_just_registered');
               sessionStorage.removeItem('pyngoo_just_signed_up');
               localStorage.removeItem('pending_nickname');

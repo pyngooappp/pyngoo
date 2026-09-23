@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Video, Mic } from 'lucide-react';
 import VoiceChat from '../components/VoiceChat';
@@ -18,6 +18,7 @@ interface HomeProps {
 
 export default function Home({ userId }: HomeProps) {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const outletContext = useOutletContext<{ setIsCallActive?: (active: boolean) => void }>() || {};
   const [isSearching, setIsSearching] = useState(false);
   const [activeMatch, setActiveMatch] = useState<string | null>(null);
@@ -120,7 +121,7 @@ export default function Home({ userId }: HomeProps) {
     setTimeout(() => setJustWentLive(false), 4500);
   };
 
-  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
   const isApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
   const isKadin = !isOmer && !isApoo && (
@@ -161,7 +162,7 @@ export default function Home({ userId }: HomeProps) {
       try {
         const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
         if (data) {
-          const isThisOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+          const isThisOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
           const isThisApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
           if (isThisOmer) {
@@ -1002,8 +1003,62 @@ export default function Home({ userId }: HomeProps) {
                 </div>
               )}
 
-              {/* KADIN KULLANICI İÇİN AFİLLİ YAYINCI OL BANNERI (Yalnızca henüz yayıncı değilse) */}
-              {profile?.gender === 'kadin' && !isFemaleStreamer && (
+              {/* ERKEK KULLANICI İÇİN CANLI YAYINCILARI KEŞFET BUTONU */}
+              {!isKadin && (
+                <button
+                  onClick={() => navigate('/explore')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: 'linear-gradient(135deg, rgba(255, 65, 108, 0.22), rgba(255, 75, 43, 0.28))',
+                    border: '1.5px solid rgba(255, 65, 108, 0.75)',
+                    color: '#fff',
+                    padding: '8px 20px',
+                    borderRadius: '20px',
+                    fontSize: '0.84rem',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 18px rgba(255, 65, 108, 0.35)',
+                    transition: 'all 0.2s',
+                    marginBottom: '4px'
+                  }}
+                >
+                  <span style={{ fontSize: '1rem' }}>✨</span>
+                  <span>{t('home_discover_streamers_btn', 'Canlı Yayıncıları Keşfet')}</span>
+                  <span style={{ fontSize: '0.85rem', color: '#ff758c' }}>➔</span>
+                </button>
+              )}
+
+              {/* KADIN YAYINCI MOLADAYSA / ÇEVRİM DIŞIYSA CANLIYA GEÇ BUTONU (Eğer büyük mola kutusu kapatılmışsa) */}
+              {isFemaleStreamer && !streamerOnline && dismissBreakAlert && (
+                <button
+                  onClick={handleGoLiveImmediately}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: 'linear-gradient(135deg, rgba(0, 230, 118, 0.28), rgba(0, 176, 255, 0.28))',
+                    border: '1.5px solid rgba(0, 230, 118, 0.85)',
+                    color: '#fff',
+                    padding: '8px 20px',
+                    borderRadius: '20px',
+                    fontSize: '0.84rem',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 18px rgba(0, 230, 118, 0.35)',
+                    transition: 'all 0.2s',
+                    marginBottom: '4px'
+                  }}
+                >
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e676', boxShadow: '0 0 8px #00e676' }}></span>
+                  <span>{t('streamer_go_live_btn', '🟢 Canlı Yayına Geç')}</span>
+                  <span style={{ fontSize: '0.85rem', color: '#00e676' }}>➔</span>
+                </button>
+              )}
+
+              {/* KADIN KULLANICI HENÜZ YAYINCI DEĞİLSE YAYINCI OL & CANLIYA GEÇ BANNERI */}
+              {isKadin && !isFemaleStreamer && (
                 <button
                   onClick={() => setShowStreamerModal(true)}
                   style={{
@@ -1013,9 +1068,9 @@ export default function Home({ userId }: HomeProps) {
                     background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.28), rgba(255, 215, 0, 0.32))',
                     border: '1.5px solid rgba(255, 215, 0, 0.8)',
                     color: '#fff',
-                    padding: '8px 18px',
+                    padding: '8px 20px',
                     borderRadius: '20px',
-                    fontSize: '0.82rem',
+                    fontSize: '0.84rem',
                     fontWeight: '900',
                     cursor: 'pointer',
                     boxShadow: '0 4px 16px rgba(46, 204, 113, 0.35)',
@@ -1025,7 +1080,7 @@ export default function Home({ userId }: HomeProps) {
                 >
                   <span style={{ fontSize: '1rem' }}>💵</span>
                   <span>
-                    💰 {t('streamer_become_host_banner', 'Yayıncı Ol & Nakit Para Kazan!')}
+                    💰 {t('streamer_become_host_banner', 'Yayıncı Ol & Canlı Yayına Geç!')}
                   </span>
                   <span style={{ fontSize: '0.85rem', color: '#ffd700' }}>➔</span>
                 </button>

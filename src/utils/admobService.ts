@@ -9,16 +9,16 @@ const TEST_AD_UNITS = {
 };
 
 export const ADMOB_APP_IDS = {
-  android: 'ca-app-pub-6163702675931285~8012675744',
-  ios: 'ca-app-pub-6163702675931285~1338244734'
+  android: 'ca-app-pub-6163702675031285~8012675744',
+  ios: 'ca-app-pub-6163702675031285~1338244734'
 };
 
 const REAL_AD_UNITS = {
-  android: 'ca-app-pub-6163702675931285/2481147464',
-  ios: 'ca-app-pub-6163702675931285/4424784528'
+  android: 'ca-app-pub-6163702675031285/2481147464',
+  ios: 'ca-app-pub-6163702675031285/4424784328' // Pyngoo iOS Ödüllü
 };
 
-const USE_TEST_ADS = false; // Gerçek AdMob ID'leri bağlandı
+const USE_TEST_ADS = false; // Gerçek AdMob ID'leri aktif
 
 class AdMobService {
   private isInitialized = false;
@@ -105,7 +105,23 @@ class AdMobService {
       this.isPreparing = false;
       return true;
     } catch (error) {
-      console.warn('AdMob prepare error:', error);
+      console.warn('⚠️ AdMob canlı reklam yüklenemedi (uygulama henüz App Store onayında olabilir), test reklamı deneniyor:', error);
+      // Canlı reklam birimi App Store incelemesindeyken test reklamına düşerek akışı koru
+      try {
+        const platform = Capacitor.getPlatform();
+        const testAdId = platform === 'ios' ? TEST_AD_UNITS.ios : TEST_AD_UNITS.android;
+        await AdMob.prepareRewardVideoAd({
+          adId: testAdId,
+          isTesting: true,
+          ssv: userId ? { userId } : undefined
+        });
+        this.isAdLoaded = true;
+        this.isPreparing = false;
+        console.log('✅ AdMob test reklamı başarıyla hazırlandı.');
+        return true;
+      } catch (testErr) {
+        console.warn('❌ AdMob test reklamı da yüklenemedi:', testErr);
+      }
       this.isPreparing = false;
       this.isAdLoaded = false;
       return false;
