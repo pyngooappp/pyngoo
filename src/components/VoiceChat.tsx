@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import AgoraRTC, { type IAgoraRTCClient, type IMicrophoneAudioTrack, type ICameraVideoTrack, type IRemoteVideoTrack } from 'agora-rtc-sdk-ng';
-import { SkipForward, Mic, MicOff, PhoneOff, Clock, Flag, Gift, X, Video, VideoOff, Eye, SwitchCamera, Send, UserX } from 'lucide-react';
+import { SkipForward, Mic, MicOff, PhoneOff, Clock, Flag, Gift, X, Video, VideoOff, Eye, SwitchCamera, Send, UserX, Heart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import femaleAvatar from '../assets/avatar_female.png';
 import maleAvatar from '../assets/avatar_male.png';
@@ -1484,7 +1484,13 @@ export default function VoiceChat({
               fontSize: '6.5rem', zIndex: 100, pointerEvents: 'none',
               animation: 'giftPop 3s ease-out forwards', textShadow: '0 10px 30px rgba(0,0,0,0.7)'
             }}>
-              {activeGiftAnimation}
+              {activeGiftAnimation === '❤️' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', filter: 'drop-shadow(0 0 35px rgba(255, 45, 85, 0.95))' }}>
+                  <Heart size={110} fill="#ff2d55" color="#ff416c" />
+                </div>
+              ) : (
+                activeGiftAnimation
+              )}
             </div>
           )}
 
@@ -1509,8 +1515,20 @@ export default function VoiceChat({
                   {partnerProfile?.display_name || t('voice_mysterious')}
                 </span>
                 {partnerProfile?.total_likes !== undefined && (
-                  <span style={{ fontSize: '0.78rem', color: '#ff416c', fontWeight: 'bold' }}>
-                    ❤️ {partnerProfile.total_likes}
+                  <span style={{ 
+                    fontSize: '0.78rem', 
+                    color: '#ff416c', 
+                    fontWeight: '800',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'rgba(255, 65, 108, 0.2)',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255, 65, 108, 0.35)'
+                  }}>
+                    <Heart size={12} fill="#ff416c" color="#ff416c" />
+                    <span>{partnerProfile.total_likes}</span>
                   </span>
                 )}
               </div>
@@ -2222,15 +2240,16 @@ export default function VoiceChat({
                   disabled={hasLiked}
                   style={{
                     width: '38px', height: '38px', borderRadius: '50%', border: 'none',
-                    background: hasLiked ? 'rgba(255,255,255,0.2)' : 'linear-gradient(135deg, #f857a6, #ff5858)',
+                    background: hasLiked ? 'rgba(255, 65, 108, 0.25)' : 'linear-gradient(135deg, #ff0844 0%, #ff4e50 100%)',
                     color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: hasLiked ? 'default' : 'pointer',
-                    boxShadow: hasLiked ? 'none' : '0 4px 12px rgba(255, 88, 88, 0.4)',
-                    opacity: hasLiked ? 0.6 : 1
+                    boxShadow: hasLiked ? 'none' : '0 4px 16px rgba(255, 8, 68, 0.55)',
+                    opacity: hasLiked ? 0.8 : 1,
+                    transition: 'all 0.25s'
                   }}
-                  title={t("voice_like")}
+                  title={hasLiked ? t('voice_already_liked', 'Beğenildi') : t("voice_like")}
                 >
-                  <span style={{ fontSize: '18px' }}>❤️</span>
+                  <Heart size={18} fill={hasLiked ? "#ff416c" : "#fff"} color={hasLiked ? "#ff416c" : "#fff"} />
                 </button>
 
                 {/* Sonraki Eşleşme (46px Yeşil Buton) */}

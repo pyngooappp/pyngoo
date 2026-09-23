@@ -1001,8 +1001,35 @@ function App() {
       setLoading(false);
     }, 4000);
 
-    // 1. Eğer URL Hash içerisinde access_token varsa, Supabase'e anında setSession ile mühürle
+    // 1. OAuth Dönüşü (PKCE Code veya Hash Access Token):
     const initializeAuth = async () => {
+      // A. Eğer URL Query veya Hash içerisinde PKCE 'code' varsa (Google / Apple PKCE akışı):
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const hashCleaned = window.location.hash ? window.location.hash.replace(/^#\/?/, '').replace(/\?/g, '&') : '';
+        const hashParams = new URLSearchParams(hashCleaned);
+        const authCode = urlParams.get('code') || hashParams.get('code');
+
+        if (authCode) {
+          console.log("App.tsx: URL içerisinden PKCE auth code tespit edildi, oturum takas ediliyor...");
+          try {
+            const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 3500));
+            const result: any = await Promise.race([
+              supabase.auth.exchangeCodeForSession(authCode),
+              timeout
+            ]);
+            if (result && result.data?.session && !result.error) {
+              console.log("App.tsx: exchangeCodeForSession başarılı, oturum kuruldu.");
+              await handleSession(result.data.session, 'SIGNED_IN');
+              return;
+            }
+          } catch (codeErr) {
+            console.warn("App.tsx: exchangeCodeForSession hata verdi:", codeErr);
+          }
+        }
+      }
+
+      // B. Eğer URL Hash içerisinde access_token varsa (Implicit Grant):
       if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
         try {
           const hashCleaned = window.location.hash.replace(/^#\/?/, '').replace(/\?/g, '&');
@@ -1013,8 +1040,6 @@ function App() {
             console.log("App.tsx: URL Hash içerisinden access_token tespit edildi, önce supabase.auth.setSession deneniyor...");
 
             // Güvenlik: Önce SDK'nın gerçek setSession'ı denenmeli (auto-refresh döngüsünü kurar).
-            // Ağ gecikmesi/refresh_token uyuşmazlığı yüzünden asılı kalmaması için kısa bir zaman aşımı ile yarıştırılır;
-            // başarısız olursa JWT decode fallback'ine düşülür (bulletproof fallback).
             if (refreshToken) {
               try {
                 const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 2500));
@@ -1704,8 +1729,36 @@ function App() {
     setShowAuth(false);
   };
 
+  if (loading) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, background: '#0a0a14',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        zIndex: 99999, gap: '16px'
+      }}>
+        <div style={{
+          width: '50px', height: '50px',
+          border: '3px solid rgba(0, 242, 254, 0.15)',
+          borderTopColor: '#00f2fe',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+        <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.92rem', fontWeight: 'bold' }}>
+          {t('loading', 'Yükleniyor...')}
+        </span>
+      </div>
+    );
+  }
+
   if (!userId) {
-    if (!showAuth && !Capacitor.isNativePlatform()) {
+    const isOAuthInProgress = typeof window !== 'undefined' && (
+      window.location.hash.includes('access_token') ||
+      window.location.hash.includes('code=') ||
+      window.location.search.includes('code=') ||
+      window.location.search.includes('oauth_login=')
+    );
+
+    if (!showAuth && !Capacitor.isNativePlatform() && !isOAuthInProgress) {
       return (
         <>
           <LandingPage onStartApp={() => setShowAuth(true)} />

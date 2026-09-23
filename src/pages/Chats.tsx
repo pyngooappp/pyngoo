@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Send, Check, CheckCheck, Gift, ArrowLeft, X, MessageSquare, Clock, UserX, PhoneCall, PhoneOff, PhoneIncoming, Trash2 } from 'lucide-react';
+import { Send, Check, CheckCheck, Gift, ArrowLeft, X, MessageSquare, Clock, UserX, PhoneCall, PhoneOff, PhoneIncoming, Trash2, Heart } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { blockUser, getLocalBlockedIds } from '../utils/blockService';
 import VoiceChat from '../components/VoiceChat';
@@ -49,9 +49,26 @@ export default function Chats({ userId }: ChatsProps) {
   const [isCalling, setIsCalling] = useState(false);
   const [chatToDelete, setChatToDelete] = useState<any | null>(null);
   const [isDeletingChat, setIsDeletingChat] = useState(false);
+  const [userToBlock, setUserToBlock] = useState<any | null>(null);
+  const [isBlockingUser, setIsBlockingUser] = useState(false);
   const isUserOnline = (targetId: string) => {
     return !!outletContext.onlineUsers?.has(targetId);
   };
+
+  // Mobilde aktif sohbete girildiğinde alt barın (BottomNav) kaldırılması
+  useEffect(() => {
+    if (activeChat) {
+      document.body.classList.add('in-active-chat');
+      window.dispatchEvent(new CustomEvent('pyngoo_active_chat_state', { detail: { isActive: true } }));
+    } else {
+      document.body.classList.remove('in-active-chat');
+      window.dispatchEvent(new CustomEvent('pyngoo_active_chat_state', { detail: { isActive: false } }));
+    }
+    return () => {
+      document.body.classList.remove('in-active-chat');
+      window.dispatchEvent(new CustomEvent('pyngoo_active_chat_state', { detail: { isActive: false } }));
+    };
+  }, [activeChat]);
 
   useEffect(() => {
     outletContext.setIsCallActive?.(!!activeCallChannel);
@@ -121,19 +138,28 @@ export default function Chats({ userId }: ChatsProps) {
     }
   };
 
-  const handleBlockActiveChat = async () => {
-    if (!activeChat) return;
-    if (!confirm(t('voice_block_confirm'))) return;
+  const handleConfirmBlock = async () => {
+    if (!userToBlock) return;
+    const target = userToBlock;
+    setIsBlockingUser(true);
 
-    await blockUser(userId, activeChat.id, activeChat.display_name);
-    if (activeChat.friendRowId) {
-      try {
-        await supabase.from('friends').delete().eq('id', activeChat.friendRowId);
-      } catch (_) {}
+    try {
+      await blockUser(userId, target.id, target.display_name);
+      if (target.friendRowId) {
+        try {
+          await supabase.from('friends').delete().eq('id', target.friendRowId);
+        } catch (_) {}
+      }
+      if (activeChat?.id === target.id) {
+        setActiveChat(null);
+      }
+      fetchFriends();
+    } catch (err) {
+      console.error('Kullanıcı engelleme hatası:', err);
+    } finally {
+      setIsBlockingUser(false);
+      setUserToBlock(null);
     }
-    setActiveChat(null);
-    fetchFriends();
-    alert(t('voice_blocked_success'));
   };
 
   // Sohbeti ve Mesajları Kalıcı Sil
@@ -846,9 +872,13 @@ export default function Chats({ userId }: ChatsProps) {
                     background: 'rgba(255, 65, 108, 0.15)',
                     padding: '2px 8px',
                     borderRadius: '12px',
-                    border: '1px solid rgba(255, 65, 108, 0.3)'
+                    border: '1px solid rgba(255, 65, 108, 0.3)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
                   }}>
-                    ❤️ {activeChat.total_likes || 0}
+                    <Heart size={12} fill="#ff416c" color="#ff416c" />
+                    <span>{activeChat.total_likes || 0}</span>
                   </span>
                 )}
               </div>
@@ -880,57 +910,73 @@ export default function Chats({ userId }: ChatsProps) {
                     background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(79, 172, 254, 0.2))',
                     border: '1px solid #00f2fe',
                     color: '#00f2fe',
-                    padding: '7px 14px',
+                    padding: '7px 11px',
                     borderRadius: '12px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.82rem',
+                    gap: '5px',
+                    fontSize: '0.80rem',
                     fontWeight: '700',
                     boxShadow: '0 0 10px rgba(0, 242, 254, 0.25)',
-                    transition: '0.2s'
+                    transition: '0.2s',
+                    flexShrink: 0
                   }}
                   title="Özel Sesli Arama Başlat (60s = 120 Altın)"
                 >
                   <PhoneCall size={16} />
-                  <span>Ara</span>
-                  <span style={{ fontSize: '0.74rem', background: 'rgba(255, 215, 0, 0.25)', color: '#ffd700', padding: '1px 6px', borderRadius: '8px', border: '1px solid rgba(255, 215, 0, 0.5)' }}>
+                  <span style={{ fontSize: '0.72rem', background: 'rgba(255, 215, 0, 0.25)', color: '#ffd700', padding: '1px 5px', borderRadius: '8px', border: '1px solid rgba(255, 215, 0, 0.5)' }}>
                     120G
                   </span>
                 </button>
               )}
 
+              {/* 🚫 Kullanıcıyı Engelle Butonu (Sadece İkon) */}
               <button
-                onClick={handleBlockActiveChat}
+                onClick={() => setUserToBlock(activeChat)}
                 style={{
                   background: 'rgba(255,65,108,0.15)',
-                  border: '1px solid rgba(255,65,108,0.3)', color: '#ff6b6b',
-                  padding: '7px 12px', borderRadius: '12px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.80rem', fontWeight: '700'
+                  border: '1px solid rgba(255,65,108,0.3)',
+                  color: '#ff6b6b',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  flexShrink: 0
                 }}
-                title={t('voice_block_user')}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#ff416c';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255,65,108,0.15)';
+                  e.currentTarget.style.color = '#ff6b6b';
+                }}
+                title={t('chats_block_confirm_title', 'Kullanıcıyı Engelle')}
               >
-                <UserX size={15} />
-                <span style={{ display: window.innerWidth < 500 ? 'none' : 'inline' }}>{t('voice_block_user')}</span>
+                <UserX size={17} />
               </button>
 
-              {/* 🗑️ Sohbeti Sil Butonu */}
+              {/* 🗑️ Sohbeti Sil Butonu (Sadece İkon) */}
               <button
                 onClick={() => setChatToDelete(activeChat)}
                 style={{
                   background: 'rgba(255, 77, 109, 0.15)',
                   border: '1px solid rgba(255, 77, 109, 0.3)',
                   color: '#ff6b6b',
-                  padding: '7px 12px',
+                  width: '36px',
+                  height: '36px',
                   borderRadius: '12px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.80rem',
-                  fontWeight: '700',
-                  transition: 'all 0.2s'
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  flexShrink: 0
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = '#ff4d6d';
@@ -940,10 +986,9 @@ export default function Chats({ userId }: ChatsProps) {
                   e.currentTarget.style.background = 'rgba(255, 77, 109, 0.15)';
                   e.currentTarget.style.color = '#ff6b6b';
                 }}
-                title={t('chats_delete_conversation', 'Sohbeti Sil')}
+                title={t('chats_delete_confirm_title', 'Sohbeti Sil')}
               >
-                <Trash2 size={15} />
-                <span style={{ display: window.innerWidth < 500 ? 'none' : 'inline' }}>{t('chats_delete_conversation', 'Sohbeti Sil')}</span>
+                <Trash2 size={17} />
               </button>
             </div>
           </div>
@@ -1527,6 +1572,83 @@ export default function Chats({ userId }: ChatsProps) {
               <button
                 disabled={isDeletingChat}
                 onClick={() => setChatToDelete(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#fff', padding: '12px', borderRadius: '16px',
+                  fontSize: '0.88rem', fontWeight: '700', cursor: 'pointer'
+                }}
+              >
+                {t('chats_delete_cancel', 'Vazgeç')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚫 Kullanıcıyı Engelleme Çift Onay Modalı */}
+      {userToBlock && (
+        <div 
+          onClick={() => !isBlockingUser && setUserToBlock(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(10px)', zIndex: 11000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px', animation: 'fadeIn 0.2s ease'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'linear-gradient(180deg, #1f1422 0%, #120a11 100%)',
+              border: '1.5px solid rgba(255, 65, 108, 0.4)',
+              borderRadius: '24px', padding: '24px', width: '100%', maxWidth: '380px',
+              boxShadow: '0 20px 60px rgba(255, 65, 108, 0.25)', textAlign: 'center'
+            }}
+          >
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: 'rgba(255, 65, 108, 0.15)', border: '2px solid #ff416c',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px auto'
+            }}>
+              <UserX size={32} color="#ff416c" />
+            </div>
+
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: '800', color: '#fff' }}>
+              {t('chats_block_confirm_title', 'Kullanıcıyı Engelle')}
+            </h3>
+
+            <p style={{ margin: '0 0 24px 0', fontSize: '0.88rem', color: 'rgba(255, 255, 255, 0.75)', lineHeight: '1.5' }}>
+              <strong style={{ color: '#fff' }}>{userToBlock.display_name}</strong> {t('chats_block_confirm_desc', 'adlı kullanıcıyı engellemek istediğinize emin misiniz? Birbirinize mesaj gönderemez ve eşleşemezsiniz.')}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                disabled={isBlockingUser}
+                onClick={handleConfirmBlock}
+                style={{
+                  background: 'linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)',
+                  border: 'none', color: '#fff', padding: '14px', borderRadius: '16px',
+                  fontSize: '0.92rem', fontWeight: '800', cursor: isBlockingUser ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  boxShadow: '0 8px 24px rgba(255, 65, 108, 0.3)',
+                  opacity: isBlockingUser ? 0.7 : 1
+                }}
+              >
+                {isBlockingUser ? (
+                  <span>{t('loading', 'İşleniyor...')}</span>
+                ) : (
+                  <>
+                    <UserX size={18} />
+                    <span>{t('chats_block_btn', 'Evet, Kullanıcıyı Engelle')}</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                disabled={isBlockingUser}
+                onClick={() => setUserToBlock(null)}
                 style={{
                   background: 'rgba(255, 255, 255, 0.08)',
                   border: '1px solid rgba(255, 255, 255, 0.15)',

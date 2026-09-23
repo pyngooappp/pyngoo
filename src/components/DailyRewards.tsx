@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
-import { Gift, Check, Coins, Gem, UserPlus, Clock, X } from 'lucide-react';
+import { Gift, Check, Coins, Gem, UserPlus, Clock, X, Sparkles } from 'lucide-react';
 import { logTransaction } from '../utils/transactionService';
 
 interface DailyRewardsProps {
@@ -25,20 +25,30 @@ export default function DailyRewards({ profile, onClose, onClaimSuccess }: Daily
   const [claiming, setClaiming] = useState(false);
   const [streak, setStreak] = useState(0);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [isClaimedToday, setIsClaimedToday] = useState(false);
 
   useEffect(() => {
     let currentStreak = profile.login_streak || 0;
     const lastReward = profile.last_reward_date ? new Date(profile.last_reward_date) : null;
     const today = new Date();
+    const now = Date.now();
+    const lastTime = lastReward ? lastReward.getTime() : 0;
     
+    const claimedToday = Boolean(lastReward && (
+      lastReward.toDateString() === today.toDateString() ||
+      (now - lastTime < 20 * 60 * 60 * 1000)
+    ));
+    setIsClaimedToday(claimedToday);
+
     if (lastReward) {
       const yesterday = new Date();
       yesterday.setDate(today.getDate() - 1);
       
       if (lastReward.toDateString() === yesterday.toDateString()) {
-        currentStreak = (currentStreak % 7); // 7. günden sonra tekrar 0'a döner
-      } else if (lastReward.toDateString() === today.toDateString()) {
-        // Bugün zaten alınmış, normalde bu ekran açılmamalı ama açılırsa streak aynı kalır
+        currentStreak = (currentStreak % 7);
+      } else if (claimedToday) {
+        // Bugün zaten alınmış, seri korunur
+        currentStreak = (currentStreak > 0 ? (currentStreak - 1) % 7 + 1 : 1);
       } else {
         currentStreak = 0; // Seri bozuldu
       }
@@ -47,7 +57,7 @@ export default function DailyRewards({ profile, onClose, onClaimSuccess }: Daily
   }, [profile]);
 
   const handleClaim = async () => {
-    if (claiming) return;
+    if (claiming || isClaimedToday) return;
     setClaiming(true);
 
     try {
@@ -64,16 +74,14 @@ export default function DailyRewards({ profile, onClose, onClaimSuccess }: Daily
         const now = Date.now();
         const today = new Date();
 
-        // Hem takvim günü hem de en az 20 saat (72.000.000 ms) geçme şartı (Saat/tarih değiştirme hilesini engeller)
         if (lastDateObj.toDateString() === today.toDateString() || (now - lastTimestamp < 20 * 60 * 60 * 1000)) {
-          alert("Günün ödülünü zaten aldınız! Lütfen yarın tekrar gelin.");
+          setIsClaimedToday(true);
           setClaiming(false);
-          onClose();
           return;
         }
       }
 
-      const rewardIndex = streak; // 0 to 6
+      const rewardIndex = Math.min(streak, 6);
       const reward = REWARDS[rewardIndex];
       
       const newStreak = streak + 1;
@@ -96,57 +104,112 @@ export default function DailyRewards({ profile, onClose, onClaimSuccess }: Daily
         last_reward_date: new Date().toISOString()
       }).eq('id', profile.id).select().single();
       
-      if (error) {
-        alert("Hata oluştu: " + error.message);
-      } else {
+      if (!error && data) {
         logTransaction(profile.id, reward.gold, 'daily_reward', { details: `Gün ${newStreak} Giriş Bonusu` });
-        onClaimSuccess(data);
+        setIsClaimedToday(true);
+        setTimeout(() => {
+          onClaimSuccess(data);
+        }, 350);
       }
     } catch (err: any) {
-      alert("Hata oluştu: " + err.message);
-      console.error(err);
+      console.error('Ödül alma hatası:', err);
     } finally {
       setClaiming(false);
     }
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.3s ease' }}>
-      <div className="glassmorphism" style={{ background: '#1a1a2e', padding: '30px 20px', borderRadius: '24px', textAlign: 'center', maxWidth: '350px', width: '90%', position: 'relative', border: '1px solid rgba(255,255,255,0.1)' }}>
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(5, 5, 15, 0.88)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px',
+      animation: 'fadeIn 0.3s ease'
+    }}>
+      <div style={{
+        background: 'linear-gradient(180deg, #1b132e 0%, #0d0a17 100%)',
+        border: '1.5px solid rgba(255, 215, 0, 0.35)',
+        borderRadius: '28px',
+        padding: '28px 20px',
+        textAlign: 'center',
+        maxWidth: '380px',
+        width: '100%',
+        position: 'relative',
+        boxShadow: '0 25px 70px rgba(0, 0, 0, 0.85), 0 0 35px rgba(255, 215, 0, 0.25)'
+      }}>
         
-        <button onClick={onClose} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>
-          <X size={24} />
+        {/* Kapat Butonu */}
+        <button 
+          onClick={onClose} 
+          style={{
+            position: 'absolute', top: '16px', right: '16px',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            width: '32px', height: '32px', borderRadius: '50%',
+            color: 'rgba(255,255,255,0.7)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
+        >
+          <X size={18} />
         </button>
 
-        <div style={{ background: 'linear-gradient(135deg, #FFD700, #F7971E)', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', boxShadow: '0 0 20px rgba(255, 215, 0, 0.4)' }}>
-          <Gift size={32} color="white" />
+        {/* Sandık İkonu */}
+        <div style={{
+          background: 'linear-gradient(135deg, #FFD700 0%, #FF8C00 100%)',
+          width: '68px', height: '68px', borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 14px',
+          boxShadow: '0 0 30px rgba(255, 215, 0, 0.55), 0 6px 16px rgba(0,0,0,0.4)',
+          border: '2px solid rgba(255, 255, 255, 0.6)'
+        }}>
+          <Gift size={34} color="#0d0a17" strokeWidth={2.4} />
         </div>
         
-        <h2 style={{ color: 'white', marginBottom: '10px', fontSize: '1.5rem', fontWeight: 'bold' }}>
-          {t('daily_reward_title')}
+        <h2 style={{
+          color: '#fff',
+          margin: '0 0 6px',
+          fontSize: '1.45rem',
+          fontWeight: '900',
+          letterSpacing: '-0.3px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+        }}>
+          {t('daily_reward_title', 'Günlük Giriş Ödülleri 🎁')}
         </h2>
-        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', marginBottom: '25px', lineHeight: '1.4' }}>
-          {t('daily_reward_desc')}
+        
+        <p style={{
+          color: 'rgba(255,255,255,0.7)',
+          fontSize: '0.84rem',
+          margin: '0 0 20px',
+          lineHeight: '1.45'
+        }}>
+          {isClaimedToday ? t('daily_reward_come_back_tomorrow', 'Yarın yeni ödül için tekrar gel!') : t('daily_reward_desc')}
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '25px' }}>
+        {/* 7 Günlük Ödül Grid'i */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '20px' }}>
           {REWARDS.map((rew, idx) => {
-            const isClaimed = idx < streak;
-            const isToday = idx === streak;
-            const isFuture = idx > streak;
+            const isClaimed = isClaimedToday ? idx <= (streak - 1) : idx < streak;
+            const isToday = !isClaimedToday && idx === streak;
+            const isFuture = isClaimedToday ? idx > (streak - 1) : idx > streak;
             
-            let bg = 'rgba(255,255,255,0.05)';
-            let border = '1px solid rgba(255,255,255,0.1)';
+            let bg = 'rgba(255,255,255,0.04)';
+            let border = '1px solid rgba(255,255,255,0.08)';
             
             if (isClaimed) {
-              bg = 'rgba(46, 204, 113, 0.2)';
-              border = '1px solid #2ecc71';
+              bg = 'rgba(46, 204, 113, 0.15)';
+              border = '1px solid rgba(46, 204, 113, 0.5)';
             } else if (isToday) {
-              bg = 'rgba(255, 215, 0, 0.2)';
-              border = '1px solid #FFD700';
+              bg = 'rgba(255, 215, 0, 0.18)';
+              border = '1.5px solid #FFD700';
             }
 
-            // 7th day is special (spans 2 columns if we want, or just larger)
             const isBig = idx === 6;
 
             return (
@@ -154,64 +217,114 @@ export default function DailyRewards({ profile, onClose, onClaimSuccess }: Daily
                 key={idx} 
                 onClick={() => setSelectedDay(idx)}
                 style={{ 
-                  background: bg, border, borderRadius: '12px', padding: '10px 5px',
+                  background: bg, border, borderRadius: '14px', padding: '10px 4px',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   gridColumn: isBig ? 'span 2' : 'span 1',
-                  opacity: isFuture ? 0.5 : 1,
-                  transform: (isToday || selectedDay === idx) ? 'scale(1.05)' : 'scale(1)',
-                  transition: '0.3s',
-                  boxShadow: (isToday || selectedDay === idx) ? '0 0 15px rgba(255,215,0,0.3)' : 'none',
-                  cursor: 'pointer'
+                  opacity: isFuture ? 0.45 : 1,
+                  transform: (isToday || selectedDay === idx) ? 'scale(1.04)' : 'scale(1)',
+                  transition: 'all 0.25s',
+                  boxShadow: isToday ? '0 0 18px rgba(255,215,0,0.35)' : 'none',
+                  cursor: 'pointer',
+                  position: 'relative'
                 }}
               >
-                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', marginBottom: '5px', fontWeight: 'bold' }}>
+                <span style={{
+                  fontSize: '0.72rem',
+                  color: isToday ? '#FFD700' : 'rgba(255,255,255,0.85)',
+                  marginBottom: '5px',
+                  fontWeight: isToday ? '900' : '700'
+                }}>
                   {t('daily_reward_day', { day: rew.day })}
                 </span>
                 
                 {isClaimed ? (
-                  <Check size={20} color="#2ecc71" />
+                  <div style={{
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    background: 'rgba(46, 204, 113, 0.25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '3px 0'
+                  }}>
+                    <Check size={16} color="#2ecc71" strokeWidth={3} />
+                  </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-                    {rew.gold > 0 && <Coins size={isBig ? 20 : 16} color="#FFD700" />}
-                    {rew.diamond > 0 && <Gem size={16} color="#00f2fe" />}
-                    {rew.friend > 0 && <UserPlus size={16} color="#ff416c" />}
-                    {rew.extend > 0 && <Clock size={16} color="#2ecc71" />}
+                  <div style={{ display: 'flex', gap: '3px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', minHeight: '24px' }}>
+                    {rew.gold > 0 && <Coins size={isBig ? 18 : 15} color="#FFD700" />}
+                    {rew.diamond > 0 && <Gem size={15} color="#00f2fe" />}
+                    {rew.friend > 0 && <UserPlus size={15} color="#ff416c" />}
+                    {rew.extend > 0 && <Clock size={15} color="#2ecc71" />}
                   </div>
                 )}
                 
-                {!isClaimed && (
-                  <span style={{ fontSize: '0.7rem', color: '#FFD700', marginTop: '5px', fontWeight: 'bold' }}>
-                    {rew.gold}G {rew.diamond > 0 && `+${rew.diamond}D`}
-                  </span>
-                )}
+                <span style={{
+                  fontSize: '0.70rem',
+                  color: isClaimed ? '#2ecc71' : '#FFD700',
+                  marginTop: '4px',
+                  fontWeight: '800'
+                }}>
+                  {isClaimed ? t('daily_reward_claimed', 'Alındı') : `${rew.gold}G ${rew.diamond > 0 ? `+${rew.diamond}D` : ''}`}
+                </span>
               </div>
             );
           })}
         </div>
 
-        {/* Seçilen Günün Detaylı Ödül Açıklaması */}
+        {/* Seçilen Günün Detaylı Açıklaması */}
         {selectedDay !== null && (
-          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '10px', marginBottom: '20px', border: '1px solid rgba(255,255,255,0.1)', animation: 'fadeIn 0.2s ease' }}>
-            <h4 style={{ color: '#FFD700', margin: '0 0 5px 0', fontSize: '0.9rem' }}>
-              {t('daily_reward_day', { day: REWARDS[selectedDay].day })} {t('reward_title')}:
+          <div style={{
+            background: 'rgba(255,255,255,0.06)',
+            padding: '10px 14px',
+            borderRadius: '14px',
+            marginBottom: '18px',
+            border: '1px solid rgba(255,215,0,0.2)',
+            animation: 'fadeIn 0.2s ease'
+          }}>
+            <h4 style={{ color: '#FFD700', margin: '0 0 4px 0', fontSize: '0.86rem', fontWeight: '800' }}>
+              {t('daily_reward_day', { day: REWARDS[selectedDay].day })} {t('reward_title', 'Ödülü')}:
             </h4>
-            <p style={{ color: 'white', margin: 0, fontSize: '0.85rem', lineHeight: '1.5' }}>
-              {REWARDS[selectedDay].gold > 0 && <span>💰 {t('reward_gold', { amount: REWARDS[selectedDay].gold })} <br/></span>}
-              {REWARDS[selectedDay].diamond > 0 && <span>💎 {t('reward_diamond', { amount: REWARDS[selectedDay].diamond })} <br/></span>}
-              {REWARDS[selectedDay].friend > 0 && <span>👤 {t('reward_friend', { amount: REWARDS[selectedDay].friend })} <br/></span>}
+            <div style={{ color: '#fff', fontSize: '0.82rem', display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {REWARDS[selectedDay].gold > 0 && <span>💰 {t('reward_gold', { amount: REWARDS[selectedDay].gold })}</span>}
+              {REWARDS[selectedDay].diamond > 0 && <span>💎 {t('reward_diamond', { amount: REWARDS[selectedDay].diamond })}</span>}
+              {REWARDS[selectedDay].friend > 0 && <span>👤 {t('reward_friend', { amount: REWARDS[selectedDay].friend })}</span>}
               {REWARDS[selectedDay].extend > 0 && <span>⏳ {t('reward_extend', { amount: REWARDS[selectedDay].extend })}</span>}
-            </p>
+            </div>
           </div>
         )}
 
-        <button 
-          onClick={handleClaim}
-          disabled={claiming}
-          className="pulse-animation"
-          style={{ width: '100%', padding: '15px', borderRadius: '15px', background: 'linear-gradient(135deg, #FFD700, #F7971E)', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '10px', alignItems: 'center' }}
-        >
-          {claiming ? '...' : t('daily_reward_claim')}
-        </button>
+        {/* Aksiyon Butonu */}
+        {isClaimedToday ? (
+          <button 
+            disabled={true}
+            style={{
+              width: '100%', padding: '14px', borderRadius: '16px',
+              background: 'rgba(46, 204, 113, 0.15)',
+              border: '1px solid rgba(46, 204, 113, 0.4)',
+              color: '#2ecc71', fontWeight: '800', fontSize: '0.96rem',
+              display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center',
+              cursor: 'default'
+            }}
+          >
+            <Check size={20} color="#2ecc71" strokeWidth={2.5} />
+            <span>{t('daily_reward_already_claimed', 'Bugünün Ödülü Alındı')}</span>
+          </button>
+        ) : (
+          <button 
+            onClick={handleClaim}
+            disabled={claiming}
+            style={{
+              width: '100%', padding: '14px', borderRadius: '16px',
+              background: 'linear-gradient(135deg, #FFD700 0%, #FF8C00 100%)',
+              color: '#0d0a17', border: 'none', fontWeight: '900', fontSize: '1.02rem',
+              cursor: claiming ? 'not-allowed' : 'pointer',
+              display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center',
+              boxShadow: '0 8px 24px rgba(255, 215, 0, 0.45)',
+              opacity: claiming ? 0.75 : 1,
+              transition: 'all 0.2s'
+            }}
+          >
+            <Sparkles size={20} color="#0d0a17" />
+            <span>{claiming ? '...' : t('daily_reward_claim', 'Ödülü Al')}</span>
+          </button>
+        )}
 
       </div>
     </div>

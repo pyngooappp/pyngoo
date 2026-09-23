@@ -41,6 +41,24 @@ export default function Layout({ userId }: LayoutProps) {
   });
   const [pendingCount, setPendingCount] = useState(0);
   const [isCallActive, setIsCallActive] = useState(false);
+  const [isInsideActiveChat, setIsInsideActiveChat] = useState(false);
+
+  useEffect(() => {
+    const handleActiveChatState = (e: any) => {
+      setIsInsideActiveChat(Boolean(e.detail?.isActive));
+    };
+    window.addEventListener('pyngoo_active_chat_state', handleActiveChatState);
+    return () => {
+      window.removeEventListener('pyngoo_active_chat_state', handleActiveChatState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (location.pathname !== '/chats') {
+      setIsInsideActiveChat(false);
+      document.body.classList.remove('in-active-chat');
+    }
+  }, [location.pathname]);
 
   // Global Arama Yönetimi (Tüm sayfalarda geçerli)
   const [incomingCall, setIncomingCall] = useState<{ callId: string; callerName: string; callerId: string } | null>(null);
@@ -814,7 +832,7 @@ export default function Layout({ userId }: LayoutProps) {
             </div>
           </div>
         )}
-        {!isCallActive && (
+        {!isCallActive && !isInsideActiveChat && (
           <nav className="bottom-nav glassmorphism">
             <NavLink 
               to="/" 

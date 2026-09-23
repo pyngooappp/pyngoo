@@ -215,12 +215,25 @@ export default function Home({ userId }: HomeProps) {
               }
             }
           } else {
-            // Erkek kullanıcılarda normal günlük ödül kontrolü
+            // Erkek kullanıcılarda normal günlük ödül kontrolü (Günde sadece İLK girişte açılır)
             const lastReward = data.last_reward_date ? new Date(data.last_reward_date) : null;
             const today = new Date();
-            const hasClaimedToday = lastReward && lastReward.toDateString() === today.toDateString();
-            if (!hasClaimedToday) {
+            const now = Date.now();
+            const lastTime = lastReward ? lastReward.getTime() : 0;
+            const hasClaimedToday = lastReward && (
+              lastReward.toDateString() === today.toDateString() ||
+              (now - lastTime < 20 * 60 * 60 * 1000)
+            );
+
+            const todayKey = today.toISOString().slice(0, 10);
+            const promptKey = `pyngoo_daily_reward_prompted_${todayKey}_${userId}`;
+            const alreadyPromptedToday = localStorage.getItem(promptKey) === 'true';
+
+            if (!hasClaimedToday && !alreadyPromptedToday) {
+              localStorage.setItem(promptKey, 'true');
               setShowDailyRewards(true);
+            } else {
+              setShowDailyRewards(false);
             }
           }
         } else {
@@ -574,12 +587,16 @@ export default function Home({ userId }: HomeProps) {
         <DailyRewards 
           profile={profile} 
           onClose={() => {
+            const todayKey = new Date().toISOString().slice(0, 10);
+            localStorage.setItem(`pyngoo_daily_reward_prompted_${todayKey}_${userId}`, 'true');
             setShowDailyRewards(false);
             if (profile.gender === 'kadin' && !profile.is_streamer && !localStorage.getItem(`pyngoo_streamer_dismissed_${userId}`)) {
               setTimeout(() => setShowStreamerModal(true), 400);
             }
           }} 
           onClaimSuccess={(newProfile) => {
+            const todayKey = new Date().toISOString().slice(0, 10);
+            localStorage.setItem(`pyngoo_daily_reward_prompted_${todayKey}_${userId}`, 'true');
             setProfile(newProfile);
             setShowDailyRewards(false);
             if (newProfile.gender === 'kadin' && !newProfile.is_streamer && !localStorage.getItem(`pyngoo_streamer_dismissed_${userId}`)) {

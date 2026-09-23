@@ -782,12 +782,20 @@ img, video {
   -webkit-backdrop-filter: blur(20px);
 }
 
-/* --- GÖRÜNTÜLÜ & SESLİ GÖRÜŞME SIRASINDA ALT DOCK GİZLEME VE TAM EKRAN KORUMASI --- */
+/* --- GÖRÜNTÜLÜ & SESLİ GÖRÜŞME VE MOBİLDE AKTİF SOHBET SIRASINDA ALT DOCK GİZLEME --- */
 body.in-call .bottom-nav,
-.in-call .bottom-nav {
+.in-call .bottom-nav,
+body.in-active-chat .bottom-nav,
+.in-active-chat .bottom-nav {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+@media (max-width: 768px) {
+  body.in-active-chat .main-content {
+    padding-bottom: 0 !important;
+  }
 }
 
 body.in-call .main-content {

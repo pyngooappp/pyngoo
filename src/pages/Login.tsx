@@ -794,14 +794,18 @@ export default function Login({ onLogin }: LoginProps) {
                 const { data: codeData, error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
                 if (codeErr) throw codeErr;
                 if (codeData?.session) {
+                  onLogin(codeData.session.user.id);
                   setLoading(false);
                   return;
                 }
               } else if (accessToken) {
-                await supabase.auth.setSession({
+                const { data: setData } = await supabase.auth.setSession({
                   access_token: accessToken,
                   refresh_token: refreshToken || ''
                 });
+                if (setData?.session) {
+                  onLogin(setData.session.user.id);
+                }
                 setLoading(false);
                 return;
               }
@@ -1527,12 +1531,7 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
         )}
 
-        {/* Giriş Yap Modunda Kart İçi Dil Seçici */}
-        {isLoginMode && (
-          <div style={{ marginTop: '14px' }}>
-            {renderLanguageDropdown()}
-          </div>
-        )}
+
 
       </div>
 
