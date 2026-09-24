@@ -418,7 +418,8 @@ export default function Layout({ userId }: LayoutProps) {
         filter: `receiver_id=eq.${userId}`
       }, async (payload: any) => {
         const newMatch = payload?.new;
-        if (newMatch && newMatch.match_id && newMatch.caller_id !== userId && newMatch.status === 'pending') {
+        if (newMatch && newMatch.match_id && newMatch.caller_id !== userId && newMatch.status === 'direct_pending') {
+          // Not: Rastgele eşleşmeler (Home) 'pending' ile açılır ve burada ASLA gelen arama sayılmaz.
           // 🛑 Yayıncı Mola Kontrolü: Moladaysa veritabanı dinleyicisi de çalmasın
           const isStreamerUser = 
             profile?.role === 'streamer' || 
@@ -662,7 +663,7 @@ export default function Layout({ userId }: LayoutProps) {
         match_id: callId,
         caller_id: userId,
         receiver_id: partner.id,
-        status: 'pending'
+        status: 'direct_pending' // Rastgele eşleşmeden ('pending') ayrılır
       }]);
     } catch (err) {
       console.warn('handleStartDirectCall insert notice:', err);

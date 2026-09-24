@@ -559,7 +559,7 @@ export default function Chats({ userId }: ChatsProps) {
         match_id: callId,
         caller_id: userId,
         receiver_id: activeChat.id,
-        status: 'pending'
+        status: 'direct_pending' // Rastgele eşleşmeden ('pending') ayrılır
       }]);
 
       const callPayload = {

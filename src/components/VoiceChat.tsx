@@ -11,12 +11,10 @@ import { generateUUID } from '../utils/uuid';
 import { blockUser } from '../utils/blockService';
 import { logTransaction } from '../utils/transactionService';
 import { soundManager } from '../utils/SoundManager';
-// @ts-ignore
-import pkg from 'agora-token';
-const { RtcTokenBuilder, RtcRole } = pkg;
 
 const appId = import.meta.env.VITE_AGORA_APP_ID;
-const appCertificate = import.meta.env.VITE_AGORA_APP_CERTIFICATE;
+// GÜVENLİK: Agora App Certificate istemci paketinde ASLA bulunmaz. Token yalnızca
+// sunucudaki 'agora-token' Edge Function'ı tarafından, arama katılımcılarına üretilir.
 
 interface VoiceChatProps {
   channelName: string;
@@ -575,39 +573,20 @@ export default function VoiceChat({
 
       try {
         const uid = Math.floor(Math.random() * 10000);
-        const privilegeExpiredTs = Math.floor(Date.now() / 1000) + 3600;
-        
         let token: string | null = null;
 
-        // GÜVENLİK: Önce sunucu tarafı Edge Function'dan token al
-        // (Agora App Certificate istemciye inmek zorunda kalmaz).
+        // Token yalnızca sunucudan alınır (katılımcı doğrulaması sunucuda yapılır)
         try {
           const { data: tokenRes, error: tokenErr } = await supabase.functions.invoke('agora-token', {
             body: { channelName, uid, expireSeconds: 3600 }
           });
           if (!tokenErr && tokenRes?.token) {
             token = tokenRes.token;
-          } else if (tokenErr) {
-            console.warn('agora-token Edge Function yok/yanıt vermedi, yerel üretime düşülüyor:', tokenErr.message);
+          } else {
+            console.warn('agora-token alınamadı:', tokenErr?.message || tokenRes?.error);
           }
-        } catch (_) { /* Edge Function erişilemezse yerel üretime düş */ }
-
-        if (!token && appCertificate) {
-          try {
-            // @ts-ignore
-            token = RtcTokenBuilder.buildTokenWithUid(
-              appId, 
-              appCertificate, 
-              channelName, 
-              uid, 
-              RtcRole.PUBLISHER, 
-              privilegeExpiredTs,
-              privilegeExpiredTs
-            );
-          } catch (tokErr) {
-            console.warn('Agora token üretilemedi, tokensiz bağlanılıyor:', tokErr);
-            token = null;
-          }
+        } catch (tokErr) {
+          console.warn('agora-token Edge Function erişilemedi:', tokErr);
         }
 
         await agoraClient.join(appId, channelName, token, uid);

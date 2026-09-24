@@ -18,7 +18,6 @@
     "@ccatto/capacitor-inapp-auth": "^1.0.1",
     "@supabase/supabase-js": "^2.112.3",
     "agora-rtc-sdk-ng": "^4.24.7",
-    "agora-token": "^2.0.5",
     "face-api.js": "^0.22.2",
     "i18next": "^26.4.0",
     "i18next-browser-languagedetector": "^8.2.1",
@@ -26,8 +25,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-i18next": "^17.0.12",
-    "react-router-dom": "^7.18.2",
-    "vite-plugin-node-polyfills": "^0.28.0"
+    "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.1",
@@ -44,5 +42,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"
+  },
+  "overrides": {
+    "node-fetch": "^2.7.0"
   }
 }

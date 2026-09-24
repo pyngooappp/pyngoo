@@ -10,9 +10,28 @@
 //        TELEGRAM_CHAT_ID   = 7656900686   (kendi chat ID'niz)
 //   5) Test: uygulamayı açıp bir şikayet gönderin; Telegram'a mesaj düşmeli.
 //
-// "Verify JWT" ayarı AÇIK kalabilir: uygulama çağrıları anon anahtarıyla imzalanır.
+// "Verify JWT" AÇIK kalmalı. GÜVENLİK: Yalnızca GİRİŞ YAPMIŞ kullanıcılar mesaj gönderebilir
+// (anon anahtarla gelen istekler reddedilir), kullanıcı başına dakikada en fazla 10 mesaj,
+// metin 4000 karakter ve fotoğraf ~3 MB ile sınırlıdır.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+// Basit hız sınırı (fonksiyon örneği başına; kötüye kullanımı büyük ölçüde keser)
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 10;
+const recentCalls = new Map<string, number[]>();
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const list = (recentCalls.get(userId) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (list.length >= RATE_MAX) {
+    recentCalls.set(userId, list);
+    return true;
+  }
+  list.push(now);
+  recentCalls.set(userId, list);
+  return false;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,6 +62,23 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Sunucu yapilandirmasi eksik (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)" }, 500);
   }
 
+  // Çağıran giriş yapmış bir kullanıcı olmalı
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!SUPABASE_URL || !SERVICE_KEY || !jwt) {
+    return json({ ok: false, error: "Yetkisiz" }, 401);
+  }
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
+  const userId = userData?.user?.id;
+  if (userErr || !userId) {
+    return json({ ok: false, error: "Yetkisiz" }, 401);
+  }
+  if (isRateLimited(userId)) {
+    return json({ ok: false, error: "Cok fazla istek" }, 429);
+  }
+
   let payload: { text?: string; photo?: string } = {};
   try {
     payload = await req.json();
@@ -50,8 +86,8 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Gecersiz JSON govdesi" }, 400);
   }
 
-  const text = (payload.text || "").toString();
-  const photo = payload.photo;
+  const text = (payload.text || "").toString().slice(0, 4000);
+  const photo = typeof payload.photo === "string" && payload.photo.length <= 4_000_000 ? payload.photo : undefined;
 
   if (!text && !photo) {
     return json({ ok: false, error: "Gonderilecek metin veya fotograf yok" }, 400);

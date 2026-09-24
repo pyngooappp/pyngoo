@@ -437,23 +437,19 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     setIsClaimingAd(true);
 
     try {
-      let newGold = (profile.total_gold ?? 0) + 20;
-      let newRemaining = Math.max(0, remainingDailyAds - 1);
-
       // Güvenlik: +20 altın, günlük limit (5) ve bekleme süresi SUNUCUDA (claim_ad_reward RPC) uygulanır.
       const { data: adRes, error: adErr } = await supabase.rpc('claim_ad_reward');
-      if (!adErr && adRes?.success) {
-        newGold = adRes.new_gold;
-        newRemaining = Math.max(0, adRes.remaining ?? remainingDailyAds - 1);
-      } else {
-        // RPC henüz veritabanında oluşturulmamışsa güvenli istemci fallback'i
-        console.warn('claim_ad_reward RPC henüz hazır değil, fallback uygulanıyor:', adErr || adRes?.error);
-        const { data: freshProf } = await supabase.from('profiles').select('total_gold').eq('id', userId).single();
-        const currentGold = freshProf?.total_gold ?? profile.total_gold ?? 0;
-        newGold = currentGold + 20;
-        newRemaining = Math.max(0, remainingDailyAds - 1);
-        await supabase.from('profiles').update({ total_gold: newGold }).eq('id', userId);
+      if (adErr || !adRes?.success) {
+        // Limit dolduysa / çok hızlı tıklandıysa altın eklenmez ve ekranda da gösterilmez
+        console.warn('claim_ad_reward başarısız:', adErr || adRes?.error);
+        if (adRes && typeof adRes.remaining === 'number') {
+          localStorage.setItem(`ad_count_${userId}`, String(adRes.remaining));
+          setRemainingDailyAds(adRes.remaining);
+        }
+        return;
       }
+      const newGold = adRes.new_gold;
+      const newRemaining = Math.max(0, adRes.remaining ?? remainingDailyAds - 1);
 
       localStorage.setItem(`ad_count_${userId}`, String(newRemaining));
       setRemainingDailyAds(newRemaining);

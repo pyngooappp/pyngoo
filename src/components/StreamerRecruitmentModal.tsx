@@ -80,8 +80,8 @@ export default function StreamerRecruitmentModal({
 
       try {
         await supabase.auth.updateUser({
+          // Avatar (base64) ASLA auth metadata'ya yazılmaz: giriş token'ını şişirip girişi bozar.
           data: {
-            avatar: uploadedPhoto,
             role: 'streamer',
             is_streamer: true
           }
