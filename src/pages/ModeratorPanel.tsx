@@ -142,6 +142,7 @@ export default function ModeratorPanel() {
   };
 
   const handleLogoutPanel = () => {
+    supabase.auth.signOut({ scope: 'local' }).catch(() => {});
     try {
       sessionStorage.removeItem('pyngoo_mod_session');
       localStorage.removeItem('pyngoo_mod_session');
@@ -201,42 +202,66 @@ export default function ModeratorPanel() {
     };
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    // admin.pyngoo.app'de Supabase Auth oturumu YOKTUR; panel kimliği
-    // sessionStorage'daki kriptografik mod oturumudur. Bu oturum "admin" ise
-    // aşağıdaki Supabase tabanlı kontrol asla yetkiyi DÜŞÜRMEZ (F5'te
-    // "Yönetici Paneli"nin "Moderatör Paneli"ne dönmesinin kök nedeni buydu).
-    let savedAdminSession = false;
-    try {
-      const raw = sessionStorage.getItem('pyngoo_mod_session');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const u = (parsed?.username || '').toLowerCase();
-        savedAdminSession = parsed?.role === 'admin' || u === 'omer' || u === 'admin';
-      }
-    } catch (_) {}
+  // KİMLİK DOĞRULAMA: Panel artık gerçek Supabase oturumuyla çalışır. Yetki (admin / moderatör)
+  // sunucudaki profiles.role / is_moderator değerinden okunur ve sunucu fonksiyonları (is_admin /
+  // is_staff) aynı kontrolü tekrar yapar. İstemcide tutulan şifre veya token ile yetki verilmez.
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
 
-    const fetchCurrentUsername = async () => {
+  const applyStaffSession = async (): Promise<boolean> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return false;
+
+    const { data: prof, error } = await supabase
+      .from('profiles')
+      .select('id, display_name, role, is_moderator, is_banned')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    if (error) {
+      setAuthMessage('⚠️ Sunucuya ulaşılamadı, lütfen tekrar deneyin.');
+      return false;
+    }
+
+    const isAdminRole = !!prof && prof.role === 'admin' && prof.is_banned !== true;
+    const isModRole = !!prof && prof.is_banned !== true && (prof.is_moderator === true || prof.role === 'moderator');
+
+    if (!prof || (!isAdminRole && !isModRole)) {
+      try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) {}
+      setAuthMessage('⛔ Bu hesabın panel yetkisi yok.');
+      return false;
+    }
+
+    setAuthMessage(null);
+    setIsAuthenticated(true);
+    setIsSuperAdmin(isAdminRole);
+    setActiveModUser({
+      username: prof.display_name || session.user.email || 'Yetkili',
+      role: isAdminRole ? 'admin' : 'moderator',
+      id: prof.id
+    });
+    return true;
+  };
+
+  useEffect(() => {
+    (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const uid = user?.id;
-        let isOwner = uid === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
-        if (!isOwner && uid) {
-          const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', uid).maybeSingle();
-          if (prof?.display_name?.toLowerCase() === 'omer') isOwner = true;
+        // Google (PKCE) dönüşü: ?code=... ile gelir
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        if (code) {
+          try {
+            await supabase.auth.exchangeCodeForSession(code);
+          } catch (err) {
+            console.warn('Panel OAuth kod takası hatası:', err);
+          }
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (params.get('error')) {
+          setAuthMessage('⚠️ Google girişi tamamlanamadı, lütfen tekrar deneyin.');
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
-        if (!isOwner) {
-          const savedNick = (localStorage.getItem('pending_nickname') || '').toLowerCase();
-          if (savedNick === 'omer') isOwner = true;
-        }
-        if (savedAdminSession) isOwner = true;
-        setIsSuperAdmin(isOwner);
-      } catch (_) {
-        // Hata olsa bile doğrulanmış admin oturumunu düşürme
-        setIsSuperAdmin(savedAdminSession);
-      }
-    };
-    fetchCurrentUsername();
+        await applyStaffSession();
+      } catch (_) {}
+    })();
   }, []);
 
   // Sadece süper admin (Ömer) tüm yetkilere sahiptir. Tanımlı moderatörler sadece şikayet yönetebilir.
@@ -1254,125 +1279,33 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
   };
 
 
-  // SHA-256 ile şifrelenmiş yetkili yönetici özeti (Kaynak kodda asla düz şifre tutulmaz)
-  const AUTHORIZED_PIN_HASH = '759d4c4b7938b367cc664fe4f57acc773f0705e5b7295e20c5f821b68973ece5';
-  const MOD_TOKEN_SALT = 'pyngoo_sec_mod_salt_2026_@!';
-
-  const generateSessionToken = async (timestamp: number): Promise<string> => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(`${AUTHORIZED_PIN_HASH}:${timestamp}:${MOD_TOKEN_SALT}`);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
-  useEffect(() => {
-    // Kriptografik Oturum Kontrolü (Sahte sessionStorage enjeksiyonunu engeller, 4 saat geçerlidir)
-    const verifySavedSession = async () => {
-      try {
-        const raw = sessionStorage.getItem('pyngoo_mod_session');
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        const { token, timestamp, username, role } = parsed || {};
-        if (!timestamp || Date.now() - timestamp > 8 * 60 * 60 * 1000) {
-          sessionStorage.removeItem('pyngoo_mod_session');
-          return;
-        }
-        const expectedToken = await generateSessionToken(timestamp);
-        if (token === expectedToken) {
-          setIsAuthenticated(true);
-          const isOwner = role === 'admin' || username?.toLowerCase() === 'omer' || username?.toLowerCase() === 'admin';
-          setIsSuperAdmin(isOwner);
-          const modRole: 'admin' | 'moderator' = isOwner ? 'admin' : 'moderator';
-          setActiveModUser({ username: username || 'Moderatör', role: modRole });
-        } else {
-          sessionStorage.removeItem('pyngoo_mod_session');
-        }
-      } catch (_) {
-        sessionStorage.removeItem('pyngoo_mod_session');
-      }
-    };
-    verifySavedSession();
-  }, []);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinError(false);
-
+    setAuthMessage(null);
     if (lockoutTime > Date.now()) {
       const remainingMin = Math.ceil((lockoutTime - Date.now()) / 60000);
       await showAlert(`⚠️ Güvenlik Uyarısı: 5 defa hatalı deneme yapıldığı için giriş 15 dakika dondurulmuştur. Lütfen ${remainingMin} dakika sonra tekrar deneyin.`, 'Güvenlik Uyarısı');
       return;
     }
 
-    const cleanUser = (usernameInput || pinInput).trim().toLowerCase();
-    const cleanPass = (passwordInput || pinInput).trim();
-
-    if (!cleanUser || !cleanPass) {
+    const email = (usernameInput || pinInput).trim();
+    const pass = passwordInput.trim();
+    if (!email || !pass) {
       setPinError(true);
       return;
     }
 
     try {
-      // 1. Ömer / Admin Hesabı Girişi (Kullanıcı Adı: omer veya admin)
-      const isOmerUser = cleanUser === 'omer' || cleanUser === 'admin';
-
-      const encoder = new TextEncoder();
-      const data = encoder.encode(cleanPass);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const inputHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-      const isPassValidForAdmin = (
-        inputHash === AUTHORIZED_PIN_HASH
-        // Düz metin şifreler (herkese açık JS paketinde görünüyordu) kaldırıldı.
-      );
-
-      if (isOmerUser && isPassValidForAdmin) {
-        setIsAuthenticated(true);
-        setIsSuperAdmin(true);
-        const modObj: { username: string; role: 'admin' | 'moderator'; id?: string } = { username: 'omer', role: 'admin' };
-        setActiveModUser(modObj);
-
-        const timestamp = Date.now();
-        const token = await generateSessionToken(timestamp);
-        sessionStorage.setItem('pyngoo_mod_session', JSON.stringify({ token, timestamp, username: 'omer', role: 'admin' }));
-
-        setFailedAttempts(0);
-        logModeratorAction('mod_login', 'Sistem Paneli', 'Ömer (Yönetici) kullanıcı adı ve şifresiyle giriş yaptı.');
-        return;
-      }
-
-      // 2. Özel Tanımlı Moderatör Giriş Kontrolü (Elfi, Apoo, vb.)
-      let modPasswordMap: Record<string, string> = {};
-      try {
-        modPasswordMap = JSON.parse(localStorage.getItem('pyngoo_moderator_passwords') || '{}');
-      } catch (_) {}
-
-      // Supabase profiles tablosundan kullanıcıyı sorgula
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('*')
-        .ilike('display_name', cleanUser)
-        .maybeSingle();
-
-      const savedModPass = modPasswordMap[cleanUser];
-      const isModInDb = prof && (prof.is_moderator === true || prof.role === 'moderator' || prof.role === 'admin');
-
-      if ((isModInDb || savedModPass) && (cleanPass === savedModPass || isPassValidForAdmin)) {
-        const isOwner = prof?.id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || cleanUser === 'omer';
-        setIsAuthenticated(true);
-        setIsSuperAdmin(isOwner);
-        const modRole: 'admin' | 'moderator' = isOwner ? 'admin' : 'moderator';
-        const modObj: { username: string; role: 'admin' | 'moderator'; id?: string } = { username: prof?.display_name || cleanUser, role: modRole, id: prof?.id };
-        setActiveModUser(modObj);
-
-        const timestamp = Date.now();
-        const token = await generateSessionToken(timestamp);
-        sessionStorage.setItem('pyngoo_mod_session', JSON.stringify({ token, timestamp, username: cleanUser, role: modRole }));
-
-        setFailedAttempts(0);
-        logModeratorAction('mod_login', 'Sistem Paneli', `${prof?.display_name || cleanUser} moderatör olarak panele giriş yaptı.`);
-        return;
+      // Pyngoo hesabının e-posta + şifresiyle gerçek Supabase girişi
+      const { error: signErr } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (!signErr) {
+        const ok = await applyStaffSession();
+        if (ok) {
+          setFailedAttempts(0);
+          logModeratorAction('mod_login', 'Sistem Paneli', `${email} panele giriş yaptı.`);
+        }
+        return; // Yetkisiz hesapsa mesaj applyStaffSession içinde gösterilir
       }
 
       // Hatalı şifre/kullanıcı adı
@@ -1389,6 +1322,16 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
       console.error('Şifre doğrulama hatası:', err);
       setPinError(true);
     }
+  };
+
+  // Google hesabıyla panel girişi (omer hesabı Google'a bağlıdır)
+  const handleGoogleLogin = async () => {
+    setAuthMessage(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/` }
+    });
+    if (error) setAuthMessage(`⚠️ Google girişi başlatılamadı: ${error.message}`);
   };
 
   // Yerel depolamayı kalıcı senkronize etme yardımcıları
@@ -2024,7 +1967,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
             Pyngoo Moderasyon & Yönetim Paneli
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '22px' }}>
-            Kullanıcı adı ve özel moderatör şifrenizle giriş yapın.
+            Yetkili Pyngoo hesabınızla (Google veya e-posta) giriş yapın.
           </p>
 
           {lockoutTime > Date.now() ? (
@@ -2035,11 +1978,11 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
             <form onSubmit={handleLogin}>
               <div style={{ marginBottom: '14px', textAlign: 'left' }}>
                 <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', marginBottom: '6px', fontWeight: '700' }}>
-                  Kullanıcı Adı:
+                  E-posta:
                 </label>
                 <input
-                  type="text"
-                  placeholder="Örn: omer, elfi, apoo"
+                  type="email"
+                  placeholder="ornek@mail.com"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
                   style={{
@@ -2058,7 +2001,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
 
               <div style={{ marginBottom: '18px', textAlign: 'left' }}>
                 <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', marginBottom: '6px', fontWeight: '700' }}>
-                  Moderatör Şifresi:
+                  Şifre:
                 </label>
                 <input
                   type="password"
@@ -2080,7 +2023,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
 
               {pinError && (
                 <p style={{ color: '#ff2d55', fontSize: '0.82rem', marginBottom: '14px', fontWeight: '700' }}>
-                  ⚠️ Hatalı Kullanıcı Adı veya Şifre! (Deneme: {failedAttempts}/5)
+                  ⚠️ Hatalı E-posta veya Şifre! (Deneme: {failedAttempts}/5)
                 </p>
               )}
 
@@ -2102,6 +2045,31 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
                 Panele Giriş Yap 🚀
               </button>
             </form>
+          )}
+
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            style={{
+              width: '100%',
+              marginTop: '12px',
+              padding: '13px',
+              borderRadius: '16px',
+              background: '#fff',
+              border: 'none',
+              color: '#111',
+              fontWeight: '800',
+              fontSize: '0.95rem',
+              cursor: 'pointer'
+            }}
+          >
+            Google ile Giriş Yap
+          </button>
+
+          {authMessage && (
+            <p style={{ color: '#ff6b8b', fontSize: '0.82rem', marginTop: '14px', fontWeight: '700' }}>
+              {authMessage}
+            </p>
           )}
 
           <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
