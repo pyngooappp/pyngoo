@@ -1323,11 +1323,8 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
       const inputHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
       const isPassValidForAdmin = (
-        inputHash === AUTHORIZED_PIN_HASH ||
-        cleanPass === '1234' ||
-        cleanPass === 'omer123' ||
-        cleanPass === 'pyngoo2026' ||
-        cleanPass === 'admin'
+        inputHash === AUTHORIZED_PIN_HASH
+        // Düz metin şifreler (herkese açık JS paketinde görünüyordu) kaldırıldı.
       );
 
       if (isOmerUser && isPassValidForAdmin) {

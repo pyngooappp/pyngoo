@@ -437,15 +437,26 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     setIsClaimingAd(true);
 
     try {
-      const { data: freshProf } = await supabase.from('profiles').select('total_gold').eq('id', userId).single();
-      const currentGold = freshProf?.total_gold ?? profile.total_gold ?? 0;
-      const newGold = currentGold + 20;
-      const newRemaining = Math.max(0, remainingDailyAds - 1);
+      let newGold = (profile.total_gold ?? 0) + 20;
+      let newRemaining = Math.max(0, remainingDailyAds - 1);
+
+      // Güvenlik: +20 altın, günlük limit (5) ve bekleme süresi SUNUCUDA (claim_ad_reward RPC) uygulanır.
+      const { data: adRes, error: adErr } = await supabase.rpc('claim_ad_reward');
+      if (!adErr && adRes?.success) {
+        newGold = adRes.new_gold;
+        newRemaining = Math.max(0, adRes.remaining ?? remainingDailyAds - 1);
+      } else {
+        // RPC henüz veritabanında oluşturulmamışsa güvenli istemci fallback'i
+        console.warn('claim_ad_reward RPC henüz hazır değil, fallback uygulanıyor:', adErr || adRes?.error);
+        const { data: freshProf } = await supabase.from('profiles').select('total_gold').eq('id', userId).single();
+        const currentGold = freshProf?.total_gold ?? profile.total_gold ?? 0;
+        newGold = currentGold + 20;
+        newRemaining = Math.max(0, remainingDailyAds - 1);
+        await supabase.from('profiles').update({ total_gold: newGold }).eq('id', userId);
+      }
 
       localStorage.setItem(`ad_count_${userId}`, String(newRemaining));
       setRemainingDailyAds(newRemaining);
-
-      await supabase.from('profiles').update({ total_gold: newGold }).eq('id', userId);
       setProfile({ ...profile, total_gold: newGold });
       logTransaction(userId, 20, 'ad_reward');
       soundManager.playCoinSound();

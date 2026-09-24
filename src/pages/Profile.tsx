@@ -118,10 +118,10 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
         await supabase.from('profiles').update({
           avatar: dataUrl
         }).eq('id', userId);
-
-        await supabase.auth.updateUser({
-          data: { avatar: dataUrl }
-        });
+        // NOT: Avatar (base64, ~200KB) ASLA auth user_metadata'ya yazılmaz! Metadata JWT'nin içine
+        // gömülür; dev token her Supabase isteğinin Authorization başlığını şişirip bağlantının
+        // kopmasına (ERR_CONNECTION_RESET) ve girişin tamamen çökmesine yol açıyordu.
+        // Avatarın tek kaynağı profiles.avatar sütunudur.
       } catch (err) {
         console.error('Supabase profile avatar update error:', err);
       }

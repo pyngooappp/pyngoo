@@ -61,51 +61,59 @@ export default function DailyRewards({ profile, onClose, onClaimSuccess }: Daily
     setClaiming(true);
 
     try {
-      // 1. Veritabanından en güncel son ödül tarihini doğrula (Çift talep ve hile engelleme)
-      const { data: freshProfile } = await supabase
-        .from('profiles')
-        .select('total_gold, total_diamonds, free_friend_adds, free_extensions, last_reward_date, login_streak')
-        .eq('id', profile.id)
-        .single();
+      let data: any = null;
+      let addedGold = 0;
 
-      if (freshProfile?.last_reward_date) {
-        const lastDateObj = new Date(freshProfile.last_reward_date);
-        const lastTimestamp = lastDateObj.getTime();
-        const now = Date.now();
-        const today = new Date();
+      const { data: res, error } = await supabase.rpc('claim_daily_reward');
 
-        if (lastDateObj.toDateString() === today.toDateString() || (now - lastTimestamp < 20 * 60 * 60 * 1000)) {
-          setIsClaimedToday(true);
-          setClaiming(false);
-          return;
+      if (!error && res?.success) {
+        data = res.profile;
+        addedGold = res.gold_added ?? 0;
+      } else if (res?.error === 'already_claimed') {
+        setIsClaimedToday(true);
+        return;
+      } else {
+        // RPC henüz veritabanında oluşturulmamışsa güvenli istemci fallback'i
+        console.warn('claim_daily_reward RPC henüz hazır değil, fallback uygulanıyor:', error || res?.error);
+        const { data: freshProfile } = await supabase
+          .from('profiles')
+          .select('total_gold, total_diamonds, free_friend_adds, free_extensions, last_reward_date, login_streak')
+          .eq('id', profile.id)
+          .single();
+
+        if (freshProfile?.last_reward_date) {
+          const lastDateObj = new Date(freshProfile.last_reward_date);
+          const now = Date.now();
+          const today = new Date();
+          if (lastDateObj.toDateString() === today.toDateString() || (now - lastDateObj.getTime() < 20 * 60 * 60 * 1000)) {
+            setIsClaimedToday(true);
+            setClaiming(false);
+            return;
+          }
         }
+
+        const rewardIndex = Math.min(streak, 6);
+        const reward = REWARDS[rewardIndex];
+        const newStreak = streak + 1;
+        const currentGold = freshProfile?.total_gold ?? profile.total_gold ?? 0;
+        const newGold = currentGold + reward.gold;
+        addedGold = reward.gold;
+
+        const updateRes = await supabase.from('profiles').update({
+          total_gold: newGold,
+          total_diamonds: (freshProfile?.total_diamonds ?? profile.total_diamonds ?? 0) + reward.diamond,
+          free_friend_adds: (freshProfile?.free_friend_adds ?? profile.free_friend_adds ?? 0) + reward.friend,
+          free_extensions: (freshProfile?.free_extensions ?? profile.free_extensions ?? 0) + reward.extend,
+          login_streak: newStreak,
+          last_reward_date: new Date().toISOString()
+        }).eq('id', profile.id).select().single();
+
+        data = updateRes.data;
       }
 
-      const rewardIndex = Math.min(streak, 6);
-      const reward = REWARDS[rewardIndex];
-      
-      const newStreak = streak + 1;
-      const currentGold = freshProfile?.total_gold ?? profile.total_gold ?? 0;
-      const currentDiamonds = freshProfile?.total_diamonds ?? profile.total_diamonds ?? 0;
-      const currentFriends = freshProfile?.free_friend_adds ?? profile.free_friend_adds ?? 0;
-      const currentExtensions = freshProfile?.free_extensions ?? profile.free_extensions ?? 0;
-
-      const newGold = currentGold + reward.gold;
-      const newDiamond = currentDiamonds + reward.diamond;
-      const newFriend = currentFriends + reward.friend;
-      const newExtend = currentExtensions + reward.extend;
-
-      const { data, error } = await supabase.from('profiles').update({
-        total_gold: newGold,
-        total_diamonds: newDiamond,
-        free_friend_adds: newFriend,
-        free_extensions: newExtend,
-        login_streak: newStreak,
-        last_reward_date: new Date().toISOString()
-      }).eq('id', profile.id).select().single();
-      
-      if (!error && data) {
-        logTransaction(profile.id, reward.gold, 'daily_reward', { details: `Gün ${newStreak} Giriş Bonusu` });
+      if (data) {
+        const newStreak = data?.login_streak ?? streak + 1;
+        logTransaction(profile.id, addedGold, 'daily_reward', { details: `Gün ${newStreak} Giriş Bonusu` });
         setIsClaimedToday(true);
         setTimeout(() => {
           onClaimSuccess(data);

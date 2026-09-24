@@ -208,7 +208,11 @@ export const processCryptoPayment = async (
   const totalGoldToAdd = goldPackage.gold + goldPackage.bonus;
 
   // 4. OTOMATİK ONAYLANDIYSA: Altını anında yükle! (7/24 Gece Otomasyonu)
-  if (verifiedOnChain) {
+  // GÜVENLİK: İstemci profile doğrudan altın yazamaz (sunucu trigger'ı engeller). Zincir doğrulaması
+  // tarayıcıda yapıldığı için güvenilir de değildir. Otomatik yükleme, sunucu tarafı bir doğrulama
+  // (Edge Function) yazılana kadar KAPALI; tüm kripto ödemeler yönetici onayına düşer.
+  const AUTO_CREDIT_ENABLED = false;
+  if (AUTO_CREDIT_ENABLED && verifiedOnChain) {
     markTxIdAsUsed(cleanTxId);
 
     try {
