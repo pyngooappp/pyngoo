@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pyngoo</string>
+    <string name="title_activity_main">Pyngoo</string>
+    <string name="package_name">app.pyngoo.chat</string>
+    <string name="custom_url_scheme">app.pyngoo.chat</string>
+</resources>

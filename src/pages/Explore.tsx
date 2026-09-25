@@ -11,6 +11,7 @@ import { generateUUID } from '../utils/uuid';
 import { soundManager } from '../utils/SoundManager';
 import { 
   toggleFollowStreamer, 
+  syncMyFollows,
   recordProfileView, 
   subscribeToStreamerGoLive, 
   broadcastStreamerGoLive 
@@ -48,6 +49,13 @@ export default function Explore({ userId }: ExploreProps) {
     }
   });
   const [liveAlert, setLiveAlert] = useState<{ id: string; name: string; avatar: string } | null>(null);
+
+  // Takip listesini sunucudan yükle (başka cihazdan yapılan takipler de görünsün)
+  useEffect(() => {
+    let alive = true;
+    syncMyFollows(userId).then((set) => { if (alive) setFollowedSet(set); });
+    return () => { alive = false; };
+  }, [userId]);
 
   useEffect(() => {
     const unsub = subscribeToStreamerGoLive(userId, (streamer) => {
@@ -586,7 +594,7 @@ export default function Explore({ userId }: ExploreProps) {
             display: 'inline-block'
           }}></span>
           <Radio size={14} />
-          <span>{t('explore_online_active_count', '{{count}} Çevrim İçi & Aktif', { count: filteredList.length })}</span>
+          <span>{t('explore_online_active_count', '{{count}} Çevrim İçi & Aktif', { count: filteredList.filter((c) => c.isOnline).length })}</span>
         </div>
 
         <h1 style={{
@@ -750,7 +758,11 @@ export default function Explore({ userId }: ExploreProps) {
                   ? (creator.isOnline 
                       ? 'linear-gradient(135deg, rgba(0, 230, 118, 0.95), rgba(0, 200, 83, 0.95))' 
                       : 'linear-gradient(135deg, rgba(100, 100, 110, 0.9), rgba(60, 60, 70, 0.9))') 
-                  : (creator.isRealStreamer ? 'linear-gradient(135deg, rgba(255, 45, 85, 0.9), rgba(255, 117, 140, 0.9))' : 'rgba(0, 0, 0, 0.65)'),
+                  : (creator.isOnline
+                      ? 'linear-gradient(135deg, rgba(0, 230, 118, 0.95), rgba(0, 200, 83, 0.95))'
+                      : (creator.isBusy
+                          ? 'linear-gradient(135deg, rgba(243, 156, 18, 0.95), rgba(230, 126, 34, 0.95))'
+                          : 'linear-gradient(135deg, rgba(100, 100, 110, 0.9), rgba(60, 60, 70, 0.9))')),
                 backdropFilter: 'blur(10px)',
                 padding: '5px 12px',
                 borderRadius: '20px',
@@ -760,14 +772,14 @@ export default function Explore({ userId }: ExploreProps) {
                 color: '#fff',
                 boxShadow: creator.isCurrentUser 
                   ? (creator.isOnline ? '0 2px 12px rgba(0, 230, 118, 0.5)' : '0 2px 10px rgba(0,0,0,0.5)') 
-                  : (creator.isRealStreamer ? '0 2px 10px rgba(0,0,0,0.5)' : 'none')
+                  : (creator.isOnline ? '0 2px 12px rgba(0, 230, 118, 0.5)' : '0 2px 10px rgba(0,0,0,0.5)')
               }}>
                 <span style={{
                   width: '8px', height: '8px', borderRadius: '50%',
                   background: creator.isCurrentUser 
                     ? (creator.isOnline ? '#fff' : '#bdbdbd') 
-                    : (creator.isRealStreamer ? '#fff' : (creator.isOnline ? '#00e676' : (creator.isBusy ? '#ffa000' : '#9e9e9e'))),
-                  boxShadow: (creator.isCurrentUser && creator.isOnline) ? '0 0 8px #fff' : 'none'
+                    : ((creator.isOnline || creator.isBusy) ? '#fff' : '#bdbdbd'),
+                  boxShadow: creator.isOnline ? '0 0 8px #fff' : 'none'
                 }}></span>
                 <span>
                   {creator.isCurrentUser 
@@ -808,33 +820,6 @@ export default function Explore({ userId }: ExploreProps) {
                     <CheckCircle2 size={17} color={creator.isOnline ? "#00e676" : "#00f2fe"} />
                   </div>
 
-                  {/* Resmin / İsmin Yanındaki Çevrim İçi / Çevrim Dışı Durumu */}
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '3px 9px',
-                    borderRadius: '12px',
-                    fontSize: '0.72rem',
-                    fontWeight: '800',
-                    background: creator.isOnline ? 'rgba(0, 230, 118, 0.22)' : 'rgba(0, 0, 0, 0.6)',
-                    border: creator.isOnline ? '1px solid #00e676' : '1px solid rgba(255, 255, 255, 0.25)',
-                    color: creator.isOnline ? '#00e676' : '#e0e0e0',
-                    backdropFilter: 'blur(8px)'
-                  }}>
-                    <span style={{
-                      width: '6px',
-                      height: '6px',
-                      borderRadius: '50%',
-                      background: creator.isOnline ? '#00e676' : (creator.isRealStreamer ? '#ff9800' : '#9e9e9e'),
-                      boxShadow: creator.isOnline ? '0 0 6px #00e676' : 'none'
-                    }}></span>
-                    <span>
-                      {creator.isOnline 
-                        ? t('explore_status_online', 'Çevrim içi') 
-                        : (creator.isRealStreamer || creator.isCurrentUser ? t('explore_status_break', '☕ Molada') : t('explore_status_offline', 'Çevrim dışı'))}
-                    </span>
-                  </div>
                 </div>
 
                 <div style={{
@@ -984,10 +969,14 @@ export default function Explore({ userId }: ExploreProps) {
                       e.stopPropagation();
                       handleToggleFollow(creator);
                     }}
+                    aria-label={followedSet.has(creator.id) ? t('explore_following_btn', '✓ Takip Ediliyor') : t('explore_follow_btn', '+ Takip Et')}
                     style={{
                       flexShrink: 0,
-                      padding: '12px 14px',
-                      borderRadius: '16px',
+                      width: '46px',
+                      height: '46px',
+                      padding: 0,
+                      justifyContent: 'center',
+                      borderRadius: '50%',
                       background: followedSet.has(creator.id) 
                         ? 'linear-gradient(135deg, rgba(0, 230, 118, 0.18), rgba(0, 200, 83, 0.22))' 
                         : 'rgba(255, 255, 255, 0.08)',
@@ -1006,8 +995,7 @@ export default function Explore({ userId }: ExploreProps) {
                     }}
                     title={followedSet.has(creator.id) ? t('explore_following_btn', '✓ Takip Ediliyor') : t('explore_follow_btn', '+ Takip Et')}
                   >
-                    {followedSet.has(creator.id) ? <UserCheck size={16} /> : <UserPlus size={16} />}
-                    <span>{followedSet.has(creator.id) ? t('explore_following_btn', '✓ Takip') : t('explore_follow_btn', '+ Takip')}</span>
+                    {followedSet.has(creator.id) ? <UserCheck size={19} /> : <UserPlus size={19} />}
                   </button>
 
                   {/* Hemen Ara Butonu */}
@@ -1019,40 +1007,44 @@ export default function Explore({ userId }: ExploreProps) {
                     disabled={callingBotId === creator.id}
                     style={{
                       flex: 1,
+                      minWidth: 0,
                       display: 'flex',
+                      flexWrap: 'wrap',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '8px',
-                      padding: '13px 14px',
-                      borderRadius: '16px',
+                      columnGap: '6px',
+                      rowGap: '2px',
+                      minHeight: '46px',
+                      padding: '8px 10px',
+                      borderRadius: '23px',
                       background: creator.isOnline 
-                        ? 'linear-gradient(135deg, #ff2d55 0%, #ff5252 100%)' 
+                        ? 'linear-gradient(135deg, #00c853 0%, #00e676 100%)' 
                         : (creator.isBusy ? 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)' : 'rgba(255,255,255,0.08)'),
                       border: 'none',
                       color: '#fff',
                       fontWeight: '800',
                       fontSize: '0.94rem',
                       cursor: (!creator.isOnline && !creator.isBusy) ? 'not-allowed' : 'pointer',
-                      boxShadow: creator.isOnline ? '0 6px 20px rgba(255, 45, 85, 0.45)' : 'none',
+                      boxShadow: creator.isOnline ? '0 6px 20px rgba(0, 230, 118, 0.45)' : 'none',
                       transition: '0.2s',
                       opacity: (!creator.isOnline && !creator.isBusy) ? 0.6 : 1
                     }}
                   >
-                    <PhoneCall size={17} />
-                    <span>
+                    <PhoneCall size={18} />
+                    <span style={{ whiteSpace: 'nowrap' }}>
                       {callingBotId === creator.id 
                         ? t('voice_calling', 'Aranıyor...') 
                         : (creator.isOnline ? t('explore_call_btn', 'Hemen Ara') : (creator.isBusy ? t('explore_busy_badge', 'Görüşmede') : (creator.isRealStreamer ? t('explore_status_break', '☕ Molada') : t('explore_status_offline', 'Çevrim dışı'))))}
                     </span>
                     {creator.isOnline && (
                       <span style={{
-                        background: 'rgba(0,0,0,0.3)',
-                        padding: '2px 7px',
+                        background: 'rgba(0,0,0,0.28)',
+                        padding: '1px 7px',
                         borderRadius: '8px',
-                        fontSize: '0.72rem',
+                        fontSize: '0.68rem',
                         fontWeight: '700',
-                        color: '#ffd700',
-                        border: '1px solid rgba(255, 215, 0, 0.3)'
+                        color: '#fff59d',
+                        whiteSpace: 'nowrap'
                       }}>
                         {t('explore_call_cost_desc', '120 Altin/dk')}
                       </span>

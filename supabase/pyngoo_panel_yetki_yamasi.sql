@@ -11,7 +11,7 @@
 BEGIN;
 
 -- ---------------------------------------------------------------------------
--- 0. Süper admin hesapları (CLAUDE.md'deki iki UID) kesin olarak admin
+-- 0. Süper admin hesapları (proje kurallarındaki iki sabit UID) kesin olarak admin
 -- ---------------------------------------------------------------------------
 UPDATE public.profiles
    SET role = 'admin', is_banned = false

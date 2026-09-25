@@ -11,6 +11,7 @@ import { generateUUID } from '../utils/uuid';
 import { getLocalBlockedIds } from '../utils/blockService';
 import PrivacyShield from '../components/PrivacyShield';
 import LivePulseCounter from '../components/LivePulseCounter';
+import { notifyFollowers } from '../utils/pushService';
 
 interface HomeProps {
   userId: string;
@@ -111,6 +112,7 @@ export default function Home({ userId }: HomeProps) {
     window.dispatchEvent(new CustomEvent('pyngoo_streamer_online_changed', { detail: { isOnline: true } }));
     soundManager.playMatchFound();
     syncStreamerStatusToNetwork(true);
+    notifyFollowers('live');
     try {
       await supabase.from('waiting_room').upsert([{ 
         user_id: userId, 

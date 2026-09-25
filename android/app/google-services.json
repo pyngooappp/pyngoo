@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "673577776513",
+    "project_id": "pyngoo-ce491",
+    "storage_bucket": "pyngoo-ce491.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:673577776513:android:18f854164fc5e336bb2480",
+        "android_client_info": {
+          "package_name": "app.pyngoo.chat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKpnkorgzsyvRgALzrQt1FfneuQWOFQ6o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

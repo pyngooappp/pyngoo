@@ -22,6 +22,8 @@ import { updateSeoForLanguage } from './utils/seoService';
 import { detectUserDefaultLanguage } from './utils/i18n';
 import { sendNewRegistrationToTelegram } from './utils/telegramAlert';
 import { NetworkStatusModal } from './components/NetworkStatusModal';
+import PushPermissionPrompt from './components/PushPermissionPrompt';
+import { notifyFollowers, unregisterPushToken } from './utils/pushService';
 
 // Modül seviyesinde cihaz sahiplik zaman damgası (re-render'larda ASLA sıfırlanmaz!)
 let moduleLastSessionClaimedAt = 0;
@@ -1434,6 +1436,11 @@ function App() {
           }).eq('id', userId);
         } catch (_) {}
       }, 25000);
+
+      // Uygulamaya girişte yayıncı çevrimiçiyse takipçilerine "çevrimiçi oldu" bildirimi
+      if (localStorage.getItem(`pyngoo_streamer_online_${userId}`) !== 'false') {
+        notifyFollowers('online');
+      }
     }
 
     return () => {
@@ -1478,6 +1485,7 @@ function App() {
     // 3. Veritabanı ve Supabase Auth çıkış işlemlerini arka planda asenkron tamamla
     (async () => {
       try {
+        await unregisterPushToken();
         if (currentUid) {
           await supabase.from('profiles').update({
             is_streamer_online: false,
@@ -1816,6 +1824,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
+        <PushPermissionPrompt userId={userId} />
       </BrowserRouter>
       <NetworkStatusModal />
     </>

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { notifyFollowers } from './pushService';
 
 export interface FollowStats {
   total: number;
@@ -21,6 +22,44 @@ export const isFollowingStreamer = (followerId: string, streamerId: string): boo
 };
 
 /**
+ * Takip listesini sunucudan çeker ve yerel önbelleği günceller.
+ * Eski sürümde yalnızca telefonda tutulan takipler bir kerelik sunucuya taşınır.
+ */
+export const syncMyFollows = async (followerId: string): Promise<Set<string>> => {
+  const key = `pyngoo_user_follows_${followerId}`;
+  let local: string[] = [];
+  try { local = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) {}
+  if (!followerId) return new Set(local);
+
+  try {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', followerId);
+    if (error || !data) return new Set(local);
+
+    const server = new Set<string>(data.map((r: { following_id: string }) => r.following_id));
+
+    const migratedKey = `pyngoo_follows_migrated_${followerId}`;
+    if (localStorage.getItem(migratedKey) !== '1') {
+      const missing = local.filter((id) => id && id !== followerId && !server.has(id));
+      if (missing.length > 0) {
+        const { error: insErr } = await supabase
+          .from('follows')
+          .upsert(missing.map((id) => ({ follower_id: followerId, following_id: id })), { onConflict: 'follower_id,following_id', ignoreDuplicates: true });
+        if (!insErr) missing.forEach((id) => server.add(id));
+      }
+      localStorage.setItem(migratedKey, '1');
+    }
+
+    localStorage.setItem(key, JSON.stringify(Array.from(server)));
+    return server;
+  } catch (_) {
+    return new Set(local);
+  }
+};
+
+/**
  * Yayıncıyı takip et veya takipten çık (Toggle)
  */
 export const toggleFollowStreamer = async (
@@ -33,7 +72,27 @@ export const toggleFollowStreamer = async (
   const currentFollowing = isFollowingStreamer(followerId, streamerId);
   const nextFollowing = !currentFollowing;
 
-  // 1. Takip eden kullanıcının listesini güncelle
+  // 1. Önce sunucuya kaydet (bildirimler buradaki kayda göre gönderilir)
+  try {
+    if (nextFollowing) {
+      const { error } = await supabase.from('follows').insert([{ follower_id: followerId, following_id: streamerId }]);
+      // 23505 = zaten takip ediliyor; sorun değil
+      if (error && error.code !== '23505') {
+        return { isFollowing: currentFollowing, newCount: getStreamerFollowers(streamerId).total };
+      }
+    } else {
+      const { error } = await supabase.from('follows').delete()
+        .eq('follower_id', followerId)
+        .eq('following_id', streamerId);
+      if (error) {
+        return { isFollowing: currentFollowing, newCount: getStreamerFollowers(streamerId).total };
+      }
+    }
+  } catch (_) {
+    return { isFollowing: currentFollowing, newCount: getStreamerFollowers(streamerId).total };
+  }
+
+  // Yerel önbelleği güncelle (ekranın anında tepki vermesi için)
   try {
     const list: string[] = JSON.parse(localStorage.getItem(`pyngoo_user_follows_${followerId}`) || '[]');
     const updatedList = nextFollowing 
@@ -57,21 +116,6 @@ export const toggleFollowStreamer = async (
 
   localStorage.setItem(`pyngoo_streamer_followers_${streamerId}`, totalFollowers.toString());
   localStorage.setItem(`pyngoo_streamer_followers_today_${streamerId}_${todayKey}`, todayFollowers.toString());
-
-  // 3. Supabase veritabanına kaydetmeyi dene (Tablo varsa)
-  try {
-    if (nextFollowing) {
-      await supabase.from('follows').insert([{
-        follower_id: followerId,
-        following_id: streamerId,
-        created_at: new Date().toISOString()
-      }]);
-    } else {
-      await supabase.from('follows').delete()
-        .eq('follower_id', followerId)
-        .eq('following_id', streamerId);
-    }
-  } catch (_) {}
 
   // 4. Global olay tetikle
   window.dispatchEvent(new CustomEvent('pyngoo_follow_updated', {
@@ -172,6 +216,9 @@ export const broadcastStreamerGoLive = (streamer: {
 
   // 3. LocalStorage sinyali (diğer pencereler için ek güvence)
   localStorage.setItem('pyngoo_last_golive_broadcast', JSON.stringify(payload));
+
+  // 4. Takipçilerin telefonuna bildirim (sunucu 30 dakikada 1 sınırı uygular)
+  notifyFollowers('live');
 };
 
 /**

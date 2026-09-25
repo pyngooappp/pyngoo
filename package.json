@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.1.0",
+    "@capacitor-firebase/messaging": "^8.5.2",
     "@capacitor/app": "^8.1.1",
     "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.5.1",
@@ -19,6 +20,7 @@
     "@supabase/supabase-js": "^2.112.3",
     "agora-rtc-sdk-ng": "^4.24.7",
     "face-api.js": "^0.22.2",
+    "firebase": "^12.19.0",
     "i18next": "^26.4.0",
     "i18next-browser-languagedetector": "^8.2.1",
     "lucide-react": "^1.33.0",

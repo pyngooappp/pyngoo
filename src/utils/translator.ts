@@ -1,6 +1,6 @@
 /**
  * Pyngoo Akıllı Çeviri Servisi (Realtime Translation Engine)
- * MyMemory Translation API (CORS serbest) + Google Translate Fallback
+ * Google Translate (otomatik dil algılama) + MyMemory yedeği
  * Kesintisiz, limitsiz ve iki yönlü anında çeviri sağlar.
  */
 
@@ -42,37 +42,19 @@ export async function translateText(
     return translationCache.get(cacheKey)!;
   }
 
-  // 1. Birincil Motor: MyMemory API (CORS açık, 429 engeli yemez, yüksek doğruluk)
-  try {
-    const langPair = cleanSource === 'au' ? `autodetect|${cleanTarget}` : `${cleanSource}|${cleanTarget}`;
-    const myMemoryUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${langPair}`;
-    
-    const response = await fetch(myMemoryUrl, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data?.responseData?.translatedText) {
-        const result = decodeHtmlEntities(data.responseData.translatedText).trim();
-        // Eğer MyMemory mantıklı bir çeviri verdiyse kaydet
-        if (result && result.toLowerCase() !== trimmed.toLowerCase()) {
-          translationCache.set(cacheKey, result);
-          return result;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('MyMemory çeviri motoru hatası, Google fallback devrede:', err);
-  }
-
-  // 2. İkincil Motor (Fallback): Google Translate GTX API
+  // 1. Birincil Motor: Google Translate (gtx) — kaynak dili kendisi algılar (sl=auto),
+  //    10 dilin tamamında (tr, en, de, fr, es, ru, ar, az, it, pt) test edildi.
   try {
     const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${cleanSource === 'au' ? 'auto' : cleanSource}&tl=${cleanTarget}&dt=t&q=${encodeURIComponent(trimmed)}`;
     const gResponse = await fetch(googleUrl);
     if (gResponse.ok) {
       const gData = await gResponse.json();
+      const detected = typeof gData?.[2] === 'string' ? gData[2].substring(0, 2).toLowerCase() : null;
+      // Metin zaten hedef dildeyse çeviri yapma
+      if (detected && detected === cleanTarget) {
+        translationCache.set(cacheKey, trimmed);
+        return trimmed;
+      }
       if (gData && gData[0] && Array.isArray(gData[0])) {
         const translated = gData[0].map((item: any) => item[0]).filter(Boolean).join('');
         if (translated) {
@@ -83,7 +65,38 @@ export async function translateText(
       }
     }
   } catch (gErr) {
-    console.warn('Google Translate fallback hatası:', gErr);
+    console.warn('Google çeviri motoru hatası, MyMemory yedeği devrede:', gErr);
+  }
+
+  // 2. Yedek Motor: MyMemory API (günlük ücretsiz kotası sınırlıdır)
+  try {
+    const langPair = cleanSource === 'au' ? `autodetect|${cleanTarget}` : `${cleanSource}|${cleanTarget}`;
+    const myMemoryUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${langPair}`;
+
+    const response = await fetch(myMemoryUrl, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const translatedText: string = data?.responseData?.translatedText || '';
+      // Kota bitti / hata mesajları ("MYMEMORY WARNING", "PLEASE SELECT...") ASLA çeviri olarak gösterilmez
+      const isValid =
+        Number(data?.responseStatus) === 200 &&
+        data?.quotaFinished !== true &&
+        translatedText &&
+        !/MYMEMORY WARNING|PLEASE SELECT|INVALID LANGUAGE|QUERY LENGTH LIMIT/i.test(translatedText);
+      if (isValid) {
+        const result = decodeHtmlEntities(translatedText).trim();
+        if (result && result.toLowerCase() !== trimmed.toLowerCase()) {
+          translationCache.set(cacheKey, result);
+          return result;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('MyMemory çeviri hatası:', err);
   }
 
   return trimmed;

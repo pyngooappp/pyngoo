@@ -2,6 +2,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { deLanding, frLanding, esLanding, ruLanding, arLanding, azLanding, itLanding, ptLanding } from './landingTranslations';
+import { extraTranslations } from './i18nExtra';
 
 
 const enTranslation = {
@@ -4282,6 +4283,12 @@ const resources = {
 };
 
 // Akıllı Konum & Türkiye Dil Tespiti
+// Eksik / İngilizce kalmış çevirileri tamamla (10 dilin hepsinde aynı anahtarlar dolu olsun)
+for (const [lng, extra] of Object.entries(extraTranslations)) {
+  const target = (resources as unknown as Record<string, { translation: Record<string, string> }>)[lng];
+  if (target) Object.assign(target.translation, extra);
+}
+
 export const detectUserDefaultLanguage = (): string => {
   try {
     // 1. Kullanıcının manuel seçtiği ve saklanan dil tercihi

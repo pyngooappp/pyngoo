@@ -11,6 +11,7 @@ import { generateUUID } from '../utils/uuid';
 import { blockUser } from '../utils/blockService';
 import { logTransaction } from '../utils/transactionService';
 import { soundManager } from '../utils/SoundManager';
+import { enableScreenGuard, disableScreenGuard } from '../utils/screenGuard';
 
 const appId = import.meta.env.VITE_AGORA_APP_ID;
 // GÜVENLİK: Agora App Certificate istemci paketinde ASLA bulunmaz. Token yalnızca
@@ -46,6 +47,44 @@ export default function VoiceChat({
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isBlurred, setIsBlurred] = useState(mode === 'video');
+
+  // 🛡️ Ekran görüntüsü / kayıt caydırıcısı (web'de tamamen engellemek teknik olarak mümkün değildir):
+  // 1) Karşı tarafın görüntüsü üzerinde izleyenin rumuzu + kimliği + tarihiyle soluk filigran,
+  // 2) Masaüstünde pencere odağı kaybolunca (Ekran Alıntısı aracı vb.) veya PrintScreen'e basılınca görüntü gizlenir.
+  const [captureShield, setCaptureShield] = useState(false);
+  // Android: görüşme ekranı açıkken ekran görüntüsü ve ekran kaydı sistem düzeyinde engellenir (kayıt siyah çıkar).
+  useEffect(() => {
+    enableScreenGuard();
+    return () => { disableScreenGuard(); };
+  }, []);
+  useEffect(() => {
+    if (mode !== 'video') return;
+    let shieldTimer: any = null;
+    const shieldBriefly = () => {
+      setCaptureShield(true);
+      if (shieldTimer) clearTimeout(shieldTimer);
+      shieldTimer = setTimeout(() => setCaptureShield(false), 2500);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const k = (e.key || '').toLowerCase();
+      if (k === 'printscreen' || (e.shiftKey && (e.metaKey || e.ctrlKey) && ['3', '4', '5', 's'].includes(k))) {
+        shieldBriefly();
+      }
+    };
+    const onBlur = () => setCaptureShield(true);
+    const onFocus = () => setCaptureShield(false);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      if (shieldTimer) clearTimeout(shieldTimer);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [mode]);
   const [blurTimer, setBlurTimer] = useState(4);
   const [timeLeft, setTimeLeft] = useState(initialTime || 45);
   const [isConnected, setIsConnected] = useState(false);
@@ -61,6 +100,8 @@ export default function VoiceChat({
   profileRef.current = profile;
   const onEndCallRef = useRef(onEndCall);
   onEndCallRef.current = onEndCall;
+  const onSkipRef = useRef(onSkip);
+  onSkipRef.current = onSkip;
   const [isExtending, setIsExtending] = useState(false);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const partnerProfileRef = useRef<any>(null);
@@ -223,11 +264,16 @@ export default function VoiceChat({
         const { data: pData } = await supabase.from('profiles').select('display_name, gender, total_likes, preferred_language').eq('id', targetPId).single();
         if (pData) setPartnerProfile(pData);
 
-        // Beğeni tekil kontrolü: Bu kullanıcı bu partneri daha önce beğendi mi?
-        const alreadyLiked = localStorage.getItem(`pyngoo_like_${userId}_${targetPId}`);
-        if (alreadyLiked === 'true') {
-          setHasLiked(true);
-        }
+        // Beğeni tekil kontrolü (sunucu): Bu kullanıcı bu partneri daha önce beğendi mi?
+        try {
+          const { data: likeRow } = await supabase
+            .from('user_likes')
+            .select('target_id')
+            .eq('liker_id', userId)
+            .eq('target_id', targetPId)
+            .maybeSingle();
+          if (likeRow) setHasLiked(true);
+        } catch (_) {}
 
         // Zaten arkadaş mı kontrol et: Arkadaşsa 5 sn "Siz Arkadaşsınız" gösterip kaldır
         try {
@@ -364,24 +410,16 @@ export default function VoiceChat({
           }, 15000);
         }
       })
-      .on('broadcast', { event: 'like' }, async () => {
+      .on('broadcast', { event: 'like' }, async (msg: any) => {
         // Karşı taraf beğendiğinde büyük kalp animasyonu göster
         setActiveGiftAnimation('❤️');
         setTimeout(() => setActiveGiftAnimation(null), 3000);
 
-        // Kendi beğeni sayımızı veritabanında +1 artır (Kendi kullanıcımız olduğu için RLS engellemez!)
-        setProfile((prev: any) => {
-          const currentLikes = prev?.total_likes || 0;
-          const updatedLikes = currentLikes + 1;
-          supabase
-            .from('profiles')
-            .update({ total_likes: updatedLikes })
-            .eq('id', userId)
-            .then(({ error }) => {
-              if (error) console.warn('Kendi profil like güncelleme hatası:', error);
-            });
-          return prev ? { ...prev, total_likes: updatedLikes } : prev;
-        });
+        // Sayaç sunucuda (like_user RPC) artırıldı; burada yalnızca ekrandaki değer güncellenir.
+        const serverLikes = msg?.payload?.nextLikes;
+        if (typeof serverLikes === 'number') {
+          setProfile((prev: any) => (prev ? { ...prev, total_likes: serverLikes } : prev));
+        }
       })
       .on('broadcast', { event: 'add_friend' }, () => {
         setHasAddedFriend(true);
@@ -395,19 +433,18 @@ export default function VoiceChat({
       .on('broadcast', { event: 'chat_message' }, (payload: any) => {
         const msg = payload.payload;
         if (msg && msg.senderId !== userId) {
-          const myLang = profile?.preferred_language || (navigator.language?.startsWith('tr') ? 'tr' : 'en');
-          const displayMsg = { ...msg, isMine: false };
+          const myLang = profileRef.current?.preferred_language || i18n.language || (navigator.language?.startsWith('tr') ? 'tr' : 'en');
+          const displayMsg = { ...msg, isMine: false, timestamp: Date.now() };
 
           // 1. Karşı tarafın mesajını ANINDA (0ms) ekrana bas
           setMessages((prev) => [...prev.slice(-15), displayMsg]);
 
           // 2. Diller farklıysa ve çeviri gerekiyorsa arka planda asenkron çevir, asla ekrana basmayı bekletme
-          const senderLang = (msg.sourceLang || 'tr').substring(0, 2).toLowerCase();
+          // Kaynak dil 'auto': Gönderen, uygulama dilinden farklı bir dilde yazmış olabilir.
+          // Metin zaten okuyucunun dilindeyse çeviri motoru aynı metni döndürür ve ekranda çeviri gösterilmez.
           const targetLang = myLang.substring(0, 2).toLowerCase();
-          const needsTranslation = senderLang !== targetLang && (!msg.translatedText || msg.translatedText === msg.originalText);
-
-          if (needsTranslation) {
-            translateText(msg.originalText, targetLang, senderLang)
+          {
+            translateText(msg.originalText, targetLang, 'auto')
               .then((localTranslated) => {
                 if (localTranslated && localTranslated.toLowerCase() !== msg.originalText.toLowerCase()) {
                   setMessages((prev) => 
@@ -421,7 +458,7 @@ export default function VoiceChat({
       })
       .on('broadcast', { event: 'skip' }, () => {
         setErrorMessage(t('voice_partner_skipped', { defaultValue: 'Karşı taraf ayrıldı, yeni arama başlatılıyor...' }));
-        setTimeout(() => onSkip(), 2000);
+        setTimeout(() => onSkipRef.current(), 2000);
       })
       .subscribe();
 
@@ -430,7 +467,23 @@ export default function VoiceChat({
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, [channelName, t, onSkip, userId, profile]);
+  }, [channelName, t, userId]);
+
+  // Görüşme içi mesajlar 25 saniye sonra ekrandan kalkar (görüntüyü kalabalıklaştırmasın)
+  const IN_CALL_MESSAGE_TTL_MS = 25000;
+  const [, setFadeTick] = useState(0);
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setFadeTick((x) => x + 1); // solma efekti için yeniden çizim
+      setMessages((prev) => {
+        const next = prev.filter((m) => now - m.timestamp < IN_CALL_MESSAGE_TTL_MS);
+        return next.length === prev.length ? prev : next;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [messages.length]);
 
   // Yeni mesaj geldiğinde veya karşı taraf yazarken otomatik aşağı kaydır
   useEffect(() => {
@@ -443,7 +496,7 @@ export default function VoiceChat({
     const text = chatInput.trim();
     setChatInput('');
 
-    const myLang = profile?.preferred_language || (navigator.language?.startsWith('tr') ? 'tr' : 'en');
+    const myLang = profile?.preferred_language || i18n.language || (navigator.language?.startsWith('tr') ? 'tr' : 'en');
     const partnerLang = partnerProfile?.preferred_language;
 
     const msgPayload = {
@@ -470,7 +523,7 @@ export default function VoiceChat({
 
     // 3. Eğer partner dili biliniyorsa ve farklıysa arka planda çevirip güncelle
     if (partnerLang && partnerLang.substring(0, 2).toLowerCase() !== myLang.substring(0, 2).toLowerCase()) {
-      translateText(text, partnerLang, myLang)
+      translateText(text, partnerLang, 'auto')
         .then((translated) => {
           if (translated && translated !== text) {
             setMessages((prev) => 
@@ -1114,29 +1167,25 @@ export default function VoiceChat({
 
   const handleLike = async () => {
     if (hasLiked || !partnerId) return;
-    localStorage.setItem(`pyngoo_like_${userId}_${partnerId}`, 'true');
     setHasLiked(true);
-    setActiveGiftAnimation('❤️');
-    setTimeout(() => setActiveGiftAnimation(null), 3000);
 
     try {
-      const currentLikes = partnerProfile?.total_likes || 0;
-      const nextLikes = currentLikes + 1;
+      // Kural: Her kullanıcı bir başkasına ÖMÜR BOYU yalnızca 1 kez kalp atabilir (sunucuda zorunlu)
+      const { data: likeRes, error: likeErr } = await supabase.rpc('like_user', { p_target: partnerId });
+      if (likeErr || !likeRes?.success) {
+        console.warn('like_user başarısız:', likeErr || likeRes?.error);
+        if (!likeRes?.already) setHasLiked(false);
+        return;
+      }
+      if (likeRes.already) return; // Daha önce beğenilmiş: animasyon/sinyal yok
+
+      setActiveGiftAnimation('❤️');
+      setTimeout(() => setActiveGiftAnimation(null), 3000);
+
+      const nextLikes = typeof likeRes.total_likes === 'number' ? likeRes.total_likes : (partnerProfile?.total_likes || 0) + 1;
       setPartnerProfile((prev: any) => ({ ...prev, total_likes: nextLikes }));
 
-      // 1. RPC ile veritabanında artırmayı dene (RLS engelini aşar)
-      try {
-        await supabase.rpc('increment_user_likes', { target_user_id: partnerId });
-      } catch (rpcErr) {
-        console.warn('RPC increment_user_likes notice:', rpcErr);
-      }
-
-      // 2. Doğrudan update fallback
-      try {
-        await supabase.from('profiles').update({ total_likes: nextLikes }).eq('id', partnerId);
-      } catch (_) {}
-
-      // 3. Karşı tarafa anında canlı beğeni sinyali gönder (Alıcı kendi tarafında da DB'ye yazar)
+      // Karşı tarafa anında canlı beğeni sinyali (yalnızca gösterim içindir)
       if (channelRef.current) {
         channelRef.current.send({
           type: 'broadcast',
@@ -1301,8 +1350,29 @@ export default function VoiceChat({
       {/* 📹 MODERN EŞLEŞME & ARAMA EKRANI (SESLİ VE GÖRÜNTÜLÜ ORTAK) */}
       <div className="video-call-box">
         {/* 1. Karşı Tarafın Video Akışı veya Avatarı */}
-        <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'hidden', zIndex: 1 }}>
-          <div ref={remoteVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <div
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'hidden', zIndex: 1, userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } as any}
+        >
+          <div ref={remoteVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: captureShield ? 'blur(40px) brightness(0.4)' : 'none', transition: 'filter 0.15s ease' }} />
+
+          {/* 🛡️ Kimlik filigranı: Ekran görüntüsü alınırsa kimin aldığı görünür */}
+          {mode === 'video' && isConnected && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute', inset: '-20%', zIndex: 2, pointerEvents: 'none',
+                display: 'flex', flexWrap: 'wrap', alignContent: 'space-around', justifyContent: 'space-around',
+                transform: 'rotate(-24deg)', opacity: 0.14, overflow: 'hidden'
+              }}
+            >
+              {Array.from({ length: 18 }).map((_, i) => (
+                <span key={i} style={{ color: '#fff', fontSize: '13px', fontWeight: 800, whiteSpace: 'nowrap', padding: '28px 18px', textShadow: '0 0 2px #000' }}>
+                  {(profile?.display_name || 'Pyngoo')} · {String(userId || '').slice(0, 8)} · {new Date().toLocaleDateString()}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Bot Görüntülü Arama Videosu */}
           {partnerProfile?.videoUrl && isCallAnswered ? (
@@ -1527,8 +1597,8 @@ export default function VoiceChat({
                 </div>
               )}
 
-              {/* Süre Rozeti: Eşleşmede her zaman; özel aramada ise yalnızca altın bitmeye yakınsa (< 120) ve son 30 sn ise görünür */}
-              {(!isDirectCall || (isCallAnswered && timeLeft <= 30 && (profile?.total_gold || 0) < 120)) && (
+              {/* Süre Rozeti: Eşleşmede her zaman; özel aramada ise YALNIZCA ARAYAN tarafta, altın bitmeye yakınsa (< 120) ve son 30 sn ise görünür. Aranan kişi süre görmez. */}
+              {(!isDirectCall || (isCaller && isCallAnswered && timeLeft <= 30 && (profile?.total_gold || 0) < 120)) && (
                 <div 
                   onClick={() => isDirectCall && setShowGoldModal(true)}
                   style={{
@@ -1553,6 +1623,52 @@ export default function VoiceChat({
                   )}
                 </div>
               )}
+
+                {/* Süre Uzat & Arkadaş Ekle: Alttaki kontrollerden uzakta, sayacın hemen altında (yanlışlıkla basılmasın) */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '230px' }}>
+                  {isConnected && profile && !isDirectCall && (
+                    <button 
+                      onClick={handleExtend}
+                      disabled={isExtending}
+                      style={{
+                        background: profile.free_extensions > 0 ? 'rgba(0, 242, 254, 0.25)' : 'rgba(255, 215, 0, 0.25)',
+                        border: profile.free_extensions > 0 ? '1px solid #00f2fe' : '1px solid #ffd700',
+                        borderRadius: '14px', padding: '4px 10px',
+                        color: profile.free_extensions > 0 ? '#00f2fe' : '#ffd700',
+                        fontWeight: '800', fontSize: '0.70rem',
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        cursor: 'pointer', backdropFilter: 'blur(10px)'
+                      }}
+                    >
+                      <Clock size={13} />
+                      {profile.free_extensions > 0 
+                        ? t('voice_extend_free', { count: profile.free_extensions }) 
+                        : t('voice_extend_gold')}
+                    </button>
+                  )}
+
+                  {profile && partnerId && showFriendButton && (
+                    <button 
+                      onClick={handleAddFriend}
+                      disabled={hasAddedFriend}
+                      style={{
+                        background: hasAddedFriend ? 'rgba(46, 204, 113, 0.25)' : 'rgba(255, 255, 255, 0.15)',
+                        border: hasAddedFriend ? '1px solid #2ecc71' : '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: '14px', padding: '4px 10px',
+                        color: hasAddedFriend ? '#2ecc71' : '#fff',
+                        fontWeight: '800', fontSize: '0.70rem',
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        cursor: hasAddedFriend ? 'default' : 'pointer', backdropFilter: 'blur(10px)',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      <span>🤝</span>
+                      {hasAddedFriend 
+                        ? t("voice_you_are_friends", { defaultValue: "Siz Arkadaşsınız" })
+                        : t("voice_add_friend", { defaultValue: "Arkadaş Ekle" })}
+                    </button>
+                  )}
+                </div>
             </div>
 
             {/* Sağ: Şikayet & Engelleme Butonları & Kullanıcı PIP Kamerası */}
@@ -1708,7 +1824,7 @@ export default function VoiceChat({
           {/* CANLI GÖRÜŞME İÇİ SOHBET AKIŞI (OTOMATİK ÇEVİRİ DESTEKLİ SAYDAM MESAJLAR) */}
           <div style={{
             position: 'absolute',
-            bottom: keyboardOffset > 0 ? `${keyboardOffset + 98}px` : '228px',
+            bottom: keyboardOffset > 0 ? `${keyboardOffset + 98}px` : '184px',
             left: '12px',
             width: 'calc(100% - 24px)',
             maxWidth: '320px',
@@ -1738,7 +1854,9 @@ export default function VoiceChat({
                     alignSelf: isMine ? 'flex-end' : 'flex-start',
                     boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
                     pointerEvents: 'auto',
-                    animation: 'fadeIn 0.2s ease'
+                    animation: 'fadeIn 0.2s ease',
+                    opacity: Date.now() - m.timestamp > IN_CALL_MESSAGE_TTL_MS - 5000 ? 0.35 : 1,
+                    transition: 'opacity 1.5s ease'
                   }}
                 >
                   <div style={{ fontSize: '0.65rem', fontWeight: '800', color: isMine ? '#00f2fe' : '#ff416c', marginBottom: '1px' }}>
@@ -1766,7 +1884,7 @@ export default function VoiceChat({
           {/* HIZLI HEDİYE ÇİPLERİ (KADINLAR İÇİN HEDİYE İSTE / ERKEKLER İÇİN HEDİYE GÖNDER) */}
           <div style={{
             position: 'absolute',
-            bottom: keyboardOffset > 0 ? `${keyboardOffset + 58}px` : '186px',
+            bottom: keyboardOffset > 0 ? `${keyboardOffset + 58}px` : '146px',
             left: '12px',
             zIndex: 35,
             display: 'flex',
@@ -1982,14 +2100,14 @@ export default function VoiceChat({
             }}
             style={{
               position: 'absolute',
-              bottom: keyboardOffset > 0 ? `${keyboardOffset + 12}px` : '148px',
+              bottom: keyboardOffset > 0 ? `${keyboardOffset + 12}px` : '108px',
               left: '12px',
               zIndex: 35,
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              width: (keyboardOffset > 0 || isInputFocused) ? 'calc(100% - 24px)' : 'calc(65% - 12px)',
-              maxWidth: (keyboardOffset > 0 || isInputFocused) ? '520px' : '240px',
+              width: 'calc(100% - 24px)',
+              maxWidth: '420px',
               padding: '6px 12px',
               background: (keyboardOffset > 0 || isInputFocused) ? 'rgba(12, 14, 28, 0.88)' : 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(16px)',
@@ -2064,52 +2182,6 @@ export default function VoiceChat({
             background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 65%, transparent 100%)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
           }}>
-            {/* Üst Yardımcı Aksiyonlar (Süre Uzat & Arkadaş Ekle) */}
-            <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'center' }}>
-              {isConnected && profile && !isDirectCall && (
-                <button 
-                  onClick={handleExtend}
-                  disabled={isExtending}
-                  style={{
-                    background: profile.free_extensions > 0 ? 'rgba(0, 242, 254, 0.25)' : 'rgba(255, 215, 0, 0.25)',
-                    border: profile.free_extensions > 0 ? '1px solid #00f2fe' : '1px solid #ffd700',
-                    borderRadius: '16px', padding: '5px 12px',
-                    color: profile.free_extensions > 0 ? '#00f2fe' : '#ffd700',
-                    fontWeight: '800', fontSize: '0.75rem',
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    cursor: 'pointer', backdropFilter: 'blur(10px)'
-                  }}
-                >
-                  <Clock size={13} />
-                  {profile.free_extensions > 0 
-                    ? `+60s (${profile.free_extensions} Ücretsiz)` 
-                    : `+60s (20 ${t('gold_currency_label')})`}
-                </button>
-              )}
-
-              {profile && partnerId && showFriendButton && (
-                <button 
-                  onClick={handleAddFriend}
-                  disabled={hasAddedFriend}
-                  style={{
-                    background: hasAddedFriend ? 'rgba(46, 204, 113, 0.25)' : 'rgba(255, 255, 255, 0.15)',
-                    border: hasAddedFriend ? '1px solid #2ecc71' : '1px solid rgba(255,255,255,0.2)',
-                    borderRadius: '16px', padding: '5px 12px',
-                    color: hasAddedFriend ? '#2ecc71' : '#fff',
-                    fontWeight: '800', fontSize: '0.75rem',
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    cursor: hasAddedFriend ? 'default' : 'pointer', backdropFilter: 'blur(10px)',
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  <span>🤝</span>
-                  {hasAddedFriend 
-                    ? t("voice_you_are_friends", { defaultValue: "Siz Arkadaşsınız" })
-                    : t("voice_add_friend", { defaultValue: "Arkadaş Ekle" })}
-                </button>
-              )}
-            </div>
-
             {/* Ana Buton Çubuğu (Dock: 3 Sol Buton - HEDİYE TAM ORTADA - 3 Sağ Buton) */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
