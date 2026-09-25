@@ -11,6 +11,7 @@ import {
 import { sendTelegramAlert } from '../utils/telegramAlert';
 import { logTransaction } from '../utils/transactionService';
 import LiveRealAnalyticsBanner from '../components/LiveRealAnalyticsBanner';
+import EconomyHealthBanner from '../components/EconomyHealthBanner';
 
 export interface PaymentOrderItem {
   id: string;
@@ -34,12 +35,24 @@ interface WithdrawalItem {
   user_id: string;
   amount_diamonds: number;
   amount_currency: number;
+  currency?: 'TRY' | 'USD';
   iban: string;
   full_name: string;
   status: 'pending' | 'approved' | 'completed' | 'rejected';
   created_at: string;
   profile_name?: string;
 }
+
+// Çekim tutarı para birimiyle birlikte gösterilir (Türkiye -> ₺, diğer ülkeler -> $). Eskiden her tutar "₺" yazıyordu.
+const withdrawalMoney = (w: { amount_currency: number | string; currency?: string }) =>
+  `${Number(w.amount_currency || 0).toFixed(2)} ${w.currency === 'USD' ? '$' : '₺'}`;
+
+// Farklı para birimleri toplanmaz; ayrı ayrı gösterilir.
+const withdrawalSums = (list: WithdrawalItem[]) => {
+  const tl = list.filter(w => w.currency !== 'USD').reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
+  const usd = list.filter(w => w.currency === 'USD').reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
+  return usd > 0 ? `${tl.toFixed(2)} ₺ + ${usd.toFixed(2)} $` : `${tl.toFixed(2)} ₺`;
+};
 
 interface ReportItem {
   id: string;
@@ -371,7 +384,7 @@ export default function ModeratorPanel() {
 🔵 <b>ÇEKİM TALEBİ ONAYLANDI!</b> 💎
 
 👤 <b>Yayıncı:</b> ${item.full_name} (@${item.profile_name || 'Kullanıcı'})
-💵 <b>Tutar:</b> ${Number(item.amount_currency).toFixed(2)} ₺ (${item.amount_diamonds.toLocaleString()} 💎)
+💵 <b>Tutar:</b> ${withdrawalMoney(item)} (${item.amount_diamonds.toLocaleString()} 💎)
 🏦 <b>IBAN:</b> <code>${item.iban}</code>
 ✍️ <b>Hesap Sahibi:</b> ${item.full_name}
 📅 <b>Tarih:</b> ${dateStr} • ${timeStr}
@@ -412,7 +425,7 @@ export default function ModeratorPanel() {
 🟢 <b>ÖDEME BAŞARIYLA YATIRILDI!</b> 💸
 
 👤 <b>Yayıncı:</b> ${item.full_name} (@${item.profile_name || 'Kullanıcı'})
-💵 <b>Yatırılan Tutar:</b> ${Number(item.amount_currency).toFixed(2)} ₺ (${item.amount_diamonds.toLocaleString()} 💎)
+💵 <b>Yatırılan Tutar:</b> ${withdrawalMoney(item)} (${item.amount_diamonds.toLocaleString()} 💎)
 🏦 <b>IBAN:</b> <code>${item.iban}</code>
 ✍️ <b>Hesap Sahibi:</b> ${item.full_name}
 📅 <b>Tarih:</b> ${dateStr} • ${timeStr}
@@ -477,7 +490,7 @@ export default function ModeratorPanel() {
 
 👤 <b>Yayıncı:</b> ${item.full_name} (@${item.profile_name || 'Kullanıcı'})
 💎 <b>İade Edilen Elmas:</b> ${item.amount_diamonds.toLocaleString()} 💎
-💵 <b>Talep Edilen Tutar:</b> ${Number(item.amount_currency).toFixed(2)} ₺
+💵 <b>Talep Edilen Tutar:</b> ${withdrawalMoney(item)}
 📝 <b>Sebep:</b> ${reason || 'Belirtilmedi'}
 📅 <b>Tarih:</b> ${dateStr} • ${timeStr}
 ↩️ <b>Sonuç:</b> Elmaslar kullanıcının hesabına eksiksiz iade edildi.
@@ -2291,6 +2304,9 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
       {/* SADECE SİSTEM YÖNETİCİSİ (ÖMER) İÇİN ÖZEL GERÇEK ANALİZ VE ÇEVRİMİÇİ KARTI */}
       <LiveRealAnalyticsBanner isAdmin={isAdmin} />
 
+      {/* SADECE YÖNETİCİ: güncel kur ile ₺ fiyat referans kuru arasındaki fark uyarısı */}
+      <EconomyHealthBanner isAdmin={isAdmin} />
+
       {/* AKSİYON BİLDİRİMİ */}
       {actionMessage && (
         <div style={{
@@ -3834,27 +3850,24 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
                 const pendingList = withdrawals.filter(w => (w.status || 'pending') === 'pending');
                 const approvedList = withdrawals.filter(w => w.status === 'approved');
                 const completedList = withdrawals.filter(w => w.status === 'completed');
-                const pendingSum = pendingList.reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
-                const approvedSum = approvedList.reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
-                const completedSum = completedList.reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
 
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                     <div style={{ background: 'rgba(241, 196, 15, 0.08)', border: '1px solid rgba(241, 196, 15, 0.3)', borderRadius: '16px', padding: '14px' }}>
                       <div style={{ fontSize: '0.75rem', color: '#f1c40f', fontWeight: '800', marginBottom: '4px' }}>🟡 BEKLEYEN TALEPLER</div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{pendingSum.toFixed(2)} ₺</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{withdrawalSums(pendingList)}</div>
                       <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>{pendingList.length} talep onay bekliyor</div>
                     </div>
 
                     <div style={{ background: 'rgba(52, 152, 219, 0.08)', border: '1px solid rgba(52, 152, 219, 0.3)', borderRadius: '16px', padding: '14px' }}>
                       <div style={{ fontSize: '0.75rem', color: '#3498db', fontWeight: '800', marginBottom: '4px' }}>🔵 YATIRIM AŞAMASINDA</div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{approvedSum.toFixed(2)} ₺</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{withdrawalSums(approvedList)}</div>
                       <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>{approvedList.length} talep transfer bekliyor</div>
                     </div>
 
                     <div style={{ background: 'rgba(46, 204, 113, 0.08)', border: '1px solid rgba(46, 204, 113, 0.3)', borderRadius: '16px', padding: '14px' }}>
                       <div style={{ fontSize: '0.75rem', color: '#2ecc71', fontWeight: '800', marginBottom: '4px' }}>🟢 TAMAMLANAN (YATIRILDI)</div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{completedSum.toFixed(2)} ₺</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{withdrawalSums(completedList)}</div>
                       <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>{completedList.length} talep ödendi</div>
                     </div>
                   </div>
@@ -4004,7 +4017,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
                             <div>
                               <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginBottom: '2px' }}>ÖDENECEK TUTAR</div>
                               <div style={{ fontSize: '1.3rem', fontWeight: '900', color: '#2ecc71' }}>
-                                {Number(item.amount_currency).toFixed(2)} ₺
+                                {withdrawalMoney(item)}
                                 <span style={{ fontSize: '0.84rem', color: '#00f2fe', marginLeft: '6px', fontWeight: '700' }}>
                                   ({item.amount_diamonds.toLocaleString()} 💎)
                                 </span>

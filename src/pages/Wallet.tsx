@@ -4,9 +4,11 @@ import { Gem, CreditCard, CheckCircle2, TrendingUp, History, Clock } from 'lucid
 import { useTranslation } from 'react-i18next';
 import { sendTelegramAlert } from '../utils/telegramAlert';
 import { logTransaction } from '../utils/transactionService';
+import { diamondValue, isTurkishLang, useEconomyConfig } from '../utils/economy';
 
 const Wallet = () => {
   const { t, i18n } = useTranslation();
+  const eco = useEconomyConfig();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -17,8 +19,9 @@ const Wallet = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [withdrawalHistory, setWithdrawalHistory] = useState<any[]>([]);
   
-  const isTr = i18n.language?.startsWith('tr') || false;
-  const exchangeRate = isTr ? 0.1 : 0.003;
+  // Elmasın para değeri ve minimum çekim tek kaynaktan: utils/economy.ts (Stüdyo/Kokpit de aynısını kullanır).
+  const isTr = isTurkishLang(i18n.language);
+  const exchangeRate = diamondValue(isTr, eco);
 
   const gifts = [
     { emoji: '🌹', name: t('gift_rose'), cost: 10, reward: 3, color: '#ff2d55' },
@@ -90,7 +93,7 @@ const Wallet = () => {
     
     const withdrawAmount = Number(amount);
     
-    if (withdrawAmount < 500) {
+    if (withdrawAmount < eco.minWithdrawDiamonds) {
       setErrorMessage(t('wallet_min_amount_err'));
       return;
     }
@@ -110,71 +113,25 @@ const Wallet = () => {
         return;
       }
 
-      // 1. Bekleyen aktif talep kontrolü (Çift harcama ve spam talepleri engeller)
-      const { data: pendingRequests } = await supabase
-        .from('withdrawal_requests')
-        .select('id')
-        .eq('user_id', session.user.id)
-        .eq('status', 'pending')
-        .limit(1);
-
-      if (pendingRequests && pendingRequests.length > 0) {
-        setErrorMessage(t('wallet_err_pending_exists'));
-        setSubmitting(false);
-        return;
+      // Elmas düşümü + talep kaydı + para tutarı hesabı SUNUCUDA tek işlemde yapılır (request_diamond_withdrawal).
+      // Tutarı istemci hesaplamaz; para birimi dile göre gönderilir (Türkçe -> TRY, diğerleri -> USD). Böylece
+      // talep eklenemezse elmas kaybolmaz ve tutar oynanamaz. Ayrıntı: supabase/pyngoo_cekim_dogrulama_yamasi.sql
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('request_diamond_withdrawal', {
+        p_amount_diamonds: withdrawAmount,
+        p_currency: isTr ? 'TRY' : 'USD',
+        p_iban: iban.trim(),
+        p_full_name: fullName.trim()
+      });
+      if (rpcErr || !rpcRes?.success) {
+        const errKeys: Record<string, string> = {
+          min_amount: 'wallet_min_amount_err',
+          insufficient: 'wallet_insufficient_err',
+          pending_exists: 'wallet_err_pending_exists'
+        };
+        throw new Error(t(errKeys[String(rpcRes?.error || '')] || 'wallet_err_deduct_failed'));
       }
-
-      // 2. Anlık veritabanı bakiyesini doğrula (İstemci state manipülasyonunu engeller)
-      const { data: freshProfile, error: profileErr } = await supabase
-        .from('profiles')
-        .select('total_diamonds')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profileErr || !freshProfile) {
-        throw new Error(t('wallet_err_profile_verify'));
-      }
-
-      const freshDiamonds = freshProfile.total_diamonds || 0;
-      if (freshDiamonds < withdrawAmount) {
-        setErrorMessage(t('wallet_insufficient_err'));
-        setProfile({ ...profile, total_diamonds: freshDiamonds });
-        setSubmitting(false);
-        return;
-      }
-
-      const moneyAmount = withdrawAmount * exchangeRate;
-      const newDiamondBalance = freshDiamonds - withdrawAmount;
-
-      // 3. Önce elmas bakiyesini düşür (Race-condition / Çift harcama koruması)
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ total_diamonds: newDiamondBalance })
-        .eq('id', session.user.id)
-        .gte('total_diamonds', withdrawAmount);
-
-      if (updateError) {
-        throw new Error(t('wallet_err_deduct_failed'));
-      }
-
-      // 4. Talebi veritabanına ekle (Başlangıç Durumu: pending / İşleme Alındı)
-      const { error: insertError } = await supabase.from('withdrawal_requests').insert([{
-        user_id: session.user.id,
-        amount_diamonds: withdrawAmount,
-        amount_currency: moneyAmount,
-        iban: iban.trim(),
-        full_name: fullName.trim(),
-        status: 'pending'
-      }]);
-
-      if (insertError) {
-        // Hata durumunda düşülen bakiyeyi kullanıcıya iade et (Rollback)
-        await supabase
-          .from('profiles')
-          .update({ total_diamonds: freshDiamonds })
-          .eq('id', session.user.id);
-        throw insertError;
-      }
+      const moneyAmount = Number(rpcRes.amount);
+      const newDiamondBalance = Number(rpcRes.new_balance);
 
       setProfile({ ...profile, total_diamonds: newDiamondBalance });
       logTransaction(session.user.id, -withdrawAmount, 'withdraw_request', {
@@ -268,7 +225,7 @@ const Wallet = () => {
         </h3>
         
         {/* Çekim Koşulu / Limit Durumu */}
-        {(profile?.total_diamonds || 0) >= 500 ? (
+        {(profile?.total_diamonds || 0) >= eco.minWithdrawDiamonds ? (
           <div style={{
             background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.12) 0%, rgba(0, 242, 254, 0.08) 100%)',
             border: '1px solid rgba(46, 204, 113, 0.35)',
@@ -346,10 +303,10 @@ const Wallet = () => {
             <input 
               type="number" 
               required
-              min="500"
+              min={eco.minWithdrawDiamonds}
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
-              placeholder="Min. 500"
+              placeholder={`Min. ${eco.minWithdrawDiamonds}`}
               style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
             />
           </div>
@@ -509,7 +466,7 @@ const Wallet = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
                     <div>
                       <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#fff' }}>
-                        {isTr ? '' : '$'}{Number(item.amount_currency).toFixed(2)}{isTr ? ' ₺' : ''}
+                        {item.currency === 'USD' ? '$' : ''}{Number(item.amount_currency).toFixed(2)}{item.currency === 'USD' ? '' : ' ₺'}
                       </span>
                       <span style={{ fontSize: '0.84rem', color: '#00f2fe', marginLeft: '8px', fontWeight: '700' }}>
                         ({item.amount_diamonds} 💎)

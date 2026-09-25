@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { diamondsToMoney, isTurkishLang, useEconomyConfig } from '../utils/economy';
 import { Wallet, Settings, ExternalLink, Flame, Radio } from 'lucide-react';
 
 interface StreamerCockpitProps {
@@ -20,12 +21,13 @@ export default function StreamerCockpit({
   onOpenExplore,
   onOpenWallet
 }: StreamerCockpitProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const eco = useEconomyConfig();
 
   const diamonds = profile?.total_diamonds || 0;
-  // 1 elmas = 0.015 USD (~0.50 TL)
-  const estimatedUsd = (diamonds * 0.015).toFixed(2);
-  const estimatedTry = Math.round(diamonds * 0.50);
+  // Elmasın para değeri Cüzdan ile AYNI kaynaktan (utils/economy.ts). Çekim para birimi dile göre: Türkçe -> ₺, diğerleri -> $.
+  const payoutIsTr = isTurkishLang(i18n.language);
+  const estimatedMoney = diamondsToMoney(diamonds, payoutIsTr, eco).toFixed(2);
 
   return (
     <div style={{
@@ -208,10 +210,10 @@ export default function StreamerCockpit({
               WebkitTextFillColor: 'transparent',
               letterSpacing: '-0.5px'
             }}>
-              ${estimatedUsd}
+              {payoutIsTr ? '' : '$'}{estimatedMoney}
             </span>
             <span style={{ fontSize: '0.92rem', color: 'rgba(255, 255, 255, 0.65)', fontWeight: '700' }}>
-              USD (~{estimatedTry} ₺)
+              {payoutIsTr ? '₺' : 'USD'}
             </span>
           </div>
 
@@ -237,7 +239,7 @@ export default function StreamerCockpit({
                 {t('streamer_minute_rate', 'Dakika Ücretin')}
               </div>
               <div style={{ fontSize: '0.86rem', fontWeight: '900', color: '#2ecc71', marginTop: '2px' }}>
-                +50 {t('diamonds')}
+                +30 {t('diamonds')}
               </div>
             </div>
             <div>

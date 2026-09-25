@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { diamondsToMoney, isTurkishLang, useEconomyConfig } from '../utils/economy';
 import { 
   ArrowLeft, Sparkles, Wallet, ShieldCheck, 
   Settings, Radio, 
@@ -16,7 +17,8 @@ interface HostCenterProps {
 }
 
 export default function HostCenter({ userId }: HostCenterProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const eco = useEconomyConfig();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<any>(null);
@@ -64,9 +66,10 @@ export default function HostCenter({ userId }: HostCenterProps) {
   }, [userId]);
 
   const diamonds = profile?.total_diamonds ?? 0;
-  // 1 elmas = 0.015 USD (~0.50 TL)
-  const estimatedUsd = (diamonds * 0.015).toFixed(2);
-  const estimatedTry = Math.round(diamonds * 0.50);
+  // Elmasın para değeri Cüzdan ile AYNI kaynaktan (utils/economy.ts). Çekim para birimi dile göre: Türkçe -> ₺, diğerleri -> $.
+  // (Eskiden burada 1 elmas = 0,015 $ / 0,50 ₺ kullanılıyordu; gerçek çekimin 5 katıydı.)
+  const payoutIsTr = isTurkishLang(i18n.language);
+  const estimatedMoney = diamondsToMoney(diamonds, payoutIsTr, eco).toFixed(2);
 
   const [followerStats, setFollowerStats] = useState(() => getStreamerFollowers(userId, diamonds));
   const [viewsCount, setViewsCount] = useState(() => getProfileViews(userId, diamonds));
@@ -474,10 +477,10 @@ export default function HostCenter({ userId }: HostCenterProps) {
                     letterSpacing: '-0.5px',
                     lineHeight: 1.1
                   }}>
-                    ${estimatedUsd}
+                    {payoutIsTr ? '' : '$'}{estimatedMoney}
                   </span>
                   <span style={{ fontSize: '0.92rem', color: 'rgba(255, 255, 255, 0.55)', fontWeight: '700' }}>
-                    USD
+                    {payoutIsTr ? '₺' : 'USD'}
                   </span>
                 </div>
 
@@ -491,9 +494,6 @@ export default function HostCenter({ userId }: HostCenterProps) {
                     gap: '3px'
                   }}>
                     +12% {t('host_center_today', 'bugün')}
-                  </span>
-                  <span style={{ fontSize: '0.76rem', color: 'rgba(255, 215, 0, 0.85)', fontWeight: '700' }}>
-                    (~{estimatedTry} ₺)
                   </span>
                 </div>
               </div>
@@ -701,7 +701,7 @@ export default function HostCenter({ userId }: HostCenterProps) {
               }}>
                 {isOnline 
                   ? t('host_center_status_live_desc', 'Erkek kullanıcılar arama başlattığında veya vitrinden seni seçtiğinde ekranına anında VIP Çağrı Daveti düşer.')
-                  : t('host_center_status_offline_desc', 'Çağrı kabul edip dakika başı +50 Elmas ($0.75 / 25₺) kazanmak için canlıya geç.')}
+                  : t('host_center_status_offline_desc', 'Çağrı kabul edip dakika başı +30 Elmas kazanmak için canlıya geç.')}
               </p>
             </div>
           </div>
@@ -766,7 +766,7 @@ export default function HostCenter({ userId }: HostCenterProps) {
               {t('host_center_rate_card', 'Dakika Ücreti')}
             </div>
             <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#2ecc71', marginTop: '4px' }}>
-              +50 💎/dk
+              +30 💎/dk
             </div>
           </div>
 
