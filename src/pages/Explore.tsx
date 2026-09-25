@@ -28,6 +28,7 @@ export default function Explore({ userId }: ExploreProps) {
     startDirectCall?: (callId: string, partner: { id: string; name: string }) => void;
     profile?: any;
     onlineUsers?: Set<string>;
+    presenceLive?: Map<string, boolean | undefined>;
   }>() || {};
 
   const [realFemales, setRealFemales] = useState<any[]>([]);
@@ -259,6 +260,23 @@ export default function Explore({ userId }: ExploreProps) {
     };
   }, [userId]);
 
+  // Keşfette olmayan bir yayıncı canlıya geçerse listeyi yenile (sayfayı yenilemeye gerek kalmasın)
+  useEffect(() => {
+    const live = outletContext.presenceLive;
+    if (!live || live.size === 0) return;
+    const known = new Set(realFemales.map((f: any) => f.id));
+    const w = window as any;
+    if (!w.__pyngooExploreTried) w.__pyngooExploreTried = new Set<string>();
+    const tried: Set<string> = w.__pyngooExploreTried;
+    const unknownLive = Array.from(live.entries())
+      .filter(([id, isLive]) => isLive === true && id !== userId && !known.has(id) && !tried.has(id))
+      .map(([id]) => id);
+    if (unknownLive.length === 0) return;
+    unknownLive.forEach((id) => tried.add(id));
+    loadCreators();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outletContext.presenceLive]);
+
   // Birleştirilmiş Liste Oluştur
   const combinedList: Array<{
     id: string;
@@ -336,15 +354,23 @@ export default function Explore({ userId }: ExploreProps) {
     const lastActiveTime = rf.last_active_at ? new Date(rf.last_active_at).getTime() : 0;
     const isRecentlyActive = lastActiveTime > 0 && (Date.now() - lastActiveTime) < 90000;
 
+    // Çevrimiçi = uygulama/site şu an açık (presence) VE yayıncı molada değil.
+    // Uygulamayı kapatan veya sekmeyi kapatan yayıncı birkaç saniye içinde otomatik "Çevrim Dışı" görünür.
     let isOnline = false;
-    if (streamerStatusMap.has(rf.id)) {
-      isOnline = streamerStatusMap.get(rf.id)!;
-    } else if (rf.is_streamer_online !== undefined && rf.is_streamer_online !== null) {
-      isOnline = rf.is_streamer_online === true;
-    } else if (outletContext.onlineUsers && outletContext.onlineUsers.has(rf.id)) {
-      isOnline = true;
+    const presenceReady = !!outletContext.onlineUsers && outletContext.onlineUsers.size > 0;
+    if (presenceReady) {
+      if (outletContext.onlineUsers!.has(rf.id)) {
+        const liveFlag = outletContext.presenceLive?.get(rf.id);
+        if (typeof liveFlag === 'boolean') {
+          isOnline = liveFlag;
+        } else if (streamerStatusMap.has(rf.id)) {
+          isOnline = streamerStatusMap.get(rf.id)!;
+        } else {
+          isOnline = rf.is_streamer_online !== false;
+        }
+      }
     } else {
-      isOnline = isRecentlyActive;
+      isOnline = rf.is_streamer_online === true && isRecentlyActive;
     }
     const localSavedAvatar = localStorage.getItem(`pyngoo_streamer_avatar_${rf.id}`);
     const streamAvatar = rf.avatar || localSavedAvatar || (rf.role === 'streamer' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80' : 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500&auto=format&fit=crop&q=80');

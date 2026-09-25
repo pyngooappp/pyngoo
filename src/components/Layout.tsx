@@ -70,6 +70,15 @@ export default function Layout({ userId }: LayoutProps) {
   const [directCallCallerId, setDirectCallCallerId] = useState<string | null>(null);
   const [callWaitingNotification, setCallWaitingNotification] = useState<{ callerName: string; callerId: string } | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  // Yayıncı canlı/mola durumu (presence üzerinden anlık). undefined = eski sürüm, bilgi yok
+  const [presenceLive, setPresenceLive] = useState<Map<string, boolean | undefined>>(new Map());
+  const presenceChannelRef = useRef<any>(null);
+  const profileForPresenceRef = useRef<any>(null);
+  profileForPresenceRef.current = profile;
+  useEffect(() => {
+    // Yayıncı olunca / rol değişince presence bilgisini yenile
+    window.dispatchEvent(new Event('pyngoo_presence_retrack'));
+  }, [profile?.is_streamer, profile?.role]);
   const [goldToastMessage, setGoldToastMessage] = useState<string | null>(null);
 
   const isCallActiveRef = useRef(false);
@@ -489,16 +498,38 @@ export default function Layout({ userId }: LayoutProps) {
       .subscribe();
 
     // 5. Global Kullanıcı Çevrimiçi Varlık Takibi (Realtime Presence)
+    // Uygulama/sekme kapanınca kullanıcı otomatik düşer; yayıncının canlı/mola durumu da burada taşınır.
+    const buildPresencePayload = () => {
+      const p = profileForPresenceRef.current;
+      const isStreamer = p?.role === 'streamer' || p?.is_streamer === true ||
+        localStorage.getItem(`pyngoo_is_streamer_${userId}`) === 'true';
+      const live = isStreamer && localStorage.getItem(`pyngoo_streamer_online_${userId}`) !== 'false';
+      return { userId, online_at: new Date().toISOString(), live };
+    };
+    const retrackPresence = () => {
+      try { Promise.resolve(presenceChannel.track(buildPresencePayload())).catch(() => {}); } catch (_) {}
+    };
+    window.addEventListener('pyngoo_streamer_online_changed', retrackPresence);
+    window.addEventListener('pyngoo_streamer_updated', retrackPresence);
+    window.addEventListener('pyngoo_presence_retrack', retrackPresence);
     const presenceChannel = supabase.channel('pyngoo_presence', {
       config: { presence: { key: userId } }
     });
 
     const updatePresence = () => {
-      const state = presenceChannel.presenceState();
+      const state = presenceChannel.presenceState() as Record<string, any[]>;
       const onlineSet = new Set<string>();
-      Object.keys(state).forEach((k) => onlineSet.add(k));
+      const liveMap = new Map<string, boolean | undefined>();
+      Object.keys(state).forEach((k) => {
+        onlineSet.add(k);
+        const metas = state[k] || [];
+        const withFlag = metas.filter((m: any) => typeof m?.live === 'boolean');
+        liveMap.set(k, withFlag.length > 0 ? withFlag.some((m: any) => m.live === true) : undefined);
+      });
       setOnlineUsers(onlineSet);
+      setPresenceLive(liveMap);
     };
+    presenceChannelRef.current = presenceChannel;
 
     presenceChannel
       .on('presence', { event: 'sync' }, updatePresence)
@@ -506,10 +537,7 @@ export default function Layout({ userId }: LayoutProps) {
       .on('presence', { event: 'leave' }, updatePresence)
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({
-            userId,
-            online_at: new Date().toISOString()
-          });
+          await presenceChannel.track(buildPresencePayload());
         }
       });
 
@@ -606,6 +634,10 @@ export default function Layout({ userId }: LayoutProps) {
       supabase.removeChannel(callChannel);
       supabase.removeChannel(friendsChannel);
       supabase.removeChannel(messagesChannel);
+      window.removeEventListener('pyngoo_streamer_online_changed', retrackPresence);
+      window.removeEventListener('pyngoo_streamer_updated', retrackPresence);
+      window.removeEventListener('pyngoo_presence_retrack', retrackPresence);
+      presenceChannelRef.current = null;
       supabase.removeChannel(presenceChannel);
       supabase.removeChannel(paymentChannel);
     };
@@ -701,7 +733,7 @@ export default function Layout({ userId }: LayoutProps) {
   return (
     <div className="app-wrapper">
         <main className="main-content">
-          <Outlet context={{ isCallActive, setIsCallActive, startDirectCall: handleStartDirectCall, profile, refreshProfile: fetchProfile, onlineUsers }} />
+          <Outlet context={{ isCallActive, setIsCallActive, startDirectCall: handleStartDirectCall, profile, refreshProfile: fetchProfile, onlineUsers, presenceLive }} />
         </main>
 
         {/* Global Tam Ekran Özel Arama Görüşmesi (Ekran kaydı ve görüntüsü kesinlikle engellenir) */}

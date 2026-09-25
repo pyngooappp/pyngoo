@@ -23,8 +23,8 @@ export interface ImageValidationResult {
   errorFallback?: string;
 }
 
-const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
 
 /**
@@ -60,7 +60,13 @@ async function checkMagicBytes(file: File): Promise<boolean> {
         bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && // "RIFF"
         bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;  // "WEBP"
 
-      resolve(isJpeg || isPng || isWebp);
+      // 4. HEIC / HEIF (iPhone fotoğrafları): bytes 4..7 = "ftyp", ardından heic/heix/mif1/msf1
+      const isFtyp = bytes.length >= 12 &&
+        bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+      const brand = isFtyp ? String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]) : '';
+      const isHeic = ['heic', 'heix', 'hevc', 'mif1', 'msf1', 'heis'].includes(brand);
+
+      resolve(isJpeg || isPng || isWebp || isHeic);
     };
 
     reader.onerror = () => resolve(false);
@@ -85,18 +91,16 @@ export async function validateAndSanitizeImage(
     };
   }
 
-  // 2. Uzantı kontrolü
-  const ext = (file.name.split('.').pop() || '').toLowerCase();
-  if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return {
-      valid: false,
-      errorKey: 'photo_err_invalid_type',
-      errorFallback: 'Lütfen geçerli bir resim dosyası seçin (JPG, PNG veya WEBP).'
-    };
-  }
-
-  // 3. MIME Türü kontrolü (Zararlı text/html, application/* veya image/svg+xml engellenir)
-  if (!ALLOWED_MIME_TYPES.includes(file.type.toLowerCase())) {
+  // 2-3. Uzantı / MIME kontrolü
+  // Telefon galerileri dosyayı çoğu zaman uzantısız ("1000012345") veya türü boş verir.
+  // Bu yüzden: açıkça tehlikeli türler (svg, html, script...) reddedilir; asıl doğrulama
+  // aşağıdaki ikili imza (magic bytes) kontrolü ve canvas ile sıfırdan yeniden kodlamadır.
+  const name = (file.name || '').toLowerCase();
+  const ext = name.includes('.') ? (name.split('.').pop() || '') : '';
+  const mime = (file.type || '').toLowerCase();
+  const extOk = ext === '' || ALLOWED_EXTENSIONS.includes(ext);
+  const mimeOk = mime === '' || ALLOWED_MIME_TYPES.includes(mime);
+  if (!extOk || !mimeOk) {
     return {
       valid: false,
       errorKey: 'photo_err_invalid_type',
