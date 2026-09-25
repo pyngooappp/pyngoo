@@ -141,7 +141,19 @@ export async function validateAndSanitizeImage(
       }
 
       const img = new Image();
+      let triedObjectUrl = false;
+      let objectUrl: string | null = null;
       img.onerror = () => {
+        // iOS'ta HEIC veya MIME türü boş dosyalarda data URL çözülemeyebilir; dosyayı objectURL ile bir kez daha dene.
+        if (!triedObjectUrl) {
+          triedObjectUrl = true;
+          try {
+            objectUrl = URL.createObjectURL(file);
+            img.src = objectUrl;
+            return;
+          } catch (_) { /* aşağıda hata döner */ }
+        }
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
         // Çözümlenemeyen veya bozuk resimlerde ASLA ham veriye dönülmez!
         resolve({
           valid: false,
@@ -183,6 +195,7 @@ export async function validateAndSanitizeImage(
 
           // Yalnızca saf pikseller canvas'a çizilir
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
 
           // Sıfırdan temiz ve standardize JPEG üretilir (tüm metadata temizlenmiştir)
           const cleanDataUrl = canvas.toDataURL('image/jpeg', quality);

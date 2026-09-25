@@ -100,9 +100,13 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
   }, []);
 
   const applyPhoto = async (dataUrl: string) => {
+    let saved = true;
     setAvatarUrl(dataUrl);
-    localStorage.setItem(`pyngoo_streamer_avatar_${userId}`, dataUrl);
-    localStorage.setItem(`pyngoo_avatar_${userId}`, dataUrl);
+    // localStorage dolu / kullanılamıyorsa (iOS WKWebView) bu satırlar hata verip veritabanı kaydını atlatmasın.
+    try {
+      localStorage.setItem(`pyngoo_streamer_avatar_${userId}`, dataUrl);
+      localStorage.setItem(`pyngoo_avatar_${userId}`, dataUrl);
+    } catch (_) {}
 
     try {
       const savedStr = localStorage.getItem(`pyngoo_user_profile_${userId}`);
@@ -120,6 +124,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
         }).eq('id', userId);
         if (avatarErr) {
           console.warn('[photo] profil kaydi hatasi:', avatarErr.message);
+          saved = false;
           setPhotoError(t('photo_err_processing', 'Görsel işleme sırasında hata oluştu.'));
         } else {
           console.warn('[photo] profil kaydedildi, boyut:', dataUrl.length);
@@ -130,6 +135,8 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
         // Avatarın tek kaynağı profiles.avatar sütunudur.
       } catch (err) {
         console.error('Supabase profile avatar update error:', err);
+        saved = false;
+        setPhotoError(t('photo_err_processing', 'Görsel işleme sırasında hata oluştu.'));
       }
     }
 
@@ -150,12 +157,14 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
     }));
 
     setIsUploadingPhoto(false);
-    setShowPhotoModal(false);
+    // Kayıt başarısızsa pencere açık kalsın ki hata görünsün ve tekrar denenebilsin.
+    if (saved) setShowPhotoModal(false);
   };
 
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhotoError(null);
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     console.warn('[photo] secilen dosya:', file ? `${file.name} | ${file.type || 'tur yok'} | ${file.size} bayt` : 'YOK');
     if (!file) return;
 
@@ -168,10 +177,14 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
         setIsUploadingPhoto(false);
         return;
       }
-      applyPhoto(result.sanitizedDataUrl);
-    } catch (_) {
+      await applyPhoto(result.sanitizedDataUrl);
+    } catch (err) {
+      console.warn('[photo] beklenmeyen hata:', err);
       setPhotoError(t('photo_err_processing', 'Görsel işleme sırasında hata oluştu.'));
       setIsUploadingPhoto(false);
+    } finally {
+      // Aynı fotoğraf tekrar seçilebilsin (seçimi seçim ANINDA değil, işlem bitince sıfırla).
+      try { input.value = ''; } catch (_) {}
     }
   };
 
@@ -1187,8 +1200,8 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
               type="file" 
               accept="image/*" 
               ref={fileInputRef} 
-              style={{ display: 'none' }} 
-              onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
+              style={{ position: 'absolute', width: '1px', height: '1px', opacity: 0, overflow: 'hidden', pointerEvents: 'none' }} 
+              tabIndex={-1}
               onChange={handlePhotoFileChange} 
             />
 
@@ -1198,8 +1211,9 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
               </div>
             )}
 
-            <label
-              htmlFor="profile-photo-input"
+            <button
+              type="button"
+              disabled={isUploadingPhoto}
               onClick={() => {
                 if (!isUploadingPhoto && fileInputRef.current) {
                   fileInputRef.current.click();
@@ -1225,7 +1239,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
             >
               <Upload size={18} />
               <span>{isUploadingPhoto ? t('host_center_btn_uploading_photo') : t('host_center_btn_select_photo')}</span>
-            </label>
+            </button>
           </div>
         </div>
       )}
