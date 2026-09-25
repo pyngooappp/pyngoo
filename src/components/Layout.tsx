@@ -108,7 +108,7 @@ export default function Layout({ userId }: LayoutProps) {
     } catch (_) {}
 
     if (reason && reason.includes('askıya')) {
-      alert(reason);
+      alert(t('account_banned_alert'));
       window.location.replace('/login');
     } else {
       window.location.replace('/login?mode=register&deleted=1');
@@ -233,7 +233,9 @@ export default function Layout({ userId }: LayoutProps) {
           window.dispatchEvent(new CustomEvent('pyngoo_gold_updated', { detail: { newGold: payload.new.total_gold } }));
         }
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, () => {
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, (payload: any) => {
+        // Supabase Realtime DELETE olaylarında filtre uygulanmaz; başka bir kullanıcının silinmesi herkesi atmasın.
+        if (payload.old?.id !== userId) return;
         console.warn("Profil veritabanından silindi (DELETE event)! Derhal oturum sonlandırılıyor.");
         forceLogoutUser('Hesabınız silinmiştir.');
       })
@@ -378,7 +380,7 @@ export default function Layout({ userId }: LayoutProps) {
 
             // 2. Görüşmedeki kullanıcıya sessiz/hafif Arama Bekletme Üst Bildirimi göster
             setCallWaitingNotification({
-              callerName: data.callerName || 'Arkadaşın',
+              callerName: data.callerName || t('call_friend_fallback'),
               callerId: data.callerId
             });
             soundManager.playCallWaitingBeep();
@@ -391,7 +393,7 @@ export default function Layout({ userId }: LayoutProps) {
 
           setIncomingCall({
             callId: data.callId,
-            callerName: data.callerName || 'Arkadaşın',
+            callerName: data.callerName || t('call_friend_fallback'),
             callerId: data.callerId
           });
 
@@ -401,8 +403,8 @@ export default function Layout({ userId }: LayoutProps) {
           // Uygulama simgesinde veya arka plandayken sistem bildirimi düşür
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) {
             try {
-              new Notification('📞 Gelen Arama - Pyngoo', {
-                body: `${data.callerName || 'Arkadaşın'} sizi sesli/görüntülü aramaya davet ediyor!`,
+              new Notification(`📞 ${t('call_incoming_title')} - Pyngoo`, {
+                body: `${data.callerName || t('call_friend_fallback')} ${t('call_incoming_invite')}`,
                 icon: '/favicon.svg'
               });
             } catch (_) {}
@@ -464,7 +466,7 @@ export default function Layout({ userId }: LayoutProps) {
             // Zaten görüşmede, broadcast dinleyicisi meşgulü yönetir
             return;
           }
-          let callerName = 'Arkadaşın';
+          let callerName = t('call_friend_fallback');
           try {
             const { data: callerProf } = await supabase
               .from('profiles')
@@ -636,7 +638,7 @@ export default function Layout({ userId }: LayoutProps) {
         // Yalnızca yeni onaylanan siparişler için 1 KEREYE MAHSUS toast göster
         if (newlyNotifiedCount > 0 && newlyCreditedAmount > 0) {
           soundManager.playCoinSound();
-          setGoldToastMessage(`🎉 +${newlyCreditedAmount.toLocaleString()} Altın hesabınıza tanımlandı!`);
+          setGoldToastMessage(t('gold_credited_toast', { amount: newlyCreditedAmount.toLocaleString() }));
           setTimeout(() => setGoldToastMessage(null), 6000);
         }
       } catch (err) {
@@ -728,7 +730,7 @@ export default function Layout({ userId }: LayoutProps) {
     setActiveCallChannel(callId);
     setIsCallActive(true);
 
-    const callerName = profile?.display_name || 'VIP Kullanıcı';
+    const callerName = profile?.display_name || t('caller_vip_fallback');
 
     // 1. match_history tablosuna pending kaydı aç (Postgres Realtime dinleyicisi için)
     try {
@@ -848,10 +850,10 @@ export default function Layout({ userId }: LayoutProps) {
               </div>
 
               <h3 style={{ margin: '0 0 6px', color: 'white', fontSize: '1.3rem', fontWeight: '800' }}>
-                Gelen Arama
+                {t('call_incoming_title')}
               </h3>
               <p style={{ color: '#ccc', fontSize: '0.92rem', marginBottom: '26px', lineHeight: '1.5' }}>
-                <strong style={{ color: '#00f2fe', fontSize: '1.1rem' }}>{incomingCall.callerName}</strong> sizi sesli/görüntülü aramaya davet ediyor!
+                <strong style={{ color: '#00f2fe', fontSize: '1.1rem' }}>{incomingCall.callerName}</strong> {t('call_incoming_invite')}
               </p>
 
               <div style={{ display: 'flex', gap: '12px' }}>

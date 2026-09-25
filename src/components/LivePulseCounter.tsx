@@ -82,7 +82,7 @@ export const LivePulseCounter: React.FC<LivePulseCounterProps> = ({ style, class
         cursor: 'default',
         ...style,
       }}
-      title="Canlı Eşleşme Odaları & Aktif Çevrim İçi Kullanıcılar"
+      title={t('live_pulse_title')}
     >
       <style>{`
         @keyframes pyngooNeonBorderPulse {

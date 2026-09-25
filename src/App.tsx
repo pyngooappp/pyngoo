@@ -1261,11 +1261,9 @@ function App() {
       } catch (_) {}
     };
 
-    // Performans Kuralı: Anlık cihaz çakışması zaten yukarıdaki realtime broadcast kanalıyla
-    // (satır ~1043) milisaniyeler içinde yakalanıyor. Bu interval sadece YEDEK bir güvenlik ağı
-    // olduğundan çok sık çalışmasına gerek yok; 4 sn yerine 20 sn kullanmak, Supabase bağlantı
-    // havuzunu (özellikle Nano katmanda 15 bağlantı limiti) gereksiz yere tüketmeyi önler.
-    const intervalId = setInterval(checkOwnership, 20000);
+    // Nano katman kuralı: periyodik polling YOK. Anlık cihaz çakışması yukarıdaki realtime broadcast
+    // kanalıyla yakalanır; bu kontrol yalnızca sekme/uygulama öne geldiğinde (uyku sonrası kopmuş
+    // bağlantılara karşı) yedek olarak çalışır.
     const onFocus = () => checkOwnership();
     const onVisChange = () => {
       if (!document.hidden) checkOwnership();
@@ -1279,7 +1277,6 @@ function App() {
     window.addEventListener('pyngoo_session_conflict', onConflictEvent);
 
     return () => {
-      clearInterval(intervalId);
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisChange);
       window.removeEventListener('pyngoo_session_conflict', onConflictEvent);
@@ -1305,6 +1302,8 @@ function App() {
         },
         async (payload: any) => {
           if (payload.eventType === 'DELETE') {
+            // Supabase Realtime DELETE olaylarında filtre uygulanmaz; başka bir kullanıcının silinmesi herkesi atmasın.
+            if (payload.old?.id !== userId) return;
             console.warn(`[App.tsx] Profil veritabanından silindi. Oturum kapatılıyor.`);
             await purgeUserSession("Hesabınız daha önce silinmiştir.");
           } else if (payload.new) {

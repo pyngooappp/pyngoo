@@ -110,7 +110,7 @@ export default function VoiceChat({
   directPartnerIdRef.current = directPartnerId;
   const [showReportModal, setShowReportModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
-  const [reportCategory, setReportCategory] = useState('🔞 Çıplaklık / Uygunsuz Görüntü');
+  const [reportCategory, setReportCategory] = useState(() => t('voice_report_cat_nudity'));
   const [reportReason, setReportReason] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [evidenceSnapshot, setEvidenceSnapshot] = useState<string | null>(null);
@@ -551,7 +551,7 @@ export default function VoiceChat({
     const initAgora = async () => {
 
       if (!appId) {
-        if (isMounted) setErrorMessage('Agora App ID eksik. Lütfen .env dosyasını kontrol et ve sunucuyu yeniden başlat.');
+        if (isMounted) setErrorMessage(t('voice_err_agora_missing'));
         return;
       }
 
@@ -618,7 +618,7 @@ export default function VoiceChat({
 
       agoraClient.on('user-left', () => {
         if (!isMounted) return;
-        setErrorMessage('Karşı taraf görüşmeden ayrıldı...');
+        setErrorMessage(t('voice_partner_left'));
         setTimeout(() => {
           if (isMounted) onSkip();
         }, 2000);
@@ -685,11 +685,11 @@ export default function VoiceChat({
       } catch (error: any) {
         if (!isMounted) return;
         if (error?.message?.includes('NotAllowedError') || error?.message?.includes('Permission denied')) {
-          setErrorMessage(mode === 'video' ? 'Kamera veya mikrofon izni verilmedi! Lütfen tarayıcıdan izin verin.' : 'Mikrofon izni verilmedi! Lütfen tarayıcıdan mikrofon izni verin.');
+          setErrorMessage(mode === 'video' ? t('voice_err_perm_video') : t('voice_err_perm_audio'));
         } else if (error?.message?.includes('DEVICE_NOT_FOUND') || error?.message?.includes('NotFoundError')) {
-          setErrorMessage(mode === 'video' ? 'Kamera veya mikrofon bulunamadı! Lütfen cihazınızı kontrol edin.' : 'Mikrofon bulunamadı! Lütfen bilgisayarınıza bir mikrofon bağlayın.');
+          setErrorMessage(mode === 'video' ? t('voice_err_device_video') : t('voice_err_device_audio'));
         } else {
-          setErrorMessage('Bağlantı hatası: ' + (error?.message || 'Bilinmeyen hata'));
+          setErrorMessage(t('voice_err_connection', { error: error?.message || t('voice_err_unknown') }));
         }
       }
     };
@@ -850,7 +850,7 @@ export default function VoiceChat({
       localAudioTrack.setMuted(!isMuted);
       setIsMuted(!isMuted);
     } else {
-      setErrorMessage("Mikrofon bulunamadığı için ses kapatıp açılamıyor.");
+      setErrorMessage(t('voice_err_no_mic_toggle'));
     }
   };
 
@@ -1139,7 +1139,7 @@ export default function VoiceChat({
     const now = Date.now();
     if (now - lastGiftRequestTimeRef.current < 25000) {
       const waitSec = Math.ceil((25000 - (now - lastGiftRequestTimeRef.current)) / 1000);
-      setErrorMessage(`⚠️ Lütfen tekrar hediye istemek için ${waitSec} saniye bekleyin.`);
+      setErrorMessage(t('voice_gift_request_wait', { sec: waitSec }));
       setTimeout(() => setErrorMessage(null), 3000);
       setShowGiftRequestMenu(false);
       return;
@@ -1155,7 +1155,7 @@ export default function VoiceChat({
           giftName,
           cost,
           reward,
-          senderName: profile?.display_name?.split(',')[0] || 'Yayıncı'
+          senderName: profile?.display_name?.split(',')[0] || t('streamer_fallback_name')
         }
       });
     }
@@ -1255,7 +1255,7 @@ export default function VoiceChat({
       }
     } catch (err: any) {
       console.error("Arkadaş ekleme hatası:", err);
-      setErrorMessage(`İstek hatası: ${err.message || err.details || JSON.stringify(err)}`);
+      setErrorMessage(t('voice_err_request', { error: err.message || err.details || JSON.stringify(err) }));
     }
   };
 
@@ -1414,7 +1414,7 @@ export default function VoiceChat({
                   {partnerProfile?.display_name || t('voice_mysterious', { defaultValue: 'Gizemli Kullanıcı' })}
                 </h3>
                 <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', fontWeight: '600', margin: 0 }}>
-                  {isCallAnswered ? '● Canlı Görüşme' : (isDirectCall ? 'Aranıyor...' : t('voice_connecting'))}
+                  {isCallAnswered ? t('voice_live_call') : (isDirectCall ? t('voice_calling') : t('voice_connecting'))}
                 </p>
               </div>
             )
@@ -1433,7 +1433,7 @@ export default function VoiceChat({
                   {t('video_blur_active')} ({blurTimer}s)
                 </div>
                 <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.82rem', maxWidth: '280px', margin: 0 }}>
-                  Güvenliğiniz için ilk 4 saniye koruma açık başlatıldı.
+                  {t('voice_protection_notice')}
                 </p>
                 <button 
                   onClick={() => setIsBlurred(false)}
@@ -1503,7 +1503,7 @@ export default function VoiceChat({
                     whiteSpace: 'nowrap'
                   }}
                 >
-                  🎁 Gönder
+                  {t('voice_gift_send_btn')}
                 </button>
                 <button
                   onClick={() => setIncomingGiftRequest(null)}
@@ -1618,7 +1618,7 @@ export default function VoiceChat({
                   <span>{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
                   {isDirectCall && (
                     <span style={{ fontSize: '0.68rem', background: '#fff', color: '#ff6b00', padding: '1px 5px', borderRadius: '6px', marginLeft: '3px', fontWeight: '900' }}>
-                      + Yükle
+                      {t('voice_topup_badge')}
                     </span>
                   )}
                 </div>
@@ -1740,7 +1740,7 @@ export default function VoiceChat({
                   </button>
                 )}
                 <div style={{ position: 'absolute', bottom: '2px', left: 0, right: 0, textAlign: 'center', fontSize: '0.62rem', background: 'rgba(0,0,0,0.65)', color: 'white', fontWeight: 'bold', padding: '1px 0' }}>
-                  Sen
+                  {t('voice_you_label')}
                 </div>
               </div>
             </div>
@@ -1798,8 +1798,8 @@ export default function VoiceChat({
                 lineHeight: '1.4'
               }}>
                 {isPartnerBusy 
-                  ? 'Kullanıcı şu anda başka bir görüşmede (Meşgul)...'
-                  : (isCaller ? 'Çalıyor... (Açıldığında süre başlayacaktır)' : 'Bağlanıyor...')}
+                  ? t('voice_partner_busy')
+                  : (isCaller ? t('voice_ringing') : t('voice_connecting'))}
               </p>
               <button
                 onClick={() => {
@@ -1816,7 +1816,7 @@ export default function VoiceChat({
                 }}
               >
                 <PhoneOff size={18} />
-                Aramayı Kapat
+                {t('voice_hang_up')}
               </button>
             </div>
           )}
@@ -2009,7 +2009,7 @@ export default function VoiceChat({
                     boxShadow: '0 2px 8px rgba(255, 45, 85, 0.35)',
                     transition: 'transform 0.15s'
                   }}
-                  title="Gül Gönder (10 Altın)"
+                  title={t('voice_gift_rose_title')}
                 >
                   <span>🌹</span>
                   <span style={{ color: '#ffd700', fontSize: '0.68rem' }}>10🪙</span>
@@ -2033,7 +2033,7 @@ export default function VoiceChat({
                     boxShadow: '0 2px 8px rgba(255, 152, 0, 0.35)',
                     transition: 'transform 0.15s'
                   }}
-                  title="Kahve Ismarla (20 Altın)"
+                  title={t('voice_gift_coffee_title')}
                 >
                   <span>☕</span>
                   <span style={{ color: '#ffd700', fontSize: '0.68rem' }}>20🪙</span>
@@ -2057,7 +2057,7 @@ export default function VoiceChat({
                     boxShadow: '0 2px 8px rgba(156, 39, 176, 0.35)',
                     transition: 'transform 0.15s'
                   }}
-                  title="Ayıcık Gönder (100 Altın)"
+                  title={t('voice_gift_bear_title')}
                 >
                   <span>🧸</span>
                   <span style={{ color: '#ffd700', fontSize: '0.68rem' }}>100🪙</span>
@@ -2080,10 +2080,10 @@ export default function VoiceChat({
                     cursor: 'pointer',
                     boxShadow: '0 2px 8px rgba(255, 215, 0, 0.25)'
                   }}
-                  title="Tüm Hediyeler"
+                  title={t('voice_all_gifts')}
                 >
                   <span>🎁</span>
-                  <span>Hediyeler</span>
+                  <span>{t('host_center_gifting')}</span>
                 </button>
               </>
             )}
@@ -2214,7 +2214,7 @@ export default function VoiceChat({
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                     backdropFilter: 'blur(10px)'
                   }}
-                  title={isVideoOff ? "Kamerayı Aç" : "Kamerayı Kapat"}
+                  title={isVideoOff ? t('voice_camera_on') : t('voice_camera_off')}
                 >
                   {isVideoOff ? <VideoOff size={18} /> : <Video size={18} />}
                 </button>
@@ -2453,7 +2453,7 @@ export default function VoiceChat({
             </div>
 
             <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
-              Hediyeler partnerinizi destekler ve beğenisini artırır.
+              {t('voice_gifts_support_note')}
             </div>
           </div>
         </div>
@@ -2653,7 +2653,7 @@ export default function VoiceChat({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.95rem' }}>450 {t('gold_currency_label')} 🪙</span>
                     <span style={{ background: '#ff416c', color: '#fff', fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' }}>
-                      POPÜLER
+                      {t('market_badge_popular')}
                     </span>
                   </div>
                   <div style={{ color: '#ff416c', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 150 })}! ({t('market_badge_discount_50')})</div>
@@ -2682,7 +2682,7 @@ export default function VoiceChat({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.95rem' }}>1,200 {t('gold_currency_label')} 💎</span>
                     <span style={{ background: '#ffd700', color: '#000', fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' }}>
-                      EN AVANTAJLI
+                      {t('badge_best_value')}
                     </span>
                   </div>
                   <div style={{ color: '#ffd700', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 500 })}! ({t('market_badge_discount_65')})</div>
@@ -2786,7 +2786,7 @@ export default function VoiceChat({
                 cursor: 'pointer', textDecoration: 'underline'
               }}
             >
-              Vazgeç
+              {t('chats_delete_cancel')}
             </button>
           </div>
         </div>
@@ -2867,7 +2867,7 @@ export default function VoiceChat({
               }}>
                 <img 
                   src={evidenceSnapshot} 
-                  alt="Kanıt Önizleme" 
+                  alt={t('voice_evidence_preview_alt')} 
                   style={{
                     width: '46px', height: '46px', borderRadius: '8px',
                     objectFit: 'cover', border: '1px solid rgba(255,255,255,0.2)', flexShrink: 0

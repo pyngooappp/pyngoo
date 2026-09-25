@@ -236,7 +236,7 @@ export default function StreamerRecruitmentModal({
               boxShadow: '0 0 20px rgba(255, 215, 0, 0.35)'
             }}>
               <DollarSign size={15} color="#2ecc71" strokeWidth={3} />
-              <span>GÜNLÜK NAKİT KAZANÇ PROGRAMI 💵</span>
+              <span>{t('recruit_badge')}</span>
             </div>
 
             {/* Büyük Başlık - Düzeltilmiş ve Çekici */}
@@ -249,7 +249,7 @@ export default function StreamerRecruitmentModal({
               WebkitTextFillColor: 'transparent',
               lineHeight: '1.25'
             }}>
-              Yayıncı Ol & Para Kazan! 💵💰
+              {t('recruit_title')}
             </h2>
 
             <p style={{
@@ -259,7 +259,7 @@ export default function StreamerRecruitmentModal({
               margin: '0 0 18px',
               padding: '0 6px'
             }}>
-              Sadece sohbet ederek dilediğin yerden <b style={{ color: '#ffd700' }}>dakika başı nakit para</b> kazan, tüm kazancını anında bankana veya Papara'na çek!
+              <span dangerouslySetInnerHTML={{ __html: t('recruit_desc') }} />
             </p>
 
             {/* 4 Ana Avantaj Kartı - Gerçek Para ve Dolar Simgeleriyle */}
@@ -275,10 +275,10 @@ export default function StreamerRecruitmentModal({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2ecc71', fontWeight: '800', fontSize: '0.82rem', marginBottom: '4px' }}>
                   <DollarSign size={16} strokeWidth={3} />
-                  <span>Dakika Başı Nakit</span>
+                  <span>{t('recruit_perk_cash_title')}</span>
                 </div>
                 <p style={{ margin: 0, color: 'rgba(255,255,255,0.72)', fontSize: '0.73rem', lineHeight: '1.35' }}>
-                  Görüşmede kaldığın her dakika hesabına anında nakit para olarak eklenir.
+                  {t('recruit_perk_cash_desc')}
                 </p>
               </div>
 
@@ -292,10 +292,10 @@ export default function StreamerRecruitmentModal({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ffd700', fontWeight: '800', fontSize: '0.82rem', marginBottom: '4px' }}>
                   <Coins size={16} />
-                  <span>Altın & Hediyeler</span>
+                  <span>{t('recruit_perk_gifts_title')}</span>
                 </div>
                 <p style={{ margin: 0, color: 'rgba(255,255,255,0.72)', fontSize: '0.73rem', lineHeight: '1.35' }}>
-                  Kullanıcıların gönderdiği tüm canlı hediyeler doğrudan gerçek paraya dönüşür.
+                  {t('recruit_perk_gifts_desc')}
                 </p>
               </div>
 
@@ -309,10 +309,10 @@ export default function StreamerRecruitmentModal({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#00f2fe', fontWeight: '800', fontSize: '0.82rem', marginBottom: '4px' }}>
                   <Wallet size={16} />
-                  <span>Hızlı IBAN Çekimi</span>
+                  <span>{t('recruit_perk_payout_title')}</span>
                 </div>
                 <p style={{ margin: 0, color: 'rgba(255,255,255,0.72)', fontSize: '0.73rem', lineHeight: '1.35' }}>
-                  Kazandığın parayı dilediğin an tüm banka hesaplarına veya Papara'na çek.
+                  {t('recruit_perk_payout_desc')}
                 </p>
               </div>
 
@@ -326,10 +326,10 @@ export default function StreamerRecruitmentModal({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ff416c', fontWeight: '800', fontSize: '0.82rem', marginBottom: '4px' }}>
                   <ShieldCheck size={16} />
-                  <span>%100 Gizlilik</span>
+                  <span>{t('recruit_perk_privacy_title')}</span>
                 </div>
                 <p style={{ margin: 0, color: 'rgba(255,255,255,0.72)', fontSize: '0.73rem', lineHeight: '1.35' }}>
-                  Kendi yüzünü göstermek veya kendi fotoğrafını yüklemek asla şart değildir!
+                  {t('recruit_perk_privacy_desc')}
                 </p>
               </div>
 
@@ -359,7 +359,7 @@ export default function StreamerRecruitmentModal({
               }}
             >
               <span style={{ fontSize: '1.2rem' }}>💰</span>
-              <span>Hemen Yayıncı Ol & Kazan ➔</span>
+              <span>{t('recruit_cta')}</span>
             </button>
           </div>
         )}
@@ -376,7 +376,7 @@ export default function StreamerRecruitmentModal({
               margin: '0 0 6px',
               color: '#fff'
             }}>
-              Yayıncı Profil Görselini Seç 📸
+              {t('recruit_upload_title')}
             </h2>
 
             <p style={{
@@ -385,7 +385,7 @@ export default function StreamerRecruitmentModal({
               lineHeight: '1.4',
               margin: '0 0 20px'
             }}>
-              Keşfet vitrininde en üst sırada yer almak için galerinden hoş bir fotoğraf yükle.
+              {t('recruit_upload_desc')}
             </p>
 
             {/* Gizli File Input */}
@@ -424,7 +424,7 @@ export default function StreamerRecruitmentModal({
                 <>
                   <img
                     src={uploadedPhoto}
-                    alt="Yayıncı Görseli"
+                    alt={t('recruit_photo_alt')}
                     style={{
                       width: '100%',
                       height: '100%',
@@ -446,7 +446,7 @@ export default function StreamerRecruitmentModal({
                     border: '2px solid #110d22',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.6)'
                   }}
-                  title="Fotoğrafı Değiştir"
+                  title={t('recruit_change_photo')}
                   >
                     <Check size={18} color="#fff" strokeWidth={3} />
                   </div>
@@ -466,7 +466,7 @@ export default function StreamerRecruitmentModal({
                   color: '#ffd700'
                 }}>
                   <Camera size={34} />
-                  <span style={{ fontSize: '0.70rem', fontWeight: '800' }}>Fotoğraf Yükle</span>
+                  <span style={{ fontSize: '0.70rem', fontWeight: '800' }}>{t('recruit_upload_photo')}</span>
                 </div>
               )}
             </div>
@@ -492,7 +492,7 @@ export default function StreamerRecruitmentModal({
               }}
             >
               <Upload size={16} />
-              <span>{uploadedPhoto ? '✅ Görsel Seçildi (Değiştir)' : '📁 Galeriden / Dosyadan Yükle (Zorunlu)'}</span>
+              <span>{uploadedPhoto ? t('recruit_photo_selected') : t('recruit_upload_required')}</span>
             </button>
 
             {uploadError && (
@@ -521,7 +521,7 @@ export default function StreamerRecruitmentModal({
                 lineHeight: '1.45',
                 fontWeight: '600'
               }}>
-                <b>Önemli Gizlilik Notu:</b> Kendi yüzünüzü veya şahsi fotoğrafınızı yüklemeniz şart <b>DEĞİLDİR!</b> Beğendiğiniz hoş bir profil görseli veya hazır bir fotoğraf da yükleyebilirsiniz. Kimliğiniz her zaman gizli kalır.
+                {t('streamer_upload_privacy_warning').replace(/^🔒\s*/, '')}
               </p>
             </div>
 
@@ -552,8 +552,8 @@ export default function StreamerRecruitmentModal({
               <Sparkles size={18} />
               <span>
                 {!uploadedPhoto 
-                  ? '📸 Lütfen Önce Galeriden Görsel Yükleyin' 
-                  : (isSubmitting ? 'Kaydediliyor...' : "🚀 Keşfet'te En Üstte Canlıya Geç!")}
+                  ? t('recruit_upload_first')
+                  : (isSubmitting ? t('recruit_saving') : t('streamer_upload_submit'))}
               </span>
             </button>
           </div>
@@ -585,7 +585,7 @@ export default function StreamerRecruitmentModal({
               margin: '0 0 8px',
               color: '#fff'
             }}>
-              Tebrikler, Artık Canlıdasın! 💵🎉
+              {t('streamer_success_title')}
             </h2>
 
             <p style={{
@@ -595,7 +595,7 @@ export default function StreamerRecruitmentModal({
               margin: '0 0 22px',
               padding: '0 6px'
             }}>
-              Yayıncı profilin onaylandı ve Keşfet vitrininde <b>en üst sıraya (1. sıraya)</b> yerleştirildi! Seni arayan kullanıcılardan dakika başı para kazanmaya başlayacaksın.
+              <span dangerouslySetInnerHTML={{ __html: t('recruit_success_desc') }} />
             </p>
 
             <button
@@ -617,7 +617,7 @@ export default function StreamerRecruitmentModal({
                 boxShadow: '0 8px 25px rgba(46, 204, 113, 0.45)'
               }}
             >
-              <span>🚀 Yayıncı Kokpitine Git (Canlıya Başla) ➔</span>
+              <span>{t('recruit_go_cockpit')}</span>
             </button>
           </div>
         )}

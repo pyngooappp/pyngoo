@@ -159,8 +159,8 @@ export default function Explore({ userId }: ExploreProps) {
 
   const currentLang = (i18n.language || 'tr').split('-')[0].toLowerCase();
 
-  const loadCreators = async () => {
-    setLoading(true);
+  const loadCreators = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       // 1. Gerçek kadın profillerini çek (Yayıncıları ve fotoğraflı olanları en başta göster)
       const { data: realUsers } = await supabase
@@ -200,41 +200,18 @@ export default function Explore({ userId }: ExploreProps) {
   useEffect(() => {
     loadCreators();
 
-    // Gerçek zamanlı profil silinme / banlanma dinleyicisi (Keşfetten anında anlık düşmesi için)
-    const profileChannel = supabase
-      .channel('explore_profiles_realtime')
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'profiles' },
-        (payload: any) => {
-          const deletedId = payload.old?.id;
-          if (deletedId) {
-            setRealFemales((prev) => prev.filter((u) => u.id !== deletedId));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'profiles' },
-        (payload: any) => {
-          const updated = payload.new;
-          if (updated && (updated.role === 'deleted' || updated.is_banned === true || (updated.display_name || '').toLowerCase().includes('silinmiş'))) {
-            setRealFemales((prev) => prev.filter((u) => u.id !== updated.id));
-          } else if (updated && updated.gender === 'kadin') {
-            setRealFemales((prev) => {
-              const idx = prev.findIndex((u) => u.id === updated.id);
-              if (idx >= 0) {
-                const copy = [...prev];
-                copy[idx] = { ...copy[idx], ...updated };
-                return copy;
-              } else {
-                return [updated, ...prev];
-              }
-            });
-          }
-        }
-      )
-      .subscribe();
+    // Nano katman kuralı: tüm profiles tablosunu filtresiz dinlemek her profil güncellemesini (yayıncı kalp atışı,
+    // altın değişimi vb.) Keşfet'i açık olan herkese gönderir ve her olay için RLS kontrolü yükü bindirir.
+    // Bunun yerine liste sekme/uygulama öne geldiğinde sessizce yenilenir; ban/silinme zaten sorguda elenir.
+    // Yayıncı durum ve avatar değişiklikleri yukarıdaki broadcast kanalından anlık gelmeye devam eder.
+    let lastRefreshAt = Date.now();
+    const refreshIfStale = () => {
+      if (document.hidden || Date.now() - lastRefreshAt < 15000) return;
+      lastRefreshAt = Date.now();
+      loadCreators(true);
+    };
+    window.addEventListener('focus', refreshIfStale);
+    document.addEventListener('visibilitychange', refreshIfStale);
 
     const handleProfileDeleted = (e: any) => {
       const deletedId = e.detail?.userId;
@@ -252,7 +229,8 @@ export default function Explore({ userId }: ExploreProps) {
     window.addEventListener('pyngoo_bots_updated', handleBotsChanged);
     window.addEventListener('pyngoo_streamer_updated', handleBotsChanged);
     return () => {
-      supabase.removeChannel(profileChannel);
+      window.removeEventListener('focus', refreshIfStale);
+      document.removeEventListener('visibilitychange', refreshIfStale);
       window.removeEventListener('pyngoo_profile_deleted', handleProfileDeleted);
       window.removeEventListener('pyngoo_bots_status_changed', handleBotsChanged);
       window.removeEventListener('pyngoo_bots_updated', handleBotsChanged);
@@ -320,10 +298,10 @@ export default function Explore({ userId }: ExploreProps) {
       (userId ? localStorage.getItem(`pyngoo_avatar_${userId}`) : null) ||
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
 
-    const myBio = outletContext.profile?.streamer_bio || (userId ? localStorage.getItem(`pyngoo_streamer_bio_${userId}`) : null) || 'Sohbet etmeyi ve eğlenmeyi çok seviyorum 💕';
+    const myBio = outletContext.profile?.streamer_bio || (userId ? localStorage.getItem(`pyngoo_streamer_bio_${userId}`) : null) || t('explore_default_bio_self');
     realStreamerCards.push({
       id: userId,
-      name: outletContext.profile?.display_name?.split(',')[0] || outletContext.profile?.display_name || 'Yayıncı',
+      name: outletContext.profile?.display_name?.split(',')[0] || outletContext.profile?.display_name || t('streamer_fallback_name'),
       age: 23,
       city: (outletContext.profile?.preferred_language || 'tr').toUpperCase() === 'TR' ? 'İstanbul' : 'Online',
       country: (outletContext.profile?.preferred_language || 'tr').toUpperCase(),
@@ -377,13 +355,13 @@ export default function Explore({ userId }: ExploreProps) {
 
     realStreamerCards.push({
       id: rf.id,
-      name: rf.display_name?.split(',')[0] || rf.display_name || 'Kullanıcı',
+      name: rf.display_name?.split(',')[0] || rf.display_name || t('user_fallback_name'),
       age: 22,
       city: (rf.preferred_language || 'tr').toUpperCase() === 'TR' ? 'Türkiye' : 'Online',
       country: (rf.preferred_language || 'tr').toUpperCase(),
       language: rf.preferred_language || 'tr',
       avatar: streamAvatar,
-      bio: rf.bio || 'Sohbet etmeyi ve yeni insanlarla tanışmayı çok seviyorum ✨',
+      bio: rf.bio || t('explore_default_bio'),
       tags: ['#sohbet', '#arkadaşlık'],
       likes: rf.total_likes || 0,
       isOnline: isOnline,
@@ -538,7 +516,7 @@ export default function Explore({ userId }: ExploreProps) {
                 {liveAlert.name}
               </span>
               <span style={{ fontSize: '0.62rem', background: '#00e676', color: '#000', fontWeight: '900', padding: '1px 6px', borderRadius: '8px' }}>
-                CANLI
+                {t('badge_live')}
               </span>
             </div>
             <p style={{ margin: '2px 0 0 0', fontSize: '0.76rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.25 }}>
@@ -1188,11 +1166,11 @@ export default function Explore({ userId }: ExploreProps) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '6px' }}>
                   <Coins size={22} color="#ffd700" />
                   <span style={{ fontSize: '1.18rem', fontWeight: '900', color: '#ffd700' }}>
-                    120 Altın / Dakika
+                    {t('explore_call_cost_desc')}
                   </span>
                 </div>
                 <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.8)', margin: 0, lineHeight: 1.45 }}>
-                  Arama başladığında hesabınızdan dakikası <strong>120 Altın</strong> olarak düşülecektir.
+                  <span dangerouslySetInnerHTML={{ __html: t('explore_call_deduct_desc') }} />
                 </p>
               </div>
 
@@ -1207,9 +1185,9 @@ export default function Explore({ userId }: ExploreProps) {
                 marginBottom: '20px',
                 fontSize: '0.85rem'
               }}>
-                <span style={{ color: 'rgba(255,255,255,0.7)' }}>Mevcut Bakiyeniz:</span>
+                <span style={{ color: 'rgba(255,255,255,0.7)' }}>{t('explore_current_balance')}</span>
                 <span style={{ fontWeight: '800', color: userGold >= 120 ? '#00e676' : '#ff4d6d' }}>
-                  {userGold} Altın
+                  {userGold} {t('gold_currency_label')}
                 </span>
               </div>
 
@@ -1230,7 +1208,7 @@ export default function Explore({ userId }: ExploreProps) {
                       cursor: 'pointer'
                     }}
                   >
-                    Vazgeç
+                    {t('chats_delete_cancel')}
                   </button>
                   <button
                     onClick={() => {
@@ -1256,7 +1234,7 @@ export default function Explore({ userId }: ExploreProps) {
                     }}
                   >
                     <PhoneCall size={18} />
-                    <span>Aramayı Başlat</span>
+                    <span>{t('explore_start_call_btn')}</span>
                   </button>
                 </div>
               ) : (
@@ -1271,7 +1249,7 @@ export default function Explore({ userId }: ExploreProps) {
                     justifyContent: 'center'
                   }}>
                     <AlertTriangle size={16} />
-                    <span>Aramayı başlatmak için en az 120 altınınız olmalı.</span>
+                    <span>{t('explore_min_gold_warning')}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button
@@ -1288,7 +1266,7 @@ export default function Explore({ userId }: ExploreProps) {
                         cursor: 'pointer'
                       }}
                     >
-                      Kapat
+                      {t('close')}
                     </button>
                     <button
                       onClick={() => {
@@ -1313,7 +1291,7 @@ export default function Explore({ userId }: ExploreProps) {
                       }}
                     >
                       <Coins size={18} />
-                      <span>Altın Yükle</span>
+                      <span>{t('gold_modal_buy_now')}</span>
                     </button>
                   </div>
                 </div>

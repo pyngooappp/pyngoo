@@ -65,8 +65,8 @@ export default function PrivacyShield({
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(
             isPrivateCall 
-              ? '🔒 Pyngoo Özel Görüşme Koruması: Bu özel görüşmede karşı tarafın mahremiyetini korumak için ekran görüntüsü almak kesinlikle yasaktır.' 
-              : '🔒 Pyngoo Gizlilik Koruması: Ekran görüntüsü almak engellendi.'
+              ? t('shield_clipboard_private')
+              : t('shield_clipboard_general')
           ).catch(() => {});
         }
         setTimeout(() => setIsPrivacyCurtain(false), 2500);
@@ -207,8 +207,8 @@ export default function PrivacyShield({
             justifyContent: 'space-between',
             width: '100%'
           }}>
-            <span>🔒 ÖZEL GÖRÜŞME • {userIdentifier}</span>
-            <span>TCK 134 İZİNSİZ KAYIT YASAKTIR</span>
+            <span>{t('shield_wm_private_call')} • {userIdentifier}</span>
+            <span>{t('shield_wm_no_recording')}</span>
           </div>
 
           {/* Orta Çapraz Fligran */}
@@ -224,7 +224,7 @@ export default function PrivacyShield({
             padding: '6px 16px',
             borderRadius: '8px'
           }}>
-            PYNGOO GİZLİ GÖRÜŞME • {userIdentifier}
+            {t('shield_wm_secret_call')} • {userIdentifier}
           </div>
 
           {/* Alt Kayan Filigran */}
@@ -238,7 +238,7 @@ export default function PrivacyShield({
             width: '100%'
           }}>
             <span>ID: {activeUserId ? activeUserId.slice(0, 12) : 'SECURE'}</span>
-            <span>EKRAN KAYDI TESPİT EDİLİR</span>
+            <span>{t('shield_wm_detected')}</span>
           </div>
         </div>
       )}

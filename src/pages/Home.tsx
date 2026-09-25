@@ -696,10 +696,10 @@ export default function Home({ userId }: HomeProps) {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: '900', fontSize: '0.98rem', color: '#fff' }}>
-                          Canlı Kullanıcı (Erkek)
+                          {t('home_preview_live_male')}
                         </div>
                         <div style={{ fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.65)', marginTop: '2px' }}>
-                          ⭐ VIP Seviye Üye • Türkiye
+                          {t('home_preview_vip_member')} • Türkiye
                         </div>
                       </div>
                     </div>
@@ -1123,12 +1123,12 @@ export default function Home({ userId }: HomeProps) {
                       </div>
                       {mediaErrorType === 'not_found_video' && (
                         <div style={{ fontSize: '0.78rem', color: '#ffd2d2', marginTop: '4px' }}>
-                          💡 <b>Çözüm:</b> Kameranız yoksa alttaki <b>"🎙️ Sesli Sohbet"</b> seçeneğine tıklayıp hemen sadece sesle eşleşebilirsiniz!
+                          <span dangerouslySetInnerHTML={{ __html: t('home_solution_no_camera') }} />
                         </div>
                       )}
                       {mediaErrorType === 'denied' && (
                         <div style={{ fontSize: '0.78rem', color: '#ffd2d2', marginTop: '4px' }}>
-                          💡 <b>Çözüm:</b> Tarayıcının en üstündeki kilit 🔒 simgesine tıklayın, Kamera ve Mikrofonu "İzin Ver" yapıp sayfayı yenileyin.
+                          <span dangerouslySetInnerHTML={{ __html: t('home_solution_denied') }} />
                         </div>
                       )}
                     </div>

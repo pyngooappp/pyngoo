@@ -119,9 +119,7 @@ const Wallet = () => {
         .limit(1);
 
       if (pendingRequests && pendingRequests.length > 0) {
-        setErrorMessage(isTr
-          ? 'Zaten onay bekleyen aktif bir para çekim talebiniz bulunmaktadır. Lütfen önceki talebinizin tamamlanmasını bekleyiniz.'
-          : 'You already have an active pending withdrawal request. Please wait for it to be processed.');
+        setErrorMessage(t('wallet_err_pending_exists'));
         setSubmitting(false);
         return;
       }
@@ -134,7 +132,7 @@ const Wallet = () => {
         .single();
 
       if (profileErr || !freshProfile) {
-        throw new Error(isTr ? 'Kullanıcı profili doğrulanamadı.' : 'User profile could not be verified.');
+        throw new Error(t('wallet_err_profile_verify'));
       }
 
       const freshDiamonds = freshProfile.total_diamonds || 0;
@@ -156,7 +154,7 @@ const Wallet = () => {
         .gte('total_diamonds', withdrawAmount);
 
       if (updateError) {
-        throw new Error(isTr ? 'Bakiye düşürme işlemi başarısız oldu.' : 'Failed to deduct balance.');
+        throw new Error(t('wallet_err_deduct_failed'));
       }
 
       // 4. Talebi veritabanına ekle (Başlangıç Durumu: pending / İşleme Alındı)
@@ -284,7 +282,7 @@ const Wallet = () => {
             <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>✅</span>
             <div style={{ fontSize: '0.82rem', lineHeight: '1.4', color: '#d4f8e8' }}>
               <strong style={{ color: '#2ecc71', display: 'block', marginBottom: '2px' }}>
-                {isTr ? 'Para Çekme Koşulunu Karşılıyorsunuz' : 'Withdrawal Requirement Met'}
+                {t('wallet_requirement_met')}
               </strong>
               {t('wallet_threshold_reached')}
             </div>
@@ -399,7 +397,7 @@ const Wallet = () => {
             </h4>
           </div>
           <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '8px' }}>
-            12 {isTr ? 'Hediye' : 'Gifts'}
+            {t('wallet_gifts_count', { count: 12 })}
           </span>
         </div>
 
@@ -447,7 +445,7 @@ const Wallet = () => {
             {t('wallet_history_title')}
           </h3>
           <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)', padding: '3px 10px', borderRadius: '10px' }}>
-            {withdrawalHistory.length} {isTr ? 'Talep' : 'Requests'}
+            {t('wallet_requests_count', { count: withdrawalHistory.length })}
           </span>
         </div>
 
@@ -540,7 +538,7 @@ const Wallet = () => {
                         {/* 1. Aşama */}
                         <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#f1c40f', color: '#000', fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>✓</div>
-                          <span style={{ fontSize: '0.70rem', color: '#f1c40f', fontWeight: '700', marginTop: '4px' }}>1. İşleme Alındı</span>
+                          <span style={{ fontSize: '0.70rem', color: '#f1c40f', fontWeight: '700', marginTop: '4px' }}>1. {t('wallet_status_pending')}</span>
                         </div>
 
                         {/* 2. Aşama */}
@@ -548,7 +546,7 @@ const Wallet = () => {
                           <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: isApproved || isCompleted ? '#3498db' : 'rgba(255,255,255,0.2)', color: '#fff', fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                             {isApproved || isCompleted ? '✓' : '2'}
                           </div>
-                          <span style={{ fontSize: '0.70rem', color: isApproved || isCompleted ? '#3498db' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginTop: '4px' }}>2. Onaylandı</span>
+                          <span style={{ fontSize: '0.70rem', color: isApproved || isCompleted ? '#3498db' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginTop: '4px' }}>2. {t('wallet_step_approved')}</span>
                         </div>
 
                         {/* 3. Aşama */}
@@ -556,7 +554,7 @@ const Wallet = () => {
                           <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: isCompleted ? '#2ecc71' : 'rgba(255,255,255,0.2)', color: '#fff', fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                             {isCompleted ? '✓' : '3'}
                           </div>
-                          <span style={{ fontSize: '0.70rem', color: isCompleted ? '#2ecc71' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginTop: '4px' }}>3. Yatırıldı</span>
+                          <span style={{ fontSize: '0.70rem', color: isCompleted ? '#2ecc71' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginTop: '4px' }}>3. {t('wallet_status_completed')}</span>
                         </div>
                       </div>
 

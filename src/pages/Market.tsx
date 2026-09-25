@@ -561,7 +561,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       priceUsdt: '3.70',
       oldPriceTr: '249.99 ₺',
       oldPriceEn: '$6.99',
-      discountBadge: '%45 İndirim',
+      discountBadge: t('market_discount_badge', { pct: 45 }),
       iconType: 'pouch'
     },
     {
@@ -574,7 +574,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       priceUsdt: '7.00',
       oldPriceTr: '549.99 ₺',
       oldPriceEn: '$13.99',
-      discountBadge: '%50 İndirim',
+      discountBadge: t('market_discount_badge', { pct: 50 }),
       isPopular: true,
       iconType: 'bag'
     },
@@ -588,7 +588,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       priceUsdt: '18.00',
       oldPriceTr: '1,399.99 ₺',
       oldPriceEn: '$35.99',
-      discountBadge: '%55 İndirim',
+      discountBadge: t('market_discount_badge', { pct: 55 }),
       isBestValue: true,
       iconType: 'chest'
     },
@@ -602,7 +602,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       priceUsdt: '35.00',
       oldPriceTr: '3,199.99 ₺',
       oldPriceEn: '$79.99',
-      discountBadge: '%60 İndirim',
+      discountBadge: t('market_discount_badge', { pct: 60 }),
       isVip: true,
       iconType: 'vault'
     },
@@ -616,7 +616,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       priceUsdt: '70.00',
       oldPriceTr: '6,999.99 ₺',
       oldPriceEn: '$169.99',
-      discountBadge: '%65 İndirim',
+      discountBadge: t('market_discount_badge', { pct: 65 }),
       isVip: true,
       iconType: 'crown'
     },
@@ -630,7 +630,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       priceUsdt: '150.00',
       oldPriceTr: '14,999.99 ₺',
       oldPriceEn: '$379.99',
-      discountBadge: '%70 İndirim',
+      discountBadge: t('market_discount_badge', { pct: 70 }),
       isVip: true,
       iconType: 'fortune'
     },
@@ -644,7 +644,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       priceUsdt: '300.00',
       oldPriceTr: '29,999.99 ₺',
       oldPriceEn: '$749.99',
-      discountBadge: '%75 İndirim',
+      discountBadge: t('market_discount_badge', { pct: 75 }),
       isVip: true,
       iconType: 'fortune'
     }
@@ -1146,7 +1146,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                 >
                   <CreditCard size={19} color={paymentMethod === 'card' ? '#ffd700' : '#fff'} />
                   <span style={{ fontSize: '0.74rem', fontWeight: '800' }}>{t('market_modal_credit_card', 'Credit Card')}</span>
-                  <span style={{ fontSize: '0.58rem', color: '#2ecc71', fontWeight: '800' }}>{isTr ? '⚡ 3D Secure Kart' : '⚡ 3D Secure'}</span>
+                  <span style={{ fontSize: '0.58rem', color: '#2ecc71', fontWeight: '800' }}>{t('market_card_3ds_short')}</span>
                 </button>
 
                 {/* 2. SEÇENEK: KRİPTO (USDT - TRC20) */}
@@ -1197,11 +1197,11 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <ShieldCheck size={18} color="#ffd700" />
                       <span style={{ color: '#fff', fontSize: '0.86rem', fontWeight: '800' }}>
-                        {isTr ? 'Shopier 3D Secure Kart ile Ödeme' : 'Shopier 3D Secure Card Checkout'}
+                        {t('market_card_checkout_title')}
                       </span>
                     </div>
                     <span style={{ background: 'rgba(46, 204, 113, 0.2)', border: '1px solid #2ecc71', color: '#2ecc71', fontSize: '0.62rem', fontWeight: '800', padding: '2px 7px', borderRadius: '8px' }}>
-                      7/24 AKTİF
+                      {t('market_active_247')}
                     </span>
                   </div>
 
@@ -1214,9 +1214,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                     color: 'rgba(255, 255, 255, 0.85)',
                     lineHeight: '1.45'
                   }}>
-                    {isTr 
-                      ? 'Tüm yerli ve yabancı Visa, Mastercard ve Troy kartlarınızla 256-Bit SSL şifreleme ve 3D Secure SMS onayı ile anında güvenle ödeyebilirsiniz.' 
-                      : 'Pay securely with Visa, Mastercard and all credit/debit cards protected by 256-Bit SSL and 3D Secure.'}
+                    {t('market_card_checkout_desc')}
                   </div>
 
                   <div style={{
@@ -1226,7 +1224,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                   }}>
                     <div>
                       <div style={{ fontSize: '0.62rem', color: '#00f2fe', fontWeight: '700', textTransform: 'uppercase' }}>
-                        {isTr ? 'Sipariş / Eşleşme Takip Kodunuz' : 'Order Tracking Code'}
+                        {t('market_order_tracking_code')}
                       </div>
                       <div style={{ color: '#fff', fontWeight: '900', fontFamily: 'monospace', fontSize: '0.88rem', marginTop: '1px' }}>
                         {orderCode}
@@ -1335,7 +1333,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                       <span style={{ fontSize: '0.70rem', color: '#fff', fontWeight: '800' }}>
                         {t('market_crypto_txid_title', 'İşlem Kodu (TXID) veya Cüzdan')} <span style={{ color: '#ff416c' }}>*</span>
                       </span>
-                      <span style={{ fontSize: '0.64rem', color: '#ff416c', fontWeight: '700' }}>Zorunlu Alan</span>
+                      <span style={{ fontSize: '0.64rem', color: '#ff416c', fontWeight: '700' }}>{t('market_required_field')}</span>
                     </div>
                     <input
                       type="text"
@@ -1456,7 +1454,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                       <span style={{ fontSize: '0.70rem', color: '#fff', fontWeight: '800' }}>
                         {t('market_modal_sender_title', 'Banka Dekontundaki Gönderen Adı Soyadı')} <span style={{ color: '#ff416c' }}>*</span>
                       </span>
-                      <span style={{ fontSize: '0.64rem', color: '#ff416c', fontWeight: '700' }}>Zorunlu Alan</span>
+                      <span style={{ fontSize: '0.64rem', color: '#ff416c', fontWeight: '700' }}>{t('market_required_field')}</span>
                     </div>
                     <input
                       type="text"
@@ -1492,12 +1490,10 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               }}>
                 <div style={{ fontSize: '2rem', marginBottom: '6px' }}>⚡</div>
                 <h4 style={{ color: '#ffd700', margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: '800' }}>
-                  {isTr ? '3D Secure Ödeme Penceresi Açıldı!' : '3D Secure Checkout Window Opened!'}
+                  {t('market_3ds_opened_title')}
                 </h4>
                 <p style={{ color: 'rgba(255,255,255,0.88)', margin: '0 0 14px 0', fontSize: '0.78rem', lineHeight: '1.45' }}>
-                  {isTr 
-                    ? `Açılan pop-up penceresinde güvenle kartınızı onaylayabilirsiniz. Siteniz bu esnada arka planda açık kalmaya devam eder.` 
-                    : `Complete your card payment in the secure pop-up window. Your Pyngoo page remains open in the background.`}
+                  {t('market_3ds_opened_desc')}
                 </p>
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                   <button
@@ -1509,7 +1505,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                       fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer'
                     }}
                   >
-                    {isTr ? '🔄 Pencereyi Tekrar Aç' : '🔄 Re-open Window'}
+                    {t('market_reopen_window')}
                   </button>
                   <button
                     type="button"
@@ -1523,7 +1519,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                       fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer'
                     }}
                   >
-                    {isTr ? '✓ Tamam' : '✓ Done'}
+                    {t('market_done_btn')}
                   </button>
                 </div>
               </div>
@@ -1613,7 +1609,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                   ) : paymentMethod !== 'card' && cooldownSeconds > 0 ? (
                     <>
                       <span>⏳</span>
-                      <span>Lütfen Bekleyin ({cooldownSeconds}s)</span>
+                      <span>{t('market_please_wait', { sec: cooldownSeconds })}</span>
                     </>
                   ) : (
                     <>
@@ -1622,7 +1618,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                       {paymentMethod === 'havale_papara' && <Check size={18} color="#000" />}
                       <span>
                         {paymentMethod === 'card' 
-                          ? (isTr ? `Shopier ile Güvenli Öde (${selectedPackage.priceTr})` : `Pay with Shopier (${selectedPackage.priceEn})`)
+                          ? t('market_pay_with_shopier', { price: isTr ? selectedPackage.priceTr : selectedPackage.priceEn })
                           : (paymentMethod === 'crypto' 
                               ? t('market_crypto_submit_btn', { amount: getUsdtPrice(selectedPackage) }) 
                               : t('market_modal_notify_btn'))}
@@ -1727,10 +1723,10 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                   background: '#2ecc71', color: '#000',
                   fontSize: '0.65rem', fontWeight: '900', padding: '2px 7px', borderRadius: '6px'
                 }}>
-                  REKLAM
+                  {t('market_ad_badge')}
                 </span>
                 <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '700' }}>
-                  Ödüllü Sponsor Yayını
+                  {t('market_ad_sponsor_title')}
                 </span>
                 <button
                   type="button"
@@ -1740,7 +1736,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                     borderRadius: '8px', padding: '4px 8px', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', marginLeft: '4px'
                   }}
-                  title={isAdMuted ? 'Sesi Aç' : 'Sesi Kapat'}
+                  title={isAdMuted ? t('market_ad_unmute') : t('market_ad_mute')}
                 >
                   {isAdMuted ? <VolumeX size={14} /> : <Volume2 size={14} color="#00f2fe" />}
                 </button>
@@ -1756,7 +1752,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                     boxShadow: '0 2px 10px rgba(255, 65, 108, 0.4)', animation: 'pulse 1.2s infinite'
                   }}
                 >
-                  <X size={15} /> Kapat
+                  <X size={15} /> {t('close')}
                 </button>
               ) : (
                 <div style={{

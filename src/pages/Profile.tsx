@@ -552,10 +552,10 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
                     fontSize: '0.68rem', fontWeight: '900', color: '#2ecc71',
                     background: 'rgba(46, 204, 113, 0.18)', padding: '2px 6px', borderRadius: '6px'
                   }}>
-                    💵 +50 💎 / dk ($0.75)
+                    {t('profile_studio_rate')}
                   </span>
                   <span style={{ fontSize: '0.68rem', color: '#ffd700', fontWeight: '800' }}>
-                    • Stüdyoyu Aç ➔
+                    {t('profile_open_studio')}
                   </span>
                 </div>
               </div>
@@ -976,15 +976,15 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
             </div>
 
             <h3 style={{ margin: '0 0 8px 0', fontSize: '1.22rem', fontWeight: '800', color: '#fff' }}>
-              Aramızdan ayrılıyor musun? 🥺
+              {t('profile_delete_sad_title')}
             </h3>
 
             <p style={{ margin: '0 0 12px 0', fontSize: '0.92rem', color: '#ff8da1', fontWeight: '700' }}>
-              Gitme, buralar sensiz eksik kalır... 💔
+              {t('profile_delete_sad_subtitle')}
             </p>
 
             <p style={{ margin: '0 0 24px 0', fontSize: '0.84rem', color: 'rgba(255, 255, 255, 0.65)', lineHeight: '1.55' }}>
-              Hesabını sildiğinde tüm sohbetlerin, arkadaşlıkların, kalan altınların ve profilin kalıcı olarak silinecektir. Seni çok özleyeceğiz! Gerçekten veda etmek istiyor musun?
+              {t('profile_delete_sad_desc')}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1000,7 +1000,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
                 }}
               >
-                <span>Vazgeç, Buradayım 🥰</span>
+                <span>{t('profile_delete_stay_btn')}</span>
               </button>
 
               {/* İkincil Buton: Evet, Hesabımı Kalıcı Olarak Sil */}
@@ -1017,11 +1017,11 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
                 }}
               >
                 {isDeleting ? (
-                  <span>Hesap ve veriler siliniyor...</span>
+                  <span>{t('delete_modal_loading')}</span>
                 ) : (
                   <>
                     <Trash2 size={15} />
-                    <span>Evet, Hesabımı Kalıcı Olarak Sil</span>
+                    <span>{t('delete_modal_confirm')}</span>
                   </>
                 )}
               </button>
@@ -1152,7 +1152,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
               📸 {t('host_center_change_photo', 'Profil Resminizi Düzenle')}
             </h3>
             <p style={{ margin: '0 0 20px', fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)' }}>
-              Yeni bir fotoğraf seçtiğinizde profil resminiz anında güncellenir.
+              {t('host_center_modal_change_photo_desc')}
             </p>
 
             {/* Mevcut Resim */}
@@ -1224,7 +1224,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
               }}
             >
               <Upload size={18} />
-              <span>{isUploadingPhoto ? 'Görsel Güncelleniyor...' : '📁 Galeriden Yeni Fotoğraf Seç'}</span>
+              <span>{isUploadingPhoto ? t('host_center_btn_uploading_photo') : t('host_center_btn_select_photo')}</span>
             </label>
           </div>
         </div>

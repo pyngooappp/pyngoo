@@ -19,7 +19,7 @@ const config: CapacitorConfig = {
       presentationOptions: ['badge', 'sound', 'alert']
     },
     AdMob: {
-      appId: 'ca-app-pub-6163702675931285~1338244734'
+      appId: 'ca-app-pub-6163702675031285~1338244734'
     }
   }
 };

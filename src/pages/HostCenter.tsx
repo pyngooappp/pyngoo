@@ -513,7 +513,7 @@ export default function HostCenter({ userId }: HostCenterProps) {
                 justifyContent: 'center',
                 transition: 'color 0.2s'
               }}
-              title="Cüzdan Detayları"
+              title={t('host_center_wallet_details')}
             >
               <ChevronRight size={28} />
             </button>

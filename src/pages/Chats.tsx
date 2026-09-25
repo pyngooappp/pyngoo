@@ -331,6 +331,7 @@ export default function Chats({ userId }: ChatsProps) {
     const roomKey = [userId, activeChat.id].sort().join('_');
     const channelName = `dm_room_${roomKey}`;
 
+    let hasSubscribedOnce = false;
     const channel = supabase.channel(channelName)
       // Doğrudan soket yayını (Karşı taraf aktifse anında 20ms'de düşer)
       .on('broadcast', { event: 'dm_instant_message' }, (payload: any) => {
@@ -383,27 +384,37 @@ export default function Chats({ userId }: ChatsProps) {
         setIsCalling(false);
         setActiveCallChannel(null);
         soundManager.stopOutgoingRingback();
-        setErrorMessage('Arama karşı tarafça reddedildi.');
+        setErrorMessage(t('chats_call_rejected'));
         setTimeout(() => setErrorMessage(null), 4000);
       })
       .on('broadcast', { event: 'direct_call_busy' }, () => {
         setIsCalling(false);
         setActiveCallChannel(null);
         soundManager.stopOutgoingRingback();
-        setErrorMessage('Kullanıcı şu anda başka bir görüşmede (Meşgul).');
+        setErrorMessage(t('chats_call_busy'));
         setTimeout(() => setErrorMessage(null), 4000);
       })
-      .subscribe();
+      // Kanal koptuktan sonra yeniden bağlandığında (mobil arka plan / ağ kesintisi) arada kaçan mesajları bir kez çek.
+      // İlk SUBSCRIBED atlanır; ilk yükleme zaten yukarıdaki fetchMessages() ile yapıldı.
+      .subscribe((status: string) => {
+        if (status !== 'SUBSCRIBED') return;
+        if (hasSubscribedOnce) fetchMessages();
+        hasSubscribedOnce = true;
+      });
 
     activeChannelRef.current = channel;
 
-    // 2. Arka plan yedek sorgu (Mobil veya ağ kopmalarına karşı 3.5s garantisi)
-    const pollInterval = setInterval(() => {
-      fetchMessages();
-    }, 3500);
+    // 2. Nano katman kuralı: periyodik polling YOK. Uygulama/sekme öne geldiğinde bir kez yeniden senkronize et.
+    const onFocus = () => fetchMessages();
+    const onVisChange = () => {
+      if (!document.hidden) fetchMessages();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisChange);
 
     return () => {
-      clearInterval(pollInterval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisChange);
       supabase.removeChannel(channel);
       activeChannelRef.current = null;
     };
@@ -457,7 +468,7 @@ export default function Chats({ userId }: ChatsProps) {
 
       if (error) {
         console.error("Mesaj veritabanına yazılamadı:", error);
-        setErrorMessage(`Mesaj iletilemedi: ${error.message}`);
+        setErrorMessage(t('chats_msg_send_failed', { error: error.message }));
         setTimeout(() => setErrorMessage(null), 5000);
         return;
       }
@@ -476,7 +487,7 @@ export default function Chats({ userId }: ChatsProps) {
 
     } catch (err: any) {
       console.error("Mesaj catch hatası:", err);
-      setErrorMessage(`Hata: ${err.message}`);
+      setErrorMessage(t('chats_error_generic', { error: err.message }));
       setTimeout(() => setErrorMessage(null), 5000);
     }
   };
@@ -585,7 +596,7 @@ export default function Chats({ userId }: ChatsProps) {
         }
       });
 
-      handleSendMessage(`📞 Özel sesli/görüntülü arama başlatıldı.`);
+      handleSendMessage(t('chats_call_started_msg'));
 
       setShowCallModal(false);
 
@@ -598,7 +609,7 @@ export default function Chats({ userId }: ChatsProps) {
       }
     } catch (err: any) {
       console.error('Arama başlatma hatası:', err);
-      setErrorMessage('Arama başlatılamadı: ' + (err.message || 'Hata'));
+      setErrorMessage(t('chats_call_start_failed', { error: err.message || '' }));
       setTimeout(() => setErrorMessage(null), 4000);
     } finally {
       setIsCalling(false);
@@ -922,7 +933,7 @@ export default function Chats({ userId }: ChatsProps) {
                     transition: '0.2s',
                     flexShrink: 0
                   }}
-                  title="Özel Sesli Arama Başlat (60s = 120 Altın)"
+                  title={t('chats_private_call_title')}
                 >
                   <PhoneCall size={16} />
                   <span style={{ fontSize: '0.72rem', background: 'rgba(255, 215, 0, 0.25)', color: '#ffd700', padding: '1px 5px', borderRadius: '8px', border: '1px solid rgba(255, 215, 0, 0.5)' }}>
@@ -1102,7 +1113,7 @@ export default function Chats({ userId }: ChatsProps) {
                     key={i} 
                     onClick={() => {
                       setShowGiftRequestMenu(false);
-                      handleSendMessage(`🎀 Canım bana ${g.emoji} ${g.name} gönderir misin? (+${g.reward} 💎)`);
+                      handleSendMessage(t('chats_gift_request_msg', { emoji: g.emoji, name: g.name, reward: g.reward }));
                     }} 
                     style={{ 
                       background: 'rgba(255, 42, 141, 0.08)', 
@@ -1203,24 +1214,24 @@ export default function Chats({ userId }: ChatsProps) {
               <PhoneCall size={30} color="white" />
             </div>
 
-            <h3 style={{ margin: '0 0 8px', color: 'white', fontSize: '1.2rem' }}>Özel Sesli Arama</h3>
+            <h3 style={{ margin: '0 0 8px', color: 'white', fontSize: '1.2rem' }}>{t('chats_call_modal_title')}</h3>
             <p style={{ color: '#ccc', fontSize: '0.9rem', marginBottom: '18px', lineHeight: '1.4' }}>
-              <strong style={{ color: '#00f2fe' }}>{activeChat.display_name}</strong> ile 60 saniyelik doğrudan sesli arama başlatmak üzeresiniz.
+              <strong style={{ color: '#00f2fe' }}>{activeChat.display_name}</strong> {t('chats_call_modal_desc')}
             </p>
 
             <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '14px', marginBottom: '20px', textAlign: 'left', fontSize: '0.88rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: '#aaa' }}>⏱️ Görüşme Süresi:</span>
-                <span style={{ color: 'white', fontWeight: 'bold' }}>60 Saniye</span>
+                <span style={{ color: '#aaa' }}>{t('chats_call_duration_label')}</span>
+                <span style={{ color: 'white', fontWeight: 'bold' }}>{t('chats_call_duration_value')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: '#aaa' }}>💰 Arama Ücreti:</span>
-                <span style={{ color: '#ffd700', fontWeight: 'bold' }}>120 Altın</span>
+                <span style={{ color: '#aaa' }}>{t('chats_call_fee_label')}</span>
+                <span style={{ color: '#ffd700', fontWeight: 'bold' }}>120 {t('gold_currency_label')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '8px' }}>
-                <span style={{ color: '#aaa' }}>👛 Mevcut Bakiyeniz:</span>
+                <span style={{ color: '#aaa' }}>{t('chats_current_balance_label')}</span>
                 <span style={{ color: (profile?.total_gold || 0) >= 120 ? '#00f2fe' : '#ff6b6b', fontWeight: 'bold' }}>
-                  {profile?.total_gold || 0} Altın
+                  {profile?.total_gold || 0} {t('gold_currency_label')}
                 </span>
               </div>
             </div>
@@ -1228,20 +1239,20 @@ export default function Chats({ userId }: ChatsProps) {
             {(profile?.total_gold || 0) < 120 ? (
               <div>
                 <div style={{ color: '#ff6b6b', fontSize: '0.85rem', marginBottom: '14px', fontWeight: '500' }}>
-                  ⚠️ Yetersiz Altın! Arama başlatmak için en az 120 altınınız olmalıdır.
+                  {t('chats_insufficient_gold_call')}
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button 
                     onClick={() => setShowCallModal(false)}
                     style={{ flex: 1, padding: '11px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}
                   >
-                    Kapat
+                    {t('close')}
                   </button>
                   <button 
                     onClick={() => { setShowCallModal(false); setShowGoldModal(true); }}
                     style={{ flex: 1.2, padding: '11px', borderRadius: '12px', background: 'linear-gradient(135deg, #ffd700, #ffaa00)', border: 'none', color: '#111', fontWeight: 'bold', cursor: 'pointer' }}
                   >
-                    Altın Al 🛒
+                    {t('chats_buy_gold_btn')}
                   </button>
                 </div>
               </div>
@@ -1251,14 +1262,14 @@ export default function Chats({ userId }: ChatsProps) {
                   onClick={() => setShowCallModal(false)}
                   style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}
                 >
-                  Vazgeç
+                  {t('chats_delete_cancel')}
                 </button>
                 <button 
                   onClick={handleStartCall}
                   disabled={isCalling}
                   style={{ flex: 1.4, padding: '12px', borderRadius: '12px', background: 'linear-gradient(135deg, #00f2fe, #4facfe)', border: 'none', color: '#0a0a14', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 15px rgba(0, 242, 254, 0.4)' }}
                 >
-                  {isCalling ? 'Bağlanıyor...' : '📞 Aramayı Başlat (120G)'}
+                  {isCalling ? t('voice_connecting') : t('chats_start_call_btn')}
                 </button>
               </div>
             )}
@@ -1297,7 +1308,7 @@ export default function Chats({ userId }: ChatsProps) {
               {t('gold_modal_title', 'Altın Yükle')}
             </h3>
             <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.85rem', margin: '0 0 16px 0', lineHeight: '1.4' }}>
-              Arama başlatmak veya hediye göndermek için altınınız yetersiz. Hemen yükleyin ve sohbete devam edin!
+              {t('chats_gold_modal_desc')}
             </p>
 
             <div style={{
@@ -1337,7 +1348,7 @@ export default function Chats({ userId }: ChatsProps) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.95rem' }}>450 {t('gold_currency_label')} 🪙</span>
                     <span style={{ background: '#ff416c', color: '#fff', fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' }}>
-                      POPÜLER
+                      {t('market_badge_popular')}
                     </span>
                   </div>
                   <div style={{ color: '#ff416c', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 150 })}! ({t('market_badge_discount_50')})</div>
@@ -1366,7 +1377,7 @@ export default function Chats({ userId }: ChatsProps) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.95rem' }}>1,200 {t('gold_currency_label')} 💎</span>
                     <span style={{ background: '#ffd700', color: '#000', fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' }}>
-                      EN AVANTAJLI
+                      {t('badge_best_value')}
                     </span>
                   </div>
                   <div style={{ color: '#ffd700', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 500 })}! ({t('market_badge_discount_65')})</div>
@@ -1470,7 +1481,7 @@ export default function Chats({ userId }: ChatsProps) {
                 color: '#aaa', fontSize: '0.8rem', cursor: 'pointer', fontWeight: '600'
               }}
             >
-              Daha Fazla Paket İçin Markete Git →
+              {t('chats_go_to_market')}
             </button>
           </div>
         </div>
@@ -1484,9 +1495,9 @@ export default function Chats({ userId }: ChatsProps) {
               <PhoneIncoming size={36} color="white" />
             </div>
 
-            <h3 style={{ margin: '0 0 6px', color: 'white', fontSize: '1.25rem' }}>Gelen Sesli Arama</h3>
+            <h3 style={{ margin: '0 0 6px', color: 'white', fontSize: '1.25rem' }}>{t('chats_incoming_voice_title')}</h3>
             <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '22px' }}>
-              <strong style={{ color: '#00f2fe', fontSize: '1.05rem' }}>{incomingCall.callerName}</strong> sizi 60 saniyelik sesli aramaya davet ediyor!
+              <strong style={{ color: '#00f2fe', fontSize: '1.05rem' }}>{incomingCall.callerName}</strong> {t('chats_incoming_voice_desc')}
             </p>
 
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -1495,14 +1506,14 @@ export default function Chats({ userId }: ChatsProps) {
                 style={{ flex: 1, padding: '13px', borderRadius: '14px', background: 'rgba(255, 65, 108, 0.2)', border: '1px solid #ff416c', color: '#ff6b6b', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
               >
                 <PhoneOff size={18} />
-                Reddet
+                {t('call_decline')}
               </button>
               <button 
                 onClick={handleAcceptIncomingCall}
                 style={{ flex: 1.2, padding: '13px', borderRadius: '14px', background: 'linear-gradient(135deg, #00f2fe, #4facfe)', border: 'none', color: '#0a0a14', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxShadow: '0 0 15px rgba(0, 242, 254, 0.5)' }}
               >
                 <PhoneCall size={18} />
-                Cevapla
+                {t('call_answer')}
               </button>
             </div>
           </div>
@@ -1560,7 +1571,7 @@ export default function Chats({ userId }: ChatsProps) {
                 }}
               >
                 {isDeletingChat ? (
-                  <span>Siliniyor...</span>
+                  <span>{t('chats_deleting')}</span>
                 ) : (
                   <>
                     <Trash2 size={18} />

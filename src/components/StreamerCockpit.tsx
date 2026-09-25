@@ -87,7 +87,7 @@ export default function StreamerCockpit({
             }}>
               <img
                 src={profile?.avatar || localStorage.getItem(`pyngoo_streamer_avatar_${userId}`) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500'}
-                alt={profile?.display_name || 'Yayıncı'}
+                alt={profile?.display_name || t('streamer_fallback_name')}
                 style={{
                   width: '100%',
                   height: '100%',
@@ -112,7 +112,7 @@ export default function StreamerCockpit({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontWeight: '900', fontSize: '1.05rem', color: '#fff' }}>
-                  {profile?.display_name || 'Yayıncı'}
+                  {profile?.display_name || t('streamer_fallback_name')}
                 </span>
                 <span style={{
                   background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(255, 65, 108, 0.25))',
@@ -195,7 +195,7 @@ export default function StreamerCockpit({
               padding: '2px 8px',
               borderRadius: '12px'
             }}>
-              <Flame size={12} /> +18% bugün
+              <Flame size={12} /> {t('cockpit_today_growth')}
             </span>
           </div>
 
@@ -237,7 +237,7 @@ export default function StreamerCockpit({
                 {t('streamer_minute_rate', 'Dakika Ücretin')}
               </div>
               <div style={{ fontSize: '0.86rem', fontWeight: '900', color: '#2ecc71', marginTop: '2px' }}>
-                +50 Elmas
+                +50 {t('diamonds')}
               </div>
             </div>
             <div>
