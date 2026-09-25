@@ -7,6 +7,7 @@ import { Mail, Camera, ArrowLeft, ShieldCheck, CheckCircle, ChevronDown, XCircle
 import { useTranslation } from 'react-i18next';
 import * as faceapi from 'face-api.js';
 import LegalModal from '../components/LegalModal';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
 import { detectUserDefaultLanguage } from '../utils/i18n';
 import { sendNewRegistrationToTelegram } from '../utils/telegramAlert';
 
@@ -85,6 +86,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [isTermsAccepted, setIsTermsAccepted] = useState(true);
 
   // Modallar
@@ -1453,6 +1455,10 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
         )}
 
+        {showForgotPassword && (
+          <ForgotPasswordModal initialEmail={email} onClose={() => setShowForgotPassword(false)} />
+        )}
+
         {/* E-POSTA FORMU */}
         {isEmailMode ? (
           <form onSubmit={handleEmailFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1477,6 +1483,18 @@ export default function Login({ onLogin }: LoginProps) {
                 background: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '0.95rem', outline: 'none' 
               }}
             />
+            {isLoginMode && (
+              <button
+                type="button"
+                onClick={() => { setError(null); setShowForgotPassword(true); }}
+                style={{
+                  alignSelf: 'flex-end', background: 'transparent', border: 'none', padding: '2px 4px',
+                  color: '#00f2fe', fontSize: '0.84rem', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                {t('fp_link')}
+              </button>
+            )}
             <button 
               type="submit" 
               disabled={loading}

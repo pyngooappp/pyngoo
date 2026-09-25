@@ -22,7 +22,7 @@ import { updateSeoForLanguage } from './utils/seoService';
 import { detectUserDefaultLanguage } from './utils/i18n';
 import { sendNewRegistrationToTelegram } from './utils/telegramAlert';
 import { NetworkStatusModal } from './components/NetworkStatusModal';
-import PushPermissionPrompt from './components/PushPermissionPrompt';
+import PushPermissionPrompt, { PushOpenBridge } from './components/PushPermissionPrompt';
 import { notifyFollowers, unregisterPushToken } from './utils/pushService';
 
 // Modül seviyesinde cihaz sahiplik zaman damgası (re-render'larda ASLA sıfırlanmaz!)
@@ -1804,6 +1804,8 @@ function App() {
           </div>
         )}
         <Login onLogin={handleAuthSuccess} />
+        {/* Mobil uygulamada bildirim izni ilk açılışta (girişten önce) sorulur */}
+        {Capacitor.isNativePlatform() && <PushPermissionPrompt userId={null} />}
         <NetworkStatusModal />
       </div>
     );
@@ -1825,6 +1827,7 @@ function App() {
           </Route>
         </Routes>
         <PushPermissionPrompt userId={userId} />
+        <PushOpenBridge />
       </BrowserRouter>
       <NetworkStatusModal />
     </>

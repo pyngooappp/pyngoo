@@ -5,7 +5,8 @@ import { Bell, BellOff } from 'lucide-react';
 import { getPushPermission, requestPushPermission, registerPushToken } from '../utils/pushService';
 
 interface Props {
-  userId: string;
+  // null = henüz giriş yapılmadı (uygulama ilk açıldığında izin sorulur; anahtar girişten sonra kaydedilir)
+  userId: string | null;
 }
 
 const SESSION_KEY = 'pyngoo_push_prompt_seen';
@@ -18,12 +19,9 @@ const DENIED_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
  * - İzin reddedildiyse: haftada en fazla 1 kez, ayarlardan nasıl açılacağı anlatılır.
  * - İzin varsa: cihaz anahtarı sessizce yenilenir.
  */
-export default function PushPermissionPrompt({ userId }: Props) {
-  const { t } = useTranslation();
+/** Bildirime dokununca ilgili sayfayı açar (yalnızca Router içinde kullanılır). */
+export function PushOpenBridge() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'hidden' | 'ask' | 'denied'>('hidden');
-  const [busy, setBusy] = useState(false);
-
   useEffect(() => {
     const onOpen = (e: Event) => {
       const path = (e as CustomEvent).detail?.path;
@@ -32,15 +30,22 @@ export default function PushPermissionPrompt({ userId }: Props) {
     window.addEventListener('pyngoo_push_open', onOpen);
     return () => window.removeEventListener('pyngoo_push_open', onOpen);
   }, [navigate]);
+  return null;
+}
+
+export default function PushPermissionPrompt({ userId }: Props) {
+  const { t } = useTranslation();
+  const [mode, setMode] = useState<'hidden' | 'ask' | 'denied'>('hidden');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
+      console.warn('[push] kontrol basladi');
       const perm = await getPushPermission();
       if (cancelled) return;
       if (perm === 'granted') {
-        registerPushToken();
+        if (userId) registerPushToken();
         return;
       }
       let seen = false;
@@ -58,7 +63,7 @@ export default function PushPermissionPrompt({ userId }: Props) {
         }
       }
       try { sessionStorage.setItem(SESSION_KEY, '1'); } catch (_) {}
-    }, 3500);
+    }, userId ? 3500 : 1500);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [userId]);
 

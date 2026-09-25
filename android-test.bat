@@ -33,13 +33,13 @@ for %%P in (5555 5556 5565 5575 5585) do "%ADB%" connect 127.0.0.1:%%P >nul 2>&1
 "%ADB%" logcat -c
 
 echo.
-echo === 5/5 SIMDI: BlueStacks'te Pyngoo'yu tamamen kapatip ac, 15 saniye bekle. ===
-echo Sonra bu pencereye donup bir tusa bas.
+echo === 5/5 SIMDI: BlueStacks'te Pyngoo'yu ac ve denemek istedigin seyi yap ===
+echo (ornegin Profil - fotograf yukle). Bitince bu pencereye donup bir tusa bas.
 pause
 
 echo.
 echo ===== BILDIRIM KAYITLARI =====
-"%ADB%" logcat -d -s Capacitor/Console:* | findstr /i "push firebase"
+"%ADB%" logcat -d -s Capacitor/Console:* | findstr /i "push firebase photo"
 echo ==============================
 pause
 exit /b 0

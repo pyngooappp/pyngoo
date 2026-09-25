@@ -115,9 +115,15 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
 
     if (userId) {
       try {
-        await supabase.from('profiles').update({
+        const { error: avatarErr } = await supabase.from('profiles').update({
           avatar: dataUrl
         }).eq('id', userId);
+        if (avatarErr) {
+          console.warn('[photo] profil kaydi hatasi:', avatarErr.message);
+          setPhotoError(t('photo_err_processing', 'Görsel işleme sırasında hata oluştu.'));
+        } else {
+          console.warn('[photo] profil kaydedildi, boyut:', dataUrl.length);
+        }
         // NOT: Avatar (base64, ~200KB) ASLA auth user_metadata'ya yazılmaz! Metadata JWT'nin içine
         // gömülür; dev token her Supabase isteğinin Authorization başlığını şişirip bağlantının
         // kopmasına (ERR_CONNECTION_RESET) ve girişin tamamen çökmesine yol açıyordu.
@@ -150,11 +156,13 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhotoError(null);
     const file = e.target.files?.[0];
+    console.warn('[photo] secilen dosya:', file ? `${file.name} | ${file.type || 'tur yok'} | ${file.size} bayt` : 'YOK');
     if (!file) return;
 
     setIsUploadingPhoto(true);
     try {
       const result = await validateAndSanitizeImage(file, 640, 0.88);
+      console.warn('[photo] dogrulama:', result.valid ? 'gecerli' : `HATA ${result.errorKey}`);
       if (!result.valid || !result.sanitizedDataUrl) {
         setPhotoError(t(result.errorKey || 'photo_err_invalid_type', result.errorFallback || 'Lütfen geçerli bir resim dosyası seçin.'));
         setIsUploadingPhoto(false);

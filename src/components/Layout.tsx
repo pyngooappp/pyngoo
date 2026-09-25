@@ -63,6 +63,7 @@ export default function Layout({ userId }: LayoutProps) {
   // Global Arama Yönetimi (Tüm sayfalarda geçerli)
   const [incomingCall, setIncomingCall] = useState<{ callId: string; callerName: string; callerId: string } | null>(null);
   const incomingCallRef = useRef(incomingCall);
+  const lastBusyAlertCallIdRef = useRef<string | null>(null);
   incomingCallRef.current = incomingCall;
 
   const [activeCallChannel, setActiveCallChannel] = useState<string | null>(null);
@@ -416,9 +417,24 @@ export default function Layout({ userId }: LayoutProps) {
       .on('broadcast', { event: 'direct_call_busy' }, (payload: any) => {
         soundManager.stopOutgoingRingback();
         soundManager.stopRingtone();
+        // Aynı arama için uyarı yalnızca 1 kez gösterilir (karşı taraf birden fazla cihazda açıksa
+        // her cihaz ayrı "meşgul" sinyali gönderebiliyor).
+        const busyCallId = payload?.payload?.callId || 'unknown';
+        if (lastBusyAlertCallIdRef.current === busyCallId) return;
+        lastBusyAlertCallIdRef.current = busyCallId;
         const isMola = payload?.payload?.isMola;
-        alert(isMola ? '☕ Yayıncı şu anda molada! Lütfen canlıya geçmesini bekleyin veya daha sonra tekrar deneyin.' : '📞 Aradığınız kullanıcı şu anda başka bir görüşmede meşgul!');
+        alert(isMola
+          ? t('streamer_mola_alert', '☕ Yayıncı şu anda molada! Lütfen canlıya geçmesini bekleyin veya daha sonra tekrar deneyin.')
+          : t('call_partner_busy_alert', '📞 Aradığınız kullanıcı şu anda başka bir görüşmede meşgul!'));
         handleEndDirectCall();
+      })
+      .on('broadcast', { event: 'direct_call_cancelled' }, (payload: any) => {
+        // Arayan kişi, biz cevaplamadan aramayı kapattı → zil sustur, gelen arama ekranını kapat
+        const cancelledId = payload?.payload?.callId;
+        if (cancelledId && incomingCallRef.current?.callId === cancelledId) {
+          soundManager.stopRingtone();
+          setIncomingCall(null);
+        }
       })
       .on('postgres_changes', {
         event: 'INSERT',
@@ -463,6 +479,19 @@ export default function Layout({ userId }: LayoutProps) {
             callerId: newMatch.caller_id
           });
           soundManager.startRingtone();
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'match_history',
+        filter: `receiver_id=eq.${userId}`
+      }, (payload: any) => {
+        // Yedek: arayan iptal ettiyse (kayıt artık 'direct_pending' değil) çalan ekranı kapat
+        const row = payload?.new;
+        if (row && incomingCallRef.current?.callId === row.match_id && row.status !== 'direct_pending' && row.status !== 'active') {
+          soundManager.stopRingtone();
+          setIncomingCall(null);
         }
       })
       .on('postgres_changes', {
@@ -722,6 +751,31 @@ export default function Layout({ userId }: LayoutProps) {
   };
 
   const handleEndDirectCall = () => {
+    // Arayan biz isek ve karşı taraf henüz cevaplamadıysa: karşı tarafın zilini sustur
+    const endedCallId = activeCallChannel;
+    const partnerId = callPartner?.id;
+    if (endedCallId && partnerId && directCallCallerId === userId) {
+      try {
+        supabase.from('match_history')
+          .update({ status: 'rejected' })
+          .eq('match_id', endedCallId)
+          .eq('status', 'direct_pending')
+          .then();
+      } catch (_) {}
+      const calleeChannel = supabase.channel(`user_call_channel_${partnerId}`);
+      calleeChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          calleeChannel.send({
+            type: 'broadcast',
+            event: 'direct_call_cancelled',
+            payload: { callId: endedCallId, callerId: userId }
+          });
+          setTimeout(() => {
+            try { supabase.removeChannel(calleeChannel); } catch (_) {}
+          }, 2000);
+        }
+      });
+    }
     soundManager.stopRingtone();
     setActiveCallChannel(null);
     setCallPartner(null);
@@ -800,7 +854,7 @@ export default function Layout({ userId }: LayoutProps) {
                   }}
                 >
                   <PhoneOff size={18} />
-                  {t('chats_reject', 'Reddet')}
+                  {t('call_decline', 'Reddet')}
                 </button>
                 <button 
                   onClick={handleAcceptIncomingCall}
@@ -814,7 +868,7 @@ export default function Layout({ userId }: LayoutProps) {
                   }}
                 >
                   <PhoneCall size={18} />
-                  {t('chats_accept', 'Cevapla')}
+                  {t('call_answer', 'Cevapla')}
                 </button>
               </div>
             </div>
