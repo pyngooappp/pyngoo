@@ -547,6 +547,8 @@ export default function VoiceChat({
     let audioTrack: IMicrophoneAudioTrack | null = null;
     let videoTrack: ICameraVideoTrack | null = null;
     let isMounted = true;
+    // Agora dakika takibi: Agora her KATILIMCI için bağlantı süresini ayrı faturalar; süreyi çıkışta call_usage'a yazarız.
+    let joinedAt: number | null = null;
 
     const initAgora = async () => {
 
@@ -643,6 +645,7 @@ export default function VoiceChat({
         }
 
         await agoraClient.join(appId, channelName, token, uid);
+        joinedAt = Date.now();
         
         const audioConfig: any = {
           encoderConfig: 'speech_standard', // Konuşma için optimize edilmiş kristal netliğinde 32kbps mono Opus ses
@@ -705,6 +708,17 @@ export default function VoiceChat({
       if (videoTrack) {
         videoTrack.stop();
         videoTrack.close();
+      }
+      // Bağlantı süresini kaydet (en iyi çaba: sekme aniden kapanırsa yazılamaz; aramanın kendisini etkilemez)
+      if (joinedAt) {
+        const secs = Math.min(21600, Math.round((Date.now() - joinedAt) / 1000));
+        joinedAt = null;
+        if (secs >= 1 && userId) {
+          supabase
+            .from('call_usage')
+            .insert({ user_id: userId, match_id: String(channelName || ''), mode: mode === 'video' ? 'video' : 'voice', seconds: secs })
+            .then(() => {}, () => {});
+        }
       }
       if (agoraClient) {
         agoraClient.leave();

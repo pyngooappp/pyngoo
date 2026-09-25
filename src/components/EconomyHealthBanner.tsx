@@ -23,6 +23,19 @@ interface EconomyHealthBannerProps {
   isAdmin: boolean;
 }
 
+const chipStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '5px 12px',
+  borderRadius: '999px',
+  background: 'rgba(255, 255, 255, 0.07)',
+  border: '1px solid rgba(255, 255, 255, 0.12)',
+  fontSize: '0.78rem',
+  color: 'rgba(255, 255, 255, 0.85)',
+  whiteSpace: 'nowrap',
+};
+
 export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmin }) => {
   const [data, setData] = useState<EconomyHealth | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,61 +77,79 @@ export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmi
   const alert = !!data.alert;
   const fmt = (n: number | null | undefined, d = 2) => (n == null ? '-' : Number(n).toFixed(d));
   const color = alert ? '#ff6b6b' : '#2ecc71';
+  const dayText = data.day ? String(data.day).split('-').reverse().join('.') : '-';
 
   return (
     <div
       style={{
-        margin: '0 0 14px',
-        padding: '12px 16px',
+        // Yandaki "Gerçek Çevrimiçi" kartıyla aynı sütun: 1200px, ortalı, taşmaz
+        width: '100%',
+        maxWidth: '1200px',
+        boxSizing: 'border-box',
+        margin: '0 auto 16px auto',
+        padding: '14px 18px',
         borderRadius: '16px',
-        background: alert ? 'rgba(255, 107, 107, 0.10)' : 'rgba(46, 204, 113, 0.08)',
-        border: `1px solid ${alert ? 'rgba(255, 107, 107, 0.45)' : 'rgba(46, 204, 113, 0.35)'}`,
+        background: alert ? 'rgba(255, 107, 107, 0.09)' : 'rgba(46, 204, 113, 0.08)',
+        border: `1.5px solid ${alert ? 'rgba(255, 107, 107, 0.45)' : 'rgba(46, 204, 113, 0.4)'}`,
         display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        gap: '12px',
-        flexWrap: 'wrap',
+        flexDirection: 'column',
+        gap: '10px',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ flex: 1, minWidth: '240px' }}>
-        <div style={{ fontSize: '0.92rem', fontWeight: '800', color: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', minWidth: 0 }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#fff', minWidth: 0, overflowWrap: 'anywhere' }}>
           💱 Kur ve fiyat sağlığı {alert ? '⚠️' : '✅'}
         </div>
-        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)', marginTop: '4px', lineHeight: '1.5' }}>
-          Güncel kur: <b>1 $ = {fmt(data.usd_try)} ₺</b> ({data.day || '-'}) · ₺ fiyatların dayandığı referans kur:{' '}
-          <b>{fmt(data.reference)}</b> · Fark: <b style={{ color }}>{drift >= 0 ? '+' : ''}{(drift * 100).toFixed(1)}%</b>{' '}
-          (uyarı eşiği %{fmt((data.threshold ?? 0) * 100, 0)})
-        </div>
-        {alert ? (
-          <div style={{ fontSize: '0.78rem', color: '#ffb3b3', marginTop: '6px', lineHeight: '1.5' }}>
-            ₺ paket fiyatları ve ₺ elmas ödemesi ({fmt(data.diamond_value_try, 3)} ₺/elmas) dolar karşılığında geride kalıyor; Agora gibi
-            maliyetler dolar olduğu için marjınız eriyor. Fiyatları ve elmas değerini gözden geçirin. Güncelledikten sonra economy_config
-            tablosundaki <code>price_reference_usd_try</code> değerini güncel kura çekin.
-          </div>
-        ) : (
-          <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', marginTop: '6px' }}>
-            Fiyatlar referans kura yakın. Elmas değeri: {fmt(data.diamond_value_try, 3)} ₺ / {fmt(data.diamond_value_usd, 4)} $.
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          title="Yenile"
+          style={{
+            flexShrink: 0,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '10px',
+            color: '#fff',
+            padding: '7px 9px',
+            cursor: loading ? 'wait' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <RefreshCw size={15} />
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={load}
-        disabled={loading}
-        title="Yenile"
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        <span style={chipStyle}>
+          Güncel kur: <b style={{ color: '#fff' }}>1 $ = {fmt(data.usd_try)} ₺</b> <span style={{ opacity: 0.6 }}>({dayText})</span>
+        </span>
+        <span style={chipStyle}>
+          Referans kur: <b style={{ color: '#fff' }}>{fmt(data.reference)}</b>
+        </span>
+        <span style={{ ...chipStyle, borderColor: color, color }}>
+          Fark: <b>{drift >= 0 ? '+' : ''}{(drift * 100).toFixed(1)}%</b> <span style={{ opacity: 0.7 }}>(eşik %{fmt((data.threshold ?? 0) * 100, 0)})</span>
+        </span>
+        <span style={chipStyle}>
+          Elmas: <b style={{ color: '#fff' }}>{fmt(data.diamond_value_try, 3)} ₺</b> / <b style={{ color: '#fff' }}>{fmt(data.diamond_value_usd, 4)} $</b>
+        </span>
+      </div>
+
+      <div
         style={{
-          background: 'rgba(255,255,255,0.08)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: '10px',
-          color: '#fff',
-          padding: '8px 10px',
-          cursor: loading ? 'wait' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
+          fontSize: '0.8rem',
+          lineHeight: '1.55',
+          color: alert ? '#ffc9c9' : 'rgba(255,255,255,0.6)',
+          overflowWrap: 'anywhere',
+          minWidth: 0,
         }}
       >
-        <RefreshCw size={15} />
-      </button>
+        {alert
+          ? 'Kur, ₺ fiyatların dayandığı referans kurdan uzaklaştı: ₺ paket fiyatları ve ₺ elmas ödemesi dolar karşılığında geride kalıyor, Agora gibi maliyetler dolar olduğu için marj eriyor. Fiyatları ve elmas değerini gözden geçirin; güncelledikten sonra ayar tablosundaki referans kuru (price_reference_usd_try) güncel kura çekin.'
+          : 'Fiyatlar referans kura yakın, işlem gerekmiyor.'}
+      </div>
     </div>
   );
 };

@@ -83,6 +83,11 @@ export default function ModeratorPanel() {
     try {
       localStorage.removeItem('pyngoo_moderator_passwords');
       localStorage.removeItem('pyngoo_revoked_moderators');
+      // Eski altyapı takibi: Vercel erişim anahtarı ve elle girilmiş uydurma dakika/bant değerleri artık kullanılmıyor.
+      localStorage.removeItem('pyngoo_vercel_token');
+      localStorage.removeItem('pyngoo_vercel_bw_mb');
+      localStorage.removeItem('pyngoo_agora_audio_mins');
+      localStorage.removeItem('pyngoo_agora_video_mins');
     } catch (_) {}
   }, []);
   const [showModLogModal, setShowModLogModal] = useState(false);
@@ -286,6 +291,26 @@ export default function ModeratorPanel() {
 
   // Sadece süper admin (Ömer) tüm yetkilere sahiptir. Tanımlı moderatörler sadece şikayet yönetebilir.
   const isOmer = isSuperAdmin;
+
+  // Denetim günlüğünü temizle (yalnızca yönetici). Günlük bu tarayıcıda (localStorage) tutulur, en fazla 300 kayıt.
+  const handleClearAuditLogs = async () => {
+    if (!isOmer) {
+      await showAlert('Denetim günlüğünü yalnızca yönetici temizleyebilir.', 'Yetki Yetersiz');
+      return;
+    }
+    if (auditLogsList.length === 0) return;
+    const ok = await showConfirm(
+      `Denetim günlüğündeki ${auditLogsList.length} kayıt kalıcı olarak silinecek. Bu işlem geri alınamaz.`,
+      'Günlüğü Temizle',
+      true,
+      'Temizle'
+    );
+    if (!ok) return;
+    setAuditLogsList([]);
+    try {
+      localStorage.removeItem('pyngoo_mod_audit_logs');
+    } catch (_) {}
+  };
   const isAdmin = isSuperAdmin;
 
   const [reports, setReports] = useState<ReportItem[]>([]);
@@ -756,151 +781,85 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [quotaLoading, setQuotaLoading] = useState(false);
   const [quotaMetrics, setQuotaMetrics] = useState<any | null>(null);
-  const [vercelTokenInput, setVercelTokenInput] = useState<string>(() => localStorage.getItem('pyngoo_vercel_token') || '');
-  const [showVercelInput, setShowVercelInput] = useState(false);
-  const [saveVercelSuccess, setSaveVercelSuccess] = useState(false);
-  const [agoraAudioInput, setAgoraAudioInput] = useState<string>(() => localStorage.getItem('pyngoo_agora_audio_mins') || '22');
-  const [agoraVideoInput, setAgoraVideoInput] = useState<string>(() => localStorage.getItem('pyngoo_agora_video_mins') || '68');
-  const [showAgoraEdit, setShowAgoraEdit] = useState(false);
-  const [vercelBandwidthMb, setVercelBandwidthMb] = useState<string>(() => localStorage.getItem('pyngoo_vercel_bw_mb') || '513.8');
-  const [showVercelEdit, setShowVercelEdit] = useState(false);
+  // Agora Console'da gördüğünüz bu ayki toplam dakika (isteğe bağlı; girilirse kendi kayıtlarımız yerine bu gösterilir)
+  const [agoraConsoleMinutes, setAgoraConsoleMinutes] = useState<string>(() => localStorage.getItem('pyngoo_agora_console_mins') || '');
 
   const handleFetchQuotaMetrics = async () => {
     setQuotaLoading(true);
     try {
       const pingStart = performance.now();
-      
-      // 1. Supabase canlı tablo satır sayıları
+
+      // Yalnızca GERÇEK ölçümler: satır sayıları + veritabanı boyutu ve Agora dakikaları (get_infra_stats).
       const [
         { count: profilesCount },
         { count: messagesCount },
         { count: matchesCount },
         { count: txCount },
-        { count: reportsCount }
+        { count: reportsCount },
+        { data: infra }
       ] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('messages').select('*', { count: 'exact', head: true }),
         supabase.from('match_history').select('*', { count: 'exact', head: true }),
         supabase.from('transactions').select('*', { count: 'exact', head: true }),
-        supabase.from('reports').select('*', { count: 'exact', head: true })
+        supabase.from('reports').select('*', { count: 'exact', head: true }),
+        supabase.rpc('get_infra_stats')
       ]);
       const pingMs = Math.round(performance.now() - pingStart);
+      const stats: any = infra && (infra as any).allowed ? infra : null;
 
-      // 2. Agora RTC Dakika Hesabı (Sesli & Görüntülü Ayrı Kırılım)
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const { data: monthCalls } = await supabase
-        .from('match_history')
-        .select('duration_sec, started_at')
-        .gte('started_at', startOfMonth.toISOString());
+      // Supabase: gerçek veritabanı boyutu (pg_database_size). Ücretsiz plan sınırı 500 MB.
+      const dbLimitMb = 500;
+      const dbMb = stats ? Math.round((Number(stats.db_bytes) / 1024 / 1024) * 10) / 10 : null;
+      const dbPercent = dbMb === null ? null : Math.min(100, Math.round((dbMb / dbLimitMb) * 1000) / 10);
+      const topTables: Array<{ name: string; mb: number }> = stats
+        ? (stats.tables || []).map((t: any) => ({ name: t.name, mb: Math.round((Number(t.bytes) / 1024 / 1024) * 100) / 100 }))
+        : [];
 
-      let totalSecondsMonth = 0;
-      (monthCalls || []).forEach(c => {
-        totalSecondsMonth += (c.duration_sec || 60);
-      });
-      const dbMinutesMonth = Math.ceil(totalSecondsMonth / 60);
-
-      // Agora Konsol Verileriyle Kalibrasyon (Sesli: 22 dk, Video HD: 68 dk)
-      const savedAudioMins = parseInt(localStorage.getItem('pyngoo_agora_audio_mins') || '22', 10);
-      const savedVideoMins = parseInt(localStorage.getItem('pyngoo_agora_video_mins') || '68', 10);
-      const extraMinutes = Math.max(0, dbMinutesMonth - 64);
-      const audioMinutes = savedAudioMins + Math.round(extraMinutes * 0.25);
-      const videoMinutes = savedVideoMins + Math.round(extraMinutes * 0.75);
-      const totalMinutesMonth = audioMinutes + videoMinutes;
-
+      // Agora: görüşmeye katılan HER kişinin bağlantı süresi (call_usage). Kayıt bu özelliğin eklendiği andan başlar.
+      const voiceMinutes = stats ? Math.round(Number(stats.agora?.voice_seconds || 0) / 60) : 0;
+      const videoMinutes = stats ? Math.round(Number(stats.agora?.video_seconds || 0) / 60) : 0;
+      const trackedMinutes = voiceMinutes + videoMinutes;
+      const consoleRaw = parseInt(localStorage.getItem('pyngoo_agora_console_mins') || '', 10);
+      const hasConsole = Number.isFinite(consoleRaw) && consoleRaw >= 0;
+      const totalMinutes = hasConsole ? consoleRaw : trackedMinutes;
       const freeLimitMinutes = 10000;
-      const remainingMinutes = Math.max(0, freeLimitMinutes - totalMinutesMonth);
-      const agoraPercent = Math.min(100, Math.round((totalMinutesMonth / freeLimitMinutes) * 100 * 10) / 10);
-
-      // 3. Vercel API Entegrasyonu (Eğer token tanımlıysa canlı çeker)
-      const savedBwMb = parseFloat(localStorage.getItem('pyngoo_vercel_bw_mb') || '513.83');
-      const bwLimitGb = 100;
-      const bwUsedGb = Math.round((savedBwMb / 1024) * 100) / 100;
-      const bwRemainingGb = Math.max(0, Math.round((bwLimitGb - bwUsedGb) * 100) / 100);
-      const bwPercent = Math.min(100, Math.round((savedBwMb / (bwLimitGb * 1024)) * 100 * 100) / 100);
-
-      let vercelData: any = {
-        deploymentsToday: 2,
-        deployLimitDay: 100,
-        bandwidthLimitGb: bwLimitGb,
-        bandwidthMb: savedBwMb,
-        bandwidthUsedGb: bwUsedGb,
-        bandwidthRemainingGb: bwRemainingGb,
-        bandwidthPercent: bwPercent,
-        inboundMb: 3.15,
-        outboundMb: 510.68,
-        buildMinutesLimit: 6000,
-        latestDeploy: null,
-        hasCustomToken: false
-      };
-
-      const tokenToUse = (vercelTokenInput || localStorage.getItem('pyngoo_vercel_token') || '').trim();
-      if (tokenToUse) {
-        try {
-          const resp = await fetch('https://api.vercel.com/v6/deployments?limit=10', {
-            headers: { Authorization: `Bearer ${tokenToUse}` }
-          });
-          if (resp.ok) {
-            const vJson = await resp.json();
-            const deployments = vJson.deployments || [];
-            const todayIso = new Date().toISOString().split('T')[0];
-            const todayDeploys = deployments.filter((d: any) => d.created && new Date(d.created).toISOString().split('T')[0] === todayIso);
-            const latest = deployments[0];
-            vercelData = {
-              ...vercelData,
-              deploymentsToday: Math.max(2, todayDeploys.length),
-              hasCustomToken: true,
-              latestDeploy: latest ? {
-                name: latest.name,
-                url: latest.url,
-                state: latest.state,
-                created: latest.created
-              } : null
-            };
-          }
-        } catch (vErr) {
-          console.warn('Vercel API fetch note:', vErr);
-        }
-      }
-
-      const pCount = profilesCount || 0;
-      const mCount = messagesCount || 0;
-      const matchC = matchesCount || 0;
-      const tCount = txCount || 0;
-      const rCount = reportsCount || 0;
-
-      const dbEstimateMb = Math.round(((pCount * 1.8 + mCount * 0.9 + matchC * 0.6 + tCount * 0.5 + 35) / 1024) * 100) / 100;
-      const mauLimit = 50000;
-      const mauPercent = Math.round((pCount / mauLimit) * 100 * 100) / 100;
+      const remainingMinutes = Math.max(0, freeLimitMinutes - totalMinutes);
+      const agoraPercent = Math.min(100, Math.round((totalMinutes / freeLimitMinutes) * 1000) / 10);
+      // Liste fiyatı (Agora): ses 0,99 $ / 1000 dk, video HD 3,99 $ / 1000 dk
+      const listCostUsd = (voiceMinutes * 0.99 + videoMinutes * 3.99) / 1000;
+      const blendedPerMin = trackedMinutes > 0 ? listCostUsd / trackedMinutes : 3.99 / 1000;
+      const overageCostUsd = Math.max(0, totalMinutes - freeLimitMinutes) * blendedPerMin;
 
       setQuotaMetrics({
         supabase: {
-          profiles: pCount,
-          messages: mCount,
-          matches: matchC,
-          transactions: tCount,
-          reports: rCount,
+          profiles: profilesCount || 0,
+          messages: messagesCount || 0,
+          matches: matchesCount || 0,
+          transactions: txCount || 0,
+          reports: reportsCount || 0,
           pingMs,
-          mauLimit,
-          mauPercent,
-          dbSizeEstimateMb: dbEstimateMb,
-          dbLimitMb: 500
+          dbMb,
+          dbLimitMb,
+          dbPercent,
+          topTables
         },
         agora: {
-          totalSecondsMonth,
-          totalMinutesMonth,
-          audioMinutes,
+          voiceMinutes,
           videoMinutes,
-          totalCallsMonth: (monthCalls || []).length,
+          trackedMinutes,
+          totalMinutes,
+          hasConsole,
+          sessions: stats ? Number(stats.agora?.sessions || 0) : 0,
+          since: stats?.agora?.since || null,
           freeLimitMinutes,
           remainingMinutes,
-          percentUsed: agoraPercent
+          percentUsed: agoraPercent,
+          listCostUsd,
+          overageCostUsd
         },
-        vercel: vercelData,
         lastChecked: new Date().toLocaleTimeString('tr-TR')
       });
-
     } catch (err) {
       console.error('Quota fetch error:', err);
     } finally {
@@ -908,11 +867,13 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
     }
   };
 
-  const handleSaveVercelToken = (e: React.FormEvent) => {
-    e.preventDefault();
-    localStorage.setItem('pyngoo_vercel_token', vercelTokenInput.trim());
-    setSaveVercelSuccess(true);
-    setTimeout(() => setSaveVercelSuccess(false), 3000);
+  // Agora Console'daki gerçek bu ay toplamını elle gir (boş bırakılırsa kendi kayıtlarımız gösterilir)
+  const handleSaveAgoraConsoleMinutes = () => {
+    const v = agoraConsoleMinutes.trim();
+    try {
+      if (v === '') localStorage.removeItem('pyngoo_agora_console_mins');
+      else localStorage.setItem('pyngoo_agora_console_mins', String(Math.max(0, parseInt(v, 10) || 0)));
+    } catch (_) {}
     handleFetchQuotaMetrics();
   };
 
@@ -3223,449 +3184,143 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
 
             {quotaMetrics && (
               <div>
-                {/* 3 BÜYÜK ALTYAPI KARTI (AGORA, SUPABASE, VERCEL) */}
+                {/* ALTYAPI KARTLARI: yalnızca ölçülebilen GERÇEK değerler gösterilir */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '16px', marginBottom: '22px' }}>
-                  
-                  {/* 1. AGORA RTC KARTI */}
-                  <div style={{
-                    background: 'rgba(0, 242, 254, 0.04)', border: '1.5px solid rgba(0, 242, 254, 0.35)',
-                    borderRadius: '20px', padding: '20px', position: 'relative', overflow: 'hidden'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '1.6rem' }}>📞</span>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#00f2fe' }}>
-                            Agora RTC (Ses & Video)
-                          </h3>
-                          <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>
-                            10,000 Ücretsiz Dakika / Ay
-                          </span>
-                        </div>
-                      </div>
-                      <span style={{
-                        padding: '3px 8px', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '700',
-                        background: 'rgba(46, 204, 113, 0.2)', color: '#2ecc71', border: '1px solid #2ecc71'
-                      }}>
-                        🟢 Aktif
-                      </span>
-                    </div>
 
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>Kalan Ücretsiz Hak:</span>
-                        <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#2ecc71' }}>
-                          {quotaMetrics.agora.remainingMinutes.toLocaleString('tr-TR')} dk
+                  {/* 1. AGORA */}
+                  <div style={{ background: 'rgba(0, 242, 254, 0.04)', border: '1.5px solid rgba(0, 242, 254, 0.35)', borderRadius: '20px', padding: '20px', minWidth: 0, boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '1.6rem' }}>📞</span>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#00f2fe' }}>Agora Görüşme Dakikaları</h3>
+                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>
+                          {quotaMetrics.agora.hasConsole ? 'Elle girilen Agora Console değeri' : 'Kendi kayıtlarımızdan (bu ay)'}
                         </span>
                       </div>
+                    </div>
 
-                      {/* Çok Renkli İlerleme Çubuğu (Agora Konsolundaki Gibi: Sarı Audio + Mavi Video) */}
-                      <div style={{ height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', display: 'flex' }}>
-                        <div 
-                          title={`Sesli (Audio): ${quotaMetrics.agora.audioMinutes} dk`}
-                          style={{
-                            height: '100%',
-                            width: `${Math.max(0.5, (quotaMetrics.agora.audioMinutes / 10000) * 100)}%`,
-                            background: '#f5a623',
-                            transition: 'width 0.5s ease'
-                          }}
-                        />
-                        <div 
-                          title={`Görüntülü (Video HD): ${quotaMetrics.agora.videoMinutes} dk`}
-                          style={{
-                            height: '100%',
-                            width: `${Math.max(0.5, (quotaMetrics.agora.videoMinutes / 10000) * 100)}%`,
-                            background: '#00f2fe',
-                            transition: 'width 0.5s ease'
-                          }}
-                        />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>Kalan ücretsiz hak:</span>
+                      <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#2ecc71' }}>{quotaMetrics.agora.remainingMinutes.toLocaleString('tr-TR')} dk</span>
+                    </div>
+                    <div style={{ height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px' }}>
+                      <div style={{ height: '100%', width: `${Math.max(quotaMetrics.agora.totalMinutes > 0 ? 0.5 : 0, quotaMetrics.agora.percentUsed)}%`, background: '#00f2fe', transition: 'width 0.5s ease' }} />
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', marginBottom: '12px' }}>
+                      {quotaMetrics.agora.totalMinutes.toLocaleString('tr-TR')} / {quotaMetrics.agora.freeLimitMinutes.toLocaleString('tr-TR')} dk (%{quotaMetrics.agora.percentUsed})
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                      <div style={{ background: 'rgba(245, 166, 35, 0.08)', border: '1px solid rgba(245, 166, 35, 0.25)', borderRadius: '12px', padding: '8px 10px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#f5a623', fontWeight: '700' }}>🎤 Sesli</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>{quotaMetrics.agora.voiceMinutes.toLocaleString('tr-TR')} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>dk</span></div>
                       </div>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginTop: '5px' }}>
-                        <span>Toplam Harcanan: {quotaMetrics.agora.totalMinutesMonth} dk (%{quotaMetrics.agora.percentUsed})</span>
-                        <span>Kota: 10,000 dk</span>
+                      <div style={{ background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.25)', borderRadius: '12px', padding: '8px 10px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#00f2fe', fontWeight: '700' }}>🎥 Görüntülü</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>{quotaMetrics.agora.videoMinutes.toLocaleString('tr-TR')} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>dk</span></div>
                       </div>
                     </div>
 
-                    {/* Agora Console Kırılım Kutucukları (Sarı: Audio, Mavi: Video HD) */}
-                    <div style={{
-                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px'
-                    }}>
-                      <div style={{
-                        background: 'rgba(245, 166, 35, 0.08)', border: '1px solid rgba(245, 166, 35, 0.25)',
-                        borderRadius: '12px', padding: '8px 10px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f5a623' }}></span>
-                          <span style={{ fontSize: '0.72rem', color: '#f5a623', fontWeight: '700' }}>🎤 Sesli (Audio)</span>
-                        </div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>
-                          {quotaMetrics.agora.audioMinutes} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>dk</span>
-                        </div>
-                      </div>
-
-                      <div style={{
-                        background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.25)',
-                        borderRadius: '12px', padding: '8px 10px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00f2fe' }}></span>
-                          <span style={{ fontSize: '0.72rem', color: '#00f2fe', fontWeight: '700' }}>📹 Video (HD)</span>
-                        </div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>
-                          {quotaMetrics.agora.videoMinutes} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>dk</span>
-                        </div>
-                      </div>
+                    <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.75)', lineHeight: '1.6', marginBottom: '10px' }}>
+                      Kayıtlı bağlantı sayısı: <b>{quotaMetrics.agora.sessions}</b><br />
+                      Liste fiyatıyla bu ayki tutar: <b>${quotaMetrics.agora.listCostUsd.toFixed(2)}</b> (ücretsiz dilim düşülmeden)<br />
+                      Ücretsiz dilim aşılırsa ödenecek: <b style={{ color: quotaMetrics.agora.overageCostUsd > 0 ? '#ff6b6b' : '#2ecc71' }}>${quotaMetrics.agora.overageCostUsd.toFixed(2)}</b>
                     </div>
 
-                    <div style={{
-                      background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '10px 14px',
-                      fontSize: '0.78rem', border: '1px solid rgba(255,255,255,0.06)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Bu Ayki Toplam Arama:</span>
-                        <span style={{ fontWeight: '700', color: '#fff' }}>{quotaMetrics.agora.totalCallsMonth} adet</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Agora Konsol Eşitleme:</span>
-                        <button
-                          onClick={() => setShowAgoraEdit(!showAgoraEdit)}
-                          style={{
-                            background: 'none', border: 'none', color: '#00f2fe',
-                            fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline'
-                          }}
-                        >
-                          {showAgoraEdit ? 'Vazgeç' : 'Manuel Güncelle'}
-                        </button>
-                      </div>
-
-                      {showAgoraEdit && (
-                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                          <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                            <input 
-                              type="number" 
-                              placeholder="Ses dk"
-                              value={agoraAudioInput}
-                              onChange={(e) => setAgoraAudioInput(e.target.value)}
-                              style={{ width: '50%', padding: '4px 8px', borderRadius: '6px', background: '#111', border: '1px solid #444', color: '#fff', fontSize: '0.75rem' }}
-                            />
-                            <input 
-                              type="number" 
-                              placeholder="Video dk"
-                              value={agoraVideoInput}
-                              onChange={(e) => setAgoraVideoInput(e.target.value)}
-                              style={{ width: '50%', padding: '4px 8px', borderRadius: '6px', background: '#111', border: '1px solid #444', color: '#fff', fontSize: '0.75rem' }}
-                            />
-                          </div>
-                          <button
-                            onClick={() => {
-                              localStorage.setItem('pyngoo_agora_audio_mins', agoraAudioInput);
-                              localStorage.setItem('pyngoo_agora_video_mins', agoraVideoInput);
-                              setShowAgoraEdit(false);
-                              handleFetchQuotaMetrics();
-                            }}
-                            style={{
-                              width: '100%', padding: '5px', borderRadius: '6px',
-                              background: '#2ecc71', border: 'none', color: '#000',
-                              fontWeight: '700', fontSize: '0.72rem', cursor: 'pointer'
-                            }}
-                          >
-                            Kaydet ve Senkronize Et
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 2. SUPABASE KARTI */}
-                  <div style={{
-                    background: 'rgba(46, 204, 113, 0.04)', border: '1.5px solid rgba(46, 204, 113, 0.35)',
-                    borderRadius: '20px', padding: '20px', position: 'relative', overflow: 'hidden'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '1.6rem' }}>⚡</span>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#2ecc71' }}>
-                            Supabase Veritabanı
-                          </h3>
-                          <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>
-                            50,000 Kullanıcı / 500 MB DB
-                          </span>
-                        </div>
-                      </div>
-                      <span style={{
-                        padding: '3px 8px', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '700',
-                        background: 'rgba(46, 204, 113, 0.2)', color: '#2ecc71', border: '1px solid #2ecc71'
-                      }}>
-                        🟢 {quotaMetrics.supabase.pingMs} ms
-                      </span>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', lineHeight: '1.55', marginBottom: '12px', overflowWrap: 'anywhere' }}>
+                      Dakikalar görüşmeye katılan <b>her kişi için ayrı</b> sayılır (Agora böyle faturalar). Bu kayıt{' '}
+                      {quotaMetrics.agora.since ? `${new Date(quotaMetrics.agora.since).toLocaleDateString('tr-TR')} tarihinde` : 'ilk görüşmeden'} başlar; öncesi ve sekme aniden kapanan görüşmeler dahil değildir. Kesin değer için Agora Console'a bakın.
                     </div>
 
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>Kayıtlı Kullanıcı:</span>
-                        <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#2ecc71' }}>
-                          {quotaMetrics.supabase.profiles.toLocaleString('tr-TR')} / 50K
-                        </span>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${Math.max(1, quotaMetrics.supabase.mauPercent)}%`,
-                          background: '#2ecc71',
-                          borderRadius: '10px'
-                        }}></div>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                        <span>Doluluk: %{quotaMetrics.supabase.mauPercent}</span>
-                        <span>Tahmini Boyut: ~{quotaMetrics.supabase.dbSizeEstimateMb} MB / 500 MB</span>
-                      </div>
-                    </div>
-
-                    <div style={{
-                      background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '10px 14px',
-                      fontSize: '0.78rem', border: '1px solid rgba(255,255,255,0.06)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Toplam Mesajlar:</span>
-                        <span style={{ fontWeight: '700', color: '#fff' }}>{quotaMetrics.supabase.messages} adet</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Görüşme Kayıtları:</span>
-                        <span style={{ fontWeight: '700', color: '#fff' }}>{quotaMetrics.supabase.matches} adet</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Altın Hareketleri:</span>
-                        <span style={{ fontWeight: '700', color: '#ffd700' }}>{quotaMetrics.supabase.transactions} adet</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3. VERCEL KARTI */}
-                  <div style={{
-                    background: 'rgba(155, 89, 182, 0.04)', border: '1.5px solid rgba(155, 89, 182, 0.35)',
-                    borderRadius: '20px', padding: '20px', position: 'relative', overflow: 'hidden'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '1.6rem' }}>▲</span>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#e056fd' }}>
-                            Vercel Hosting & CDN
-                          </h3>
-                          <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>
-                            100 GB Bant / 100 Deploy Günlük
-                          </span>
-                        </div>
-                      </div>
-                      <span style={{
-                        padding: '3px 8px', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '700',
-                        background: 'rgba(155, 89, 182, 0.2)', color: '#e056fd', border: '1px solid #e056fd'
-                      }}>
-                        {quotaMetrics.vercel.hasCustomToken ? '⚡ API Bağlı' : 'Hobby Plan'}
-                      </span>
-                    </div>
-
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>Kalan Bant Genişliği:</span>
-                        <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#2ecc71' }}>
-                          {quotaMetrics.vercel.bandwidthRemainingGb} GB
-                        </span>
-                      </div>
-
-                      {/* Bant Genişliği İlerleme Çubuğu */}
-                      <div style={{ height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden' }}>
-                        <div 
-                          title={`Veri Aktarımı: ${quotaMetrics.vercel.bandwidthMb} MB`}
-                          style={{
-                            height: '100%',
-                            width: `${Math.max(1, quotaMetrics.vercel.bandwidthPercent * 5)}%`,
-                            background: '#e056fd',
-                            borderRadius: '10px',
-                            transition: 'width 0.5s ease'
-                          }}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginTop: '5px' }}>
-                        <span>Aktarılan: {quotaMetrics.vercel.bandwidthMb} MB (%{quotaMetrics.vercel.bandwidthPercent})</span>
-                        <span>Kota: 100 GB</span>
-                      </div>
-                    </div>
-
-                    {/* Vercel Hızlı Veri Aktarımı Kırılım Kutucukları (Gelen vs Dışa Dönük) */}
-                    <div style={{
-                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px'
-                    }}>
-                      <div style={{
-                        background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.25)',
-                        borderRadius: '12px', padding: '8px 10px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00f2fe' }}></span>
-                          <span style={{ fontSize: '0.72rem', color: '#00f2fe', fontWeight: '700' }}>📥 Gelen İstek</span>
-                        </div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>
-                          {quotaMetrics.vercel.inboundMb} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>MB</span>
-                        </div>
-                      </div>
-
-                      <div style={{
-                        background: 'rgba(224, 86, 253, 0.08)', border: '1px solid rgba(224, 86, 253, 0.25)',
-                        borderRadius: '12px', padding: '8px 10px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#e056fd' }}></span>
-                          <span style={{ fontSize: '0.72rem', color: '#e056fd', fontWeight: '700' }}>📤 Dışa Dönük</span>
-                        </div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>
-                          {quotaMetrics.vercel.outboundMb} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>MB</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{
-                      background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '10px 14px',
-                      fontSize: '0.78rem', border: '1px solid rgba(255,255,255,0.06)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Bugünkü Dağıtım (Deploy):</span>
-                        <span style={{ fontWeight: '700', color: '#fff' }}>{quotaMetrics.vercel.deploymentsToday} / 100</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Son Deploy Durumu:</span>
-                        <span style={{ fontWeight: '700', color: quotaMetrics.vercel.latestDeploy?.state === 'READY' ? '#2ecc71' : '#00f2fe' }}>
-                          {quotaMetrics.vercel.latestDeploy?.state || 'CANLI / READY'}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Vercel Konsol Eşitleme:</span>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setShowVercelEdit(!showVercelEdit)}
-                            style={{
-                              background: 'none', border: 'none', color: '#00f2fe',
-                              fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline'
-                            }}
-                          >
-                            {showVercelEdit ? 'Vazgeç' : 'Bant Güncelle'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowVercelInput(!showVercelInput)}
-                            style={{
-                              background: 'none', border: 'none', color: '#e056fd',
-                              fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline'
-                            }}
-                          >
-                            {showVercelInput ? 'Gizle' : 'Token'}
-                          </button>
-                        </div>
-                      </div>
-
-                      {showVercelEdit && (
-                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                          <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                            <input 
-                              type="number" 
-                              step="0.01"
-                              placeholder="Kullanılan MB (örn: 513.83)"
-                              value={vercelBandwidthMb}
-                              onChange={(e) => setVercelBandwidthMb(e.target.value)}
-                              style={{ flex: 1, padding: '4px 8px', borderRadius: '6px', background: '#111', border: '1px solid #444', color: '#fff', fontSize: '0.75rem' }}
-                            />
-                          </div>
-                          <button
-                            onClick={() => {
-                              localStorage.setItem('pyngoo_vercel_bw_mb', vercelBandwidthMb);
-                              setShowVercelEdit(false);
-                              handleFetchQuotaMetrics();
-                            }}
-                            style={{
-                              width: '100%', padding: '5px', borderRadius: '6px',
-                              background: '#e056fd', border: 'none', color: '#fff',
-                              fontWeight: '700', fontSize: '0.72rem', cursor: 'pointer'
-                            }}
-                          >
-                            Bant Verisini Güncelle
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* VERCEL TOKEN TANIMLAMA KUTUSU (İSTEĞE BAĞLI AÇILIR) */}
-                {showVercelInput && (
-                  <form onSubmit={handleSaveVercelToken} style={{
-                    background: 'rgba(155, 89, 182, 0.1)', border: '1px solid rgba(155, 89, 182, 0.3)',
-                    borderRadius: '16px', padding: '16px 20px', marginBottom: '20px'
-                  }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#e056fd', marginBottom: '6px' }}>
-                      🔑 Vercel Personal Access Token (Vercel Dashboard'dan alınan API Token)
-                    </label>
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                       <input
-                        type="password"
-                        value={vercelTokenInput}
-                        onChange={(e) => setVercelTokenInput(e.target.value)}
-                        placeholder="Vercel token yapıştırın..."
-                        style={{
-                          flex: 1, padding: '10px 14px', borderRadius: '10px',
-                          background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)',
-                          color: '#fff', fontSize: '0.85rem', outline: 'none'
-                        }}
+                        type="number"
+                        min="0"
+                        value={agoraConsoleMinutes}
+                        onChange={(e) => setAgoraConsoleMinutes(e.target.value)}
+                        placeholder="Console'daki bu ay toplamı (dk)"
+                        style={{ flex: 1, minWidth: '150px', padding: '8px 10px', borderRadius: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
                       />
                       <button
-                        type="submit"
-                        style={{
-                          padding: '10px 18px', borderRadius: '10px',
-                          background: 'linear-gradient(135deg, #e056fd, #9b59b6)',
-                          border: 'none', color: '#fff', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer'
-                        }}
+                        type="button"
+                        onClick={handleSaveAgoraConsoleMinutes}
+                        style={{ padding: '8px 12px', borderRadius: '10px', background: 'linear-gradient(135deg, #00f2fe, #4facfe)', border: 'none', color: '#000', fontWeight: '800', fontSize: '0.78rem', cursor: 'pointer' }}
                       >
-                        Kaydet & Senkronize Et
+                        Kaydet
                       </button>
                     </div>
-                    {saveVercelSuccess && (
-                      <span style={{ fontSize: '0.78rem', color: '#2ecc71', fontWeight: '700', display: 'block', marginTop: '6px' }}>
-                        ✅ Vercel Token kaydedildi ve canlı veriler güncellendi!
-                      </span>
+                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', marginTop: '6px' }}>
+                      Boş bırakıp kaydederseniz kendi kayıtlarımız gösterilir. Konsol:{' '}
+                      <a href="https://console.agora.io/" target="_blank" rel="noopener noreferrer" style={{ color: '#00f2fe' }}>console.agora.io</a>
+                    </div>
+                  </div>
+
+                  {/* 2. SUPABASE */}
+                  <div style={{ background: 'rgba(46, 204, 113, 0.04)', border: '1.5px solid rgba(46, 204, 113, 0.35)', borderRadius: '20px', padding: '20px', minWidth: 0, boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '1.6rem' }}>⚡</span>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#2ecc71' }}>Supabase Veritabanı</h3>
+                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>Gerçek ölçüm (pg_database_size) · Ping {quotaMetrics.supabase.pingMs} ms</span>
+                      </div>
+                    </div>
+
+                    {quotaMetrics.supabase.dbMb === null ? (
+                      <div style={{ fontSize: '0.8rem', color: '#ffb3b3', marginBottom: '12px' }}>Veritabanı boyutu okunamadı (yönetici oturumu gerekli).</div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>Veritabanı boyutu:</span>
+                          <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#2ecc71' }}>{quotaMetrics.supabase.dbMb} MB</span>
+                        </div>
+                        <div style={{ height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px' }}>
+                          <div style={{ height: '100%', width: `${Math.max(0.5, quotaMetrics.supabase.dbPercent || 0)}%`, background: '#2ecc71', transition: 'width 0.5s ease' }} />
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', marginBottom: '12px' }}>
+                          {quotaMetrics.supabase.dbMb} / {quotaMetrics.supabase.dbLimitMb} MB (%{quotaMetrics.supabase.dbPercent}) · Ücretsiz plan sınırı
+                        </div>
+                      </>
                     )}
-                  </form>
-                )}
 
-                {/* GÜVENLİK VE FATURA GARANTİ BİLDİRİMİ */}
-                <div style={{
-                  background: 'rgba(46, 204, 113, 0.08)', border: '1.5px solid rgba(46, 204, 113, 0.3)',
-                  borderRadius: '16px', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px'
-                }}>
-                  <div style={{
-                    width: '38px', height: '38px', borderRadius: '10px',
-                    background: 'rgba(46, 204, 113, 0.2)', border: '1px solid #2ecc71',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                  }}>
-                    <CheckCircle2 size={22} color="#2ecc71" />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: '800', color: '#2ecc71' }}>
-                      Kotalarınız Güvenli Bölgede (0₺ Maliyet)
-                    </h4>
-                    <p style={{ margin: '3px 0 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.4' }}>
-                      Agora 10,000 dakikalık ücretsiz ses/video limitinizin yalnızca <b>%{quotaMetrics.agora.percentUsed}</b>'i kullanıldı. 
-                      Supabase veritabanı kapasitenizin ve Vercel dağıtım kotalarınızın tamamı ücretsiz sınırlar içerisindedir. Herhangi bir aşım veya ek fatura riski yoktur.
-                    </p>
-                  </div>
-                </div>
+                    <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.75)', lineHeight: '1.6', marginBottom: '10px' }}>
+                      Profil: <b>{quotaMetrics.supabase.profiles}</b> · Mesaj: <b>{quotaMetrics.supabase.messages}</b> · Görüşme kaydı: <b>{quotaMetrics.supabase.matches}</b><br />
+                      İşlem: <b>{quotaMetrics.supabase.transactions}</b> · Şikâyet: <b>{quotaMetrics.supabase.reports}</b>
+                    </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>
-                  <span>● Veriler Supabase sunucusundan anlık hesaplanmaktadır.</span>
-                  <span>Son Kontrol: {quotaMetrics.lastChecked}</span>
+                    {quotaMetrics.supabase.topTables.length > 0 && (
+                      <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.6', marginBottom: '10px' }}>
+                        <div style={{ fontWeight: '700', color: 'rgba(255,255,255,0.8)' }}>En büyük tablolar:</div>
+                        {quotaMetrics.supabase.topTables.map((t: any) => (
+                          <div key={t.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                            <span style={{ overflowWrap: 'anywhere' }}>{t.name}</span><span>{t.mb} MB</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', lineHeight: '1.55', overflowWrap: 'anywhere' }}>
+                      Buradan ölçülemeyenler: eşzamanlı Realtime bağlantısı (ücretsiz planda 200) ve çıkış trafiği (5 GB). Bunlar için Supabase Dashboard → Reports sayfasına bakın.
+                    </div>
+                  </div>
+
+                  {/* 3. VERCEL */}
+                  <div style={{ background: 'rgba(155, 89, 182, 0.05)', border: '1.5px solid rgba(155, 89, 182, 0.35)', borderRadius: '20px', padding: '20px', minWidth: 0, boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '1.6rem' }}>▲</span>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#e056fd' }}>Vercel (barındırma)</h3>
+                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>Buradan ölçülmez</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)', lineHeight: '1.6', overflowWrap: 'anywhere' }}>
+                      Vercel kullanımı bu panelden güvenilir biçimde okunamıyor. Eskiden burada koda sabit yazılmış (uydurma) bant genişliği ve dağıtım sayıları ile tarayıcıda saklanan bir Vercel erişim anahtarı vardı; ikisi de kaldırıldı.
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', lineHeight: '1.6', marginTop: '10px' }}>
+                      Kullanıma bakmak için:{' '}
+                      <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: '#e056fd' }}>vercel.com/dashboard</a> → Usage.
+                      Ücretsiz planda bant genişliği sınırı 100 GB/aydır.
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -4859,16 +4514,27 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
               <h2 style={{ fontSize: '1.2rem', fontWeight: '800', margin: 0, color: '#f39c12', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 📜 Moderatör İşlem & Denetim Günlüğü ({auditLogsList.length})
               </h2>
-              <button
-                onClick={() => setShowModLogModal(false)}
-                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer' }}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {isOmer && auditLogsList.length > 0 && (
+                  <button
+                    onClick={handleClearAuditLogs}
+                    title="Tüm denetim kayıtlarını kalıcı olarak sil"
+                    style={{ background: 'rgba(255, 45, 85, 0.15)', border: '1px solid rgba(255, 45, 85, 0.4)', color: '#ff2d55', padding: '6px 12px', borderRadius: '10px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Trash2 size={13} /> Temizle
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowModLogModal(false)}
+                  style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+                </div>
             </div>
 
             <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.6)', marginBottom: '16px' }}>
-              Moderatörlerin panel üzerinde gerçekleştirdiği banlama, silme, onaylama ve şifre değiştirme işlemleri burada zaman damgasıyla şeffaf şekilde listelenir.
+              Moderatörlerin panel üzerinde gerçekleştirdiği banlama, silme ve onaylama işlemleri burada zaman damgasıyla şeffaf şekilde listelenir.
             </p>
 
             {auditLogsList.length === 0 ? (

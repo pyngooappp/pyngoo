@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { RefreshCw } from 'lucide-react';
 
 interface RealAnalyticsData {
   totalUsers: number;
-  activeUsers15m: number;
   newUsers24h: number;
   femaleCount: number;
   maleCount: number;
@@ -18,6 +17,40 @@ interface LiveRealAnalyticsBannerProps {
 export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = ({ isAdmin }) => {
   const [data, setData] = useState<RealAnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
+  // GERÇEK çevrimiçi sayısı: uygulamanın kullandığı 'pyngoo_presence' kanalı yalnızca DİNLENİR (track edilmez,
+  // yani yönetici kendini listeye eklemez). null = kanal henüz bağlanmadı.
+  const [onlineNow, setOnlineNow] = useState<number | null>(null);
+  const [liveStreamers, setLiveStreamers] = useState<number>(0);
+  const presenceRef = useRef<any>(null);
+
+  const readPresence = () => {
+    const ch = presenceRef.current;
+    if (!ch) return;
+    try {
+      const st = ch.presenceState() as Record<string, any[]>;
+      const keys = Object.keys(st);
+      setOnlineNow(keys.length);
+      setLiveStreamers(keys.filter((k) => (st[k] || []).some((m: any) => m?.live === true)).length);
+    } catch (_) {
+      // sessizce geç
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const ch = supabase.channel('pyngoo_presence');
+    presenceRef.current = ch;
+    ch.on('presence', { event: 'sync' }, readPresence)
+      .on('presence', { event: 'join' }, readPresence)
+      .on('presence', { event: 'leave' }, readPresence)
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') readPresence();
+      });
+    return () => {
+      presenceRef.current = null;
+      supabase.removeChannel(ch);
+    };
+  }, [isAdmin]);
 
   const fetchAnalytics = async () => {
     if (!isAdmin) return;
@@ -34,21 +67,11 @@ export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = (
       const female = users?.filter((u) => u.gender === 'kadin').length || 0;
       const male = users?.filter((u) => u.gender === 'erkek').length || 0;
 
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const new24h = users?.filter((u) => u.created_at && u.created_at >= oneDayAgo).length || 0;
-
-      // Son aktiflik: son 30 dk içinde oluşturulan veya ödül/uzatma alanlar (en az 1 admin aktif)
-      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-      const recentActionUsers = users?.filter(
-        (u) =>
-          (u.created_at && u.created_at >= thirtyMinAgo) ||
-          (u.last_reward_date && u.last_reward_date >= thirtyMinAgo) ||
-          (u.last_extension_date && u.last_extension_date >= thirtyMinAgo)
-      ).length || 0;
+      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const new24h = users?.filter((u) => u.created_at && new Date(u.created_at).getTime() >= oneDayAgo).length || 0;
 
       setData({
         totalUsers: total,
-        activeUsers15m: Math.max(recentActionUsers, 1),
         newUsers24h: new24h,
         femaleCount: female,
         maleCount: male,
@@ -61,6 +84,7 @@ export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = (
     } catch (err) {
       console.warn('LiveRealAnalyticsBanner fetch error:', err);
     } finally {
+      readPresence();
       setLoading(false);
     }
   };
@@ -136,10 +160,10 @@ export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = (
           }}
         >
           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#00e676' }}>
-            {data ? data.activeUsers15m : '...'}
+            {onlineNow === null ? '...' : onlineNow}
           </div>
           <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
-            🟢 Son 15 Dk Aktif
+            🟢 Şu An Çevrimiçi{liveStreamers > 0 ? ` • 🎥 ${liveStreamers} canlı` : ''}
           </div>
         </div>
 
