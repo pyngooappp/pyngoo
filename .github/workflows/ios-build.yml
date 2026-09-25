@@ -26,7 +26,6 @@ jobs:
           VITE_SUPABASE_URL: https://rdqcwzosmikusketghyq.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcWN3em9zbWlrdXNrZXRnaHlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDY2OTQsImV4cCI6MjEwMjcyMjY5NH0.bWBNSXqz3aLCsst0JxBTLt1tbFfCygv0WzUeGasvtdg
           VITE_AGORA_APP_ID: 42f01590d5f14201a201b5d85e2f944a
-          VITE_AGORA_APP_CERTIFICATE: 22014c05e2db4ee8880e03bf67cdb617
         run: npx vite build
 
       - name: Sync Capacitor iOS
@@ -98,7 +97,13 @@ jobs:
           xcodebuild -showsdks
 
           cd ios/App
-          
+
+          # Imza ayarlari yalnizca App hedefinde (project.pbxproj Release). Komut satirindan verilirse
+          # Firebase gibi SPM paketlerinin kaynak hedeflerine de uygulanip derlemeyi bozar.
+          # Profil adi GitHub Secret'taki profilden alinir:
+          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = .*;/PROVISIONING_PROFILE_SPECIFIER = \"${{ env.PROV_NAME }}\";/" App.xcodeproj/project.pbxproj
+          grep -n "PROVISIONING_PROFILE_SPECIFIER" App.xcodeproj/project.pbxproj || true
+
           cat <<EOF > ExportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -126,9 +131,6 @@ jobs:
                        -configuration Release \
                        -archivePath App.xcarchive \
                        DEVELOPMENT_TEAM="FX59PMTS6R" \
-                       CODE_SIGN_STYLE="Manual" \
-                       CODE_SIGN_IDENTITY="Apple Distribution" \
-                       PROVISIONING_PROFILE_SPECIFIER="${{ env.PROV_NAME }}" \
                        CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
                        archive
           else
@@ -138,9 +140,6 @@ jobs:
                        -configuration Release \
                        -archivePath App.xcarchive \
                        DEVELOPMENT_TEAM="FX59PMTS6R" \
-                       CODE_SIGN_STYLE="Manual" \
-                       CODE_SIGN_IDENTITY="Apple Distribution" \
-                       PROVISIONING_PROFILE_SPECIFIER="${{ env.PROV_NAME }}" \
                        CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
                        archive
           fi
