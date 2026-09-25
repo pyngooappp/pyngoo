@@ -326,7 +326,9 @@ export default function Login({ onLogin }: LoginProps) {
       setError(t('login_err_email'));
       return;
     }
-    if (!password || password.length < 6) {
+    // Yeni kayıtlarda en az 8 karakter (Supabase Auth ayarıyla aynı). Girişte 6 bırakıldı: eski, 6-7 karakterli
+    // şifresi olan mevcut kullanıcılar Supabase tarafında hâlâ giriş yapabiliyor, istemci onları engellememeli.
+    if (!password || password.length < (isLoginMode ? 6 : 8)) {
       setError(t('login_err_password'));
       return;
     }
@@ -448,6 +450,10 @@ export default function Login({ onLogin }: LoginProps) {
               setLoading(false);
               return;
             }
+          } else if ((signUpErr as any).code === 'weak_password' || errMsg.includes('weak') || errMsg.includes('password should')) {
+            setError(t('password_err_weak'));
+            setLoading(false);
+            return;
           } else {
             throw signUpErr;
           }

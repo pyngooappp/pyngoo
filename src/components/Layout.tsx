@@ -3,6 +3,7 @@ import { MessageCircle, Phone, User, Wallet as WalletIcon, Coins, PhoneIncoming,
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
+import { createPresenceSync } from '../utils/presenceSync';
 import { soundManager } from '../utils/SoundManager';
 import VoiceChat from './VoiceChat';
 import PrivacyShield from './PrivacyShield';
@@ -73,8 +74,6 @@ export default function Layout({ userId }: LayoutProps) {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   // Yayıncı canlı/mola durumu (presence üzerinden anlık). undefined = eski sürüm, bilgi yok
   const [presenceLive, setPresenceLive] = useState<Map<string, boolean | undefined>>(new Map());
-  const presenceChannelRef = useRef<any>(null);
-  const presenceRetrackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileForPresenceRef = useRef<any>(null);
   profileForPresenceRef.current = profile;
   useEffect(() => {
@@ -108,12 +107,12 @@ export default function Layout({ userId }: LayoutProps) {
     } catch (_) {}
 
     if (reason && reason.includes('askıya')) {
-      alert(t('account_banned_alert'));
+      alert(i18n.t('account_banned_alert'));
       window.location.replace('/login');
     } else {
       window.location.replace('/login?mode=register&deleted=1');
     }
-  }, [userId]);
+  }, [userId, i18n]);
 
   const fetchProfile = useCallback(async () => {
     if (userId) {
@@ -538,47 +537,33 @@ export default function Layout({ userId }: LayoutProps) {
       const live = isStreamer && localStorage.getItem(`pyngoo_streamer_online_${userId}`) !== 'false';
       return { userId, online_at: new Date().toISOString(), live };
     };
-    // Hızlı art arda Canlı/Mola değişimlerinde Supabase Realtime'ın presence hız sınırına takılıp
-    // bazı güncellemelerin sunucuya işlenmeden düşmesini (ve karşı tarafta durumun eski haliyle
-    // donup kalmasını) önlemek için son değişikliği kısa bir gecikmeyle (debounce) gönderiyoruz.
-    const retrackPresence = () => {
-      if (presenceRetrackTimerRef.current) clearTimeout(presenceRetrackTimerRef.current);
-      presenceRetrackTimerRef.current = setTimeout(() => {
-        presenceRetrackTimerRef.current = null;
-        try { Promise.resolve(presenceChannel.track(buildPresencePayload())).catch(() => {}); } catch (_) {}
-      }, 400);
-    };
+    // Supabase Realtime, bir istemciden sık presence güncellemesi gelirse (~5 güncellemeden sonra) kanalı
+    // "Client presence rate limit exceeded" ile sunucu tarafında KAPATIR; bu durumda yayıncı sayfa yenilenene kadar
+    // karşı tarafta "molada" görünürdü. presenceSync güncellemeleri en az 10 sn arayla (en güncel durumla) gönderir
+    // ve kapanan kanalı otomatik yeniden kurar. Ayrıntı: src/utils/presenceSync.ts
+    const presenceSync = createPresenceSync({
+      client: supabase,
+      topic: 'pyngoo_presence',
+      key: userId,
+      buildPayload: buildPresencePayload,
+      onState: (state) => {
+        const onlineSet = new Set<string>();
+        const liveMap = new Map<string, boolean | undefined>();
+        Object.keys(state).forEach((k) => {
+          onlineSet.add(k);
+          const metas = state[k] || [];
+          const withFlag = metas.filter((m: any) => typeof m?.live === 'boolean');
+          liveMap.set(k, withFlag.length > 0 ? withFlag.some((m: any) => m.live === true) : undefined);
+        });
+        setOnlineUsers(onlineSet);
+        setPresenceLive(liveMap);
+      },
+    });
+    const retrackPresence = presenceSync.requestTrack;
     window.addEventListener('pyngoo_streamer_online_changed', retrackPresence);
     window.addEventListener('pyngoo_streamer_updated', retrackPresence);
     window.addEventListener('pyngoo_presence_retrack', retrackPresence);
-    const presenceChannel = supabase.channel('pyngoo_presence', {
-      config: { presence: { key: userId } }
-    });
-
-    const updatePresence = () => {
-      const state = presenceChannel.presenceState() as Record<string, any[]>;
-      const onlineSet = new Set<string>();
-      const liveMap = new Map<string, boolean | undefined>();
-      Object.keys(state).forEach((k) => {
-        onlineSet.add(k);
-        const metas = state[k] || [];
-        const withFlag = metas.filter((m: any) => typeof m?.live === 'boolean');
-        liveMap.set(k, withFlag.length > 0 ? withFlag.some((m: any) => m.live === true) : undefined);
-      });
-      setOnlineUsers(onlineSet);
-      setPresenceLive(liveMap);
-    };
-    presenceChannelRef.current = presenceChannel;
-
-    presenceChannel
-      .on('presence', { event: 'sync' }, updatePresence)
-      .on('presence', { event: 'join' }, updatePresence)
-      .on('presence', { event: 'leave' }, updatePresence)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await presenceChannel.track(buildPresencePayload());
-        }
-      });
+    presenceSync.start();
 
     // 6. Onaylanan Altın Ödemelerini Takip Et ve Bildirim Göster (1 Kerelik Bildirim Garantisi)
     const syncApprovedPayments = async (isRealtimeNotification = false) => {
@@ -676,12 +661,7 @@ export default function Layout({ userId }: LayoutProps) {
       window.removeEventListener('pyngoo_streamer_online_changed', retrackPresence);
       window.removeEventListener('pyngoo_streamer_updated', retrackPresence);
       window.removeEventListener('pyngoo_presence_retrack', retrackPresence);
-      if (presenceRetrackTimerRef.current) {
-        clearTimeout(presenceRetrackTimerRef.current);
-        presenceRetrackTimerRef.current = null;
-      }
-      presenceChannelRef.current = null;
-      supabase.removeChannel(presenceChannel);
+      presenceSync.stop();
       supabase.removeChannel(paymentChannel);
     };
   }, [userId, fetchCounts, forceLogoutUser]);
@@ -855,6 +835,14 @@ export default function Layout({ userId }: LayoutProps) {
               <p style={{ color: '#ccc', fontSize: '0.92rem', marginBottom: '26px', lineHeight: '1.5' }}>
                 <strong style={{ color: '#00f2fe', fontSize: '1.1rem' }}>{incomingCall.callerName}</strong> {t('call_incoming_invite')}
               </p>
+
+              {/* Kazanç kartı: yalnızca doğrudan aramalarda ve alıcı bayan ise (sunucu elması yalnızca kadın alıcıya yazar) */}
+              {profile?.gender === 'kadin' && (
+                <div style={{ margin: '-10px 0 20px', padding: '10px 12px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.18), rgba(255, 215, 0, 0.12))', border: '1.5px solid rgba(46, 204, 113, 0.8)', boxShadow: '0 0 22px rgba(46, 204, 113, 0.25)' }}>
+                  <div style={{ display: 'inline-block', padding: '3px 12px', borderRadius: '20px', background: 'rgba(255, 215, 0, 0.22)', border: '1px solid #ffd700', color: '#ffd700', fontSize: '0.72rem', fontWeight: '900', marginBottom: '6px' }}>{t('call_earning_badge')}</div>
+                  <div style={{ color: '#eafff1', fontSize: '0.84rem', fontWeight: '700', lineHeight: '1.4' }}>{t('call_earning_note_direct')}</div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button 

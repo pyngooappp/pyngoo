@@ -63,7 +63,7 @@ export default function ForgotPasswordModal({ initialEmail = '', onClose }: Prop
       setError(t('fp_err_code'));
       return;
     }
-    if (pw1.length < 6) {
+    if (pw1.length < 8) {
       setError(t('fp_err_password'));
       return;
     }
@@ -81,7 +81,7 @@ export default function ForgotPasswordModal({ initialEmail = '', onClose }: Prop
       }
       const { error: uErr } = await supabase.auth.updateUser({ password: pw1 });
       if (uErr) {
-        setError(t('fp_err_generic'));
+        setError((uErr as any).code === 'weak_password' ? t('password_err_weak') : t('fp_err_generic'));
         setBusy(false);
         return;
       }

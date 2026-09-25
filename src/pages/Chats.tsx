@@ -1500,6 +1500,14 @@ export default function Chats({ userId }: ChatsProps) {
               <strong style={{ color: '#00f2fe', fontSize: '1.05rem' }}>{incomingCall.callerName}</strong> {t('chats_incoming_voice_desc')}
             </p>
 
+            {/* Kazanç kartı: yalnızca doğrudan aramalarda ve alıcı bayan ise */}
+            {profile?.gender === 'kadin' && (
+              <div style={{ margin: '-10px 0 20px', padding: '10px 12px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.18), rgba(255, 215, 0, 0.12))', border: '1.5px solid rgba(46, 204, 113, 0.8)', boxShadow: '0 0 22px rgba(46, 204, 113, 0.25)' }}>
+                <div style={{ display: 'inline-block', padding: '3px 12px', borderRadius: '20px', background: 'rgba(255, 215, 0, 0.22)', border: '1px solid #ffd700', color: '#ffd700', fontSize: '0.72rem', fontWeight: '900', marginBottom: '6px' }}>{t('call_earning_badge')}</div>
+                <div style={{ color: '#eafff1', fontSize: '0.84rem', fontWeight: '700', lineHeight: '1.4' }}>{t('call_earning_note_direct')}</div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
                 onClick={handleRejectIncomingCall}

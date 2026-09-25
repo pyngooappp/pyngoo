@@ -624,20 +624,14 @@ export default function Home({ userId }: HomeProps) {
       {pendingMatchData && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(5, 5, 16, 0.92)', backdropFilter: 'blur(16px)', zIndex: 10005, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', animation: 'fadeIn 0.3s ease' }}>
           <div style={{
-            background: isFemaleStreamer 
-              ? 'linear-gradient(165deg, #1d1038 0%, #120b22 55%, #0d071a 100%)' 
-              : '#1a1a2e',
-            border: isFemaleStreamer 
-              ? '2px solid rgba(46, 204, 113, 0.8)' 
-              : '1px solid rgba(255, 255, 255, 0.2)',
+            background: '#1a1a2e',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
             borderRadius: '26px',
             padding: '28px 22px',
             textAlign: 'center',
             maxWidth: '430px',
             width: '100%',
-            boxShadow: isFemaleStreamer 
-              ? '0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(46, 204, 113, 0.35)' 
-              : '0 20px 60px rgba(0, 0, 0, 0.8)',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8)',
             color: '#fff',
             position: 'relative'
           }}>
@@ -645,94 +639,16 @@ export default function Home({ userId }: HomeProps) {
               <h3 style={{ color: '#ff6b6b', animation: 'fadeIn 0.3s ease' }}>{rejectMessage}</h3>
             ) : (
               <div style={{ animation: 'fadeIn 0.3s ease' }}>
-                {isFemaleStreamer ? (
-                  <>
-                    {/* VIP Çağrı Rozeti */}
-                    <div style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '5px 15px',
-                      borderRadius: '20px',
-                      background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(46, 204, 113, 0.25))',
-                      border: '1px solid #ffd700',
-                      color: '#ffd700',
-                      fontSize: '0.74rem',
-                      fontWeight: '900',
-                      marginBottom: '12px',
-                      boxShadow: '0 0 16px rgba(255, 215, 0, 0.3)'
-                    }}>
-                      <span>{t('streamer_incoming_call_badge', '🔥 VIP ERKEK ÜYE ARIYOR')}</span>
-                    </div>
-
-                    <h2 style={{ fontSize: '1.45rem', fontWeight: '900', margin: '0 0 8px', color: '#fff' }}>
-                      {t('streamer_incoming_call_title', 'Gelen Canlı Görüntülü Arama! 📞')}
-                    </h2>
-
-                    {/* Arayan Kullanıcı Kartı */}
-                    <div style={{
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      borderRadius: '18px',
-                      padding: '12px 14px',
-                      margin: '0 auto 14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      textAlign: 'left'
-                    }}>
-                      <div style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.4rem',
-                        boxShadow: '0 0 15px rgba(0, 242, 254, 0.4)'
-                      }}>
-                        👨
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '900', fontSize: '0.98rem', color: '#fff' }}>
-                          {t('home_preview_live_male')}
-                        </div>
-                        <div style={{ fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.65)', marginTop: '2px' }}>
-                          {t('home_preview_vip_member')} • Türkiye
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Net Kazanç Bildirimi */}
-                    <div style={{
-                      background: 'rgba(46, 204, 113, 0.14)',
-                      border: '1px solid rgba(46, 204, 113, 0.5)',
-                      borderRadius: '16px',
-                      padding: '12px 14px',
-                      marginBottom: '16px',
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px'
-                    }}>
-                      <span style={{ fontSize: '1.5rem' }}>💵</span>
-                      <div style={{ fontSize: '0.78rem', color: '#e8f8f0', lineHeight: '1.4', fontWeight: '700' }}>
-                        {t('streamer_call_earning_note', 'Bu görüşmede kaldığın her dakika hesabına +50 Elmas ($0.75 / 25₺) eklenecek!')}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h2 style={{ color: 'white', marginBottom: '10px' }}>{t('match_found_title')}</h2>
-                    <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '20px' }}>{t('match_found_desc')}</p>
-                  </>
-                )}
+                {/* Rastgele eşleşme onayı herkes için sade: "Gizemli biri bulundu". Kazanç kartı yalnızca doğrudan aramalarda (Layout / Chats). */}
+                <>
+                  <h2 style={{ color: 'white', marginBottom: '10px' }}>{t('match_found_title')}</h2>
+                  <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '20px' }}>{t('match_found_desc')}</p>
+                </>
                 
                 <div style={{
-                  fontSize: isFemaleStreamer ? '2.4rem' : '3rem',
+                  fontSize: '3rem',
                   fontWeight: '900',
-                  color: countdown <= 3 ? '#ff416c' : (isFemaleStreamer ? '#2ecc71' : '#00f2fe'),
+                  color: countdown <= 3 ? '#ff416c' : '#00f2fe',
                   marginBottom: '18px',
                   transition: 'color 0.3s ease'
                 }}>
@@ -753,7 +669,7 @@ export default function Home({ userId }: HomeProps) {
                       transition: '0.2s'
                     }}
                   >
-                    {isFemaleStreamer ? t('streamer_decline_call', 'Reddet 🔴') : t('match_skip')}
+                    {t('match_skip')}
                   </button>
                   <button 
                     onClick={handleAccept}
@@ -764,7 +680,7 @@ export default function Home({ userId }: HomeProps) {
                       borderRadius: '16px',
                       background: hasAccepted 
                         ? 'rgba(46, 204, 113, 0.3)' 
-                        : (isFemaleStreamer ? 'linear-gradient(135deg, #2ecc71, #11998e)' : 'linear-gradient(135deg, #11998e, #38ef7d)'),
+                        : 'linear-gradient(135deg, #11998e, #38ef7d)',
                       color: 'white',
                       border: 'none',
                       fontWeight: '900',
@@ -772,7 +688,7 @@ export default function Home({ userId }: HomeProps) {
                       boxShadow: hasAccepted ? 'none' : '0 6px 25px rgba(46, 204, 113, 0.5)'
                     }}
                   >
-                    {hasAccepted ? t('match_waiting') : (isFemaleStreamer ? t('streamer_accept_call', 'KABUL ET (+50 Elmas/dk) 🟢') : t('match_connect'))}
+                    {hasAccepted ? t('match_waiting') : t('match_connect')}
                   </button>
                 </div>
               </div>
