@@ -74,6 +74,7 @@ export default function Layout({ userId }: LayoutProps) {
   // Yayıncı canlı/mola durumu (presence üzerinden anlık). undefined = eski sürüm, bilgi yok
   const [presenceLive, setPresenceLive] = useState<Map<string, boolean | undefined>>(new Map());
   const presenceChannelRef = useRef<any>(null);
+  const presenceRetrackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileForPresenceRef = useRef<any>(null);
   profileForPresenceRef.current = profile;
   useEffect(() => {
@@ -535,8 +536,15 @@ export default function Layout({ userId }: LayoutProps) {
       const live = isStreamer && localStorage.getItem(`pyngoo_streamer_online_${userId}`) !== 'false';
       return { userId, online_at: new Date().toISOString(), live };
     };
+    // Hızlı art arda Canlı/Mola değişimlerinde Supabase Realtime'ın presence hız sınırına takılıp
+    // bazı güncellemelerin sunucuya işlenmeden düşmesini (ve karşı tarafta durumun eski haliyle
+    // donup kalmasını) önlemek için son değişikliği kısa bir gecikmeyle (debounce) gönderiyoruz.
     const retrackPresence = () => {
-      try { Promise.resolve(presenceChannel.track(buildPresencePayload())).catch(() => {}); } catch (_) {}
+      if (presenceRetrackTimerRef.current) clearTimeout(presenceRetrackTimerRef.current);
+      presenceRetrackTimerRef.current = setTimeout(() => {
+        presenceRetrackTimerRef.current = null;
+        try { Promise.resolve(presenceChannel.track(buildPresencePayload())).catch(() => {}); } catch (_) {}
+      }, 400);
     };
     window.addEventListener('pyngoo_streamer_online_changed', retrackPresence);
     window.addEventListener('pyngoo_streamer_updated', retrackPresence);
@@ -666,6 +674,10 @@ export default function Layout({ userId }: LayoutProps) {
       window.removeEventListener('pyngoo_streamer_online_changed', retrackPresence);
       window.removeEventListener('pyngoo_streamer_updated', retrackPresence);
       window.removeEventListener('pyngoo_presence_retrack', retrackPresence);
+      if (presenceRetrackTimerRef.current) {
+        clearTimeout(presenceRetrackTimerRef.current);
+        presenceRetrackTimerRef.current = null;
+      }
       presenceChannelRef.current = null;
       supabase.removeChannel(presenceChannel);
       supabase.removeChannel(paymentChannel);
