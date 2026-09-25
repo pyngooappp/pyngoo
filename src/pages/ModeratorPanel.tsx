@@ -77,7 +77,14 @@ export default function ModeratorPanel() {
   const [activeModUser, setActiveModUser] = useState<{ username: string; role: 'admin' | 'moderator'; id?: string } | null>(null);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutTime, setLockoutTime] = useState<number>(0);
-  const [modPasswordInput, setModPasswordInput] = useState('');
+  // Eski sürümlerde moderatör şifreleri panelde gösteriliyor ve tarayıcıda (localStorage) DÜZ METİN saklanıyordu.
+  // Artık hiç şifre üretilmez/saklanmaz; moderatör kendi hesabının e-posta ve şifresiyle girer. Kalmış eski kayıtları sil.
+  useEffect(() => {
+    try {
+      localStorage.removeItem('pyngoo_moderator_passwords');
+      localStorage.removeItem('pyngoo_revoked_moderators');
+    } catch (_) {}
+  }, []);
   const [showModLogModal, setShowModLogModal] = useState(false);
   const [auditLogsList, setAuditLogsList] = useState<any[]>(() => {
     try {
@@ -1705,49 +1712,14 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
         .select('id, display_name, gender, total_gold, is_moderator, role')
         .or('is_moderator.eq.true,role.eq.moderator,role.eq.admin');
       
-      let mods: any[] = data || [];
+      const mods: any[] = data || [];
 
-      // Karaliste / Yetkisi kaldırılanlar listesini al
-      let revokedMods: string[] = [];
-      try {
-        revokedMods = JSON.parse(localStorage.getItem('pyngoo_revoked_moderators') || '[]');
-      } catch (_) {}
-
-      // Yetkisi kaldırılan kullanıcıları filtreden geçir
-      mods = mods.filter(m => {
-        const nameKey = (m.display_name || '').toLowerCase();
-        if (revokedMods.includes(nameKey) || (m.id && revokedMods.includes(m.id))) {
-          return false;
-        }
-        return true;
-      });
-
-      // Ömer listede yoksa manuel ekle
-      const hasOmerInList = mods.some(m => (m.display_name || '').toLowerCase() === 'omer' || m.id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b');
-      if (!hasOmerInList) {
-        mods.unshift({
-          id: 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b',
-          display_name: 'omer',
-          role: 'admin',
-          is_moderator: true
-        });
-      }
-
-      let modPasswordMap: Record<string, string> = {};
-      try {
-        modPasswordMap = JSON.parse(localStorage.getItem('pyngoo_moderator_passwords') || '{}');
-      } catch (_) {}
-
-      // SADECE ÖMER ADMİN OLACAK. Diğer herkes (Apoo ve yeni eklenenler dahil) Moderatör olacak!
-      const enriched = mods.map(m => {
-        const nameKey = (m.display_name || '').toLowerCase();
-        const isSuperAdmin = nameKey === 'omer' || m.id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
-        return {
-          ...m,
-          role: isSuperAdmin ? 'admin' : 'moderator',
-          assignedPassword: isSuperAdmin ? 'Süper Admin' : (modPasswordMap[nameKey] || 'Tanımlı')
-        };
-      });
+      // Yetki KAYNAĞI veritabanıdır (profiles.role / is_moderator). Yönetici yalnızca role = 'admin' olan hesaptır;
+      // diğer herkes moderatör olarak listelenir. (Eskiden tarayıcıdaki kara liste ve sabit 'omer' kaydı listeyi değiştiriyordu.)
+      const enriched = mods.map(m => ({
+        ...m,
+        role: m.role === 'admin' ? 'admin' : 'moderator'
+      }));
 
       setModeratorsList(enriched);
     } catch (e) {
@@ -1757,7 +1729,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
     }
   };
 
-  // Kullanıcıya Moderatör Yetkisi ve Özel Şifre Ver
+  // Kullanıcıya Moderatör Yetkisi Ver (yetki veritabanında tutulur; şifre üretilmez)
   const handleAssignModerator = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
@@ -1765,14 +1737,9 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
       return;
     }
     const query = modUsernameInput.trim();
-    const pass = modPasswordInput.trim();
 
     if (!query) {
       setModErrorMsg('Lütfen kullanıcı adını girin!');
-      return;
-    }
-    if (!pass || pass.length < 4) {
-      setModErrorMsg('Lütfen bu moderatör için en az 4 karakterli özel bir şifre belirleyin!');
       return;
     }
 
@@ -1824,21 +1791,8 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
           .eq('id', userRecord.id);
       }
 
-      // Moderatör şifresini kaydet ve revoked listesinden temizle
-      const cleanName = userRecord.display_name.toLowerCase();
-      try {
-        const modPasswordMap = JSON.parse(localStorage.getItem('pyngoo_moderator_passwords') || '{}');
-        modPasswordMap[cleanName] = pass;
-        localStorage.setItem('pyngoo_moderator_passwords', JSON.stringify(modPasswordMap));
-
-        const revokedMods: string[] = JSON.parse(localStorage.getItem('pyngoo_revoked_moderators') || '[]');
-        const updatedRevoked = revokedMods.filter(r => r !== cleanName && r !== userRecord.id);
-        localStorage.setItem('pyngoo_revoked_moderators', JSON.stringify(updatedRevoked));
-      } catch (_) {}
-
-      setModSuccessMsg(`✅ "${userRecord.display_name}" kullanıcısına şifresi (${pass}) ile başarıyla Moderatör yetkisi tanımlandı!`);
+      setModSuccessMsg(`✅ "${userRecord.display_name}" kullanıcısına Moderatör yetkisi tanımlandı. Kullanıcı, kendi hesabının e-posta ve şifresiyle panele giriş yapar (bu ekranda hiçbir şifre gösterilmez veya saklanmaz).`);
       setModUsernameInput('');
-      setModPasswordInput('');
       fetchModerators();
 
       logModeratorAction('mod_assign', userRecord.display_name, `Yeni moderatör tanımlandı: ${userRecord.display_name}`);
@@ -1854,7 +1808,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
       return;
     }
     const cleanTargetName = (targetName || '').trim().toLowerCase();
-    if (cleanTargetName === 'omer' || targetId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b') {
+    if (cleanTargetName === 'omer' || targetId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || targetId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c') {
       await showAlert('Ana Yönetici (Ömer) hesabının yetkisi kaldırılamaz!', 'İşlem Engellendi');
       return;
     }
@@ -1896,20 +1850,9 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
         }
       }
 
-      // 3. LocalStorage yedeğini temizle ve karaliste (revoked) verisine ekle
+      // 3. Yetki veritabanında kaldırıldı (kara liste / şifre tarayıcıda tutulmaz)
+      // Yetki veritabanında kaldırıldı; tarayıcıda şifre/kara liste tutulmaz.
       try {
-        const modPasswordMap = JSON.parse(localStorage.getItem('pyngoo_moderator_passwords') || '{}');
-        delete modPasswordMap[cleanTargetName];
-        localStorage.setItem('pyngoo_moderator_passwords', JSON.stringify(modPasswordMap));
-
-        const revokedMods: string[] = JSON.parse(localStorage.getItem('pyngoo_revoked_moderators') || '[]');
-        if (cleanTargetName && !revokedMods.includes(cleanTargetName)) {
-          revokedMods.push(cleanTargetName);
-        }
-        if (targetId && !revokedMods.includes(targetId)) {
-          revokedMods.push(targetId);
-        }
-        localStorage.setItem('pyngoo_revoked_moderators', JSON.stringify(revokedMods));
         if (targetId) localStorage.removeItem(`pyngoo_role_${targetId}`);
       } catch (_) {}
 
@@ -1919,7 +1862,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
       ));
       setModSuccessMsg(`"${targetName}" kullanıcısının yetkisi başarıyla kaldırıldı.`);
       
-      // 5. Yeniden senkronize et (fetchModerators da revoked listesini kontrol eder)
+      // 5. Listeyi veritabanından yeniden oku
       setTimeout(() => {
         fetchModerators();
       }, 400);
@@ -2610,28 +2553,17 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
               Burada yetki verdiğiniz kullanıcıların profillerinde otomatik olarak <b>Moderatör & Yönetim Paneli</b> menüsü açılır. Yetkisi olmayan normal kullanıcılar bu menüyü asla göremez.
             </p>
 
-            {/* Yetki & Özel Şifre Tanımlama Formu */}
+            {/* Moderatör Yetkilendirme Formu (şifre yok: kullanıcı kendi hesabıyla girer) */}
             <form onSubmit={handleAssignModerator} style={{ marginBottom: '20px', background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(243, 156, 18, 0.2)' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', marginBottom: '10px', color: '#f39c12' }}>
-                Yeni Moderatör & Özel Şifre Tanımla:
+                Yeni Moderatör Tanımla (kullanıcı kendi hesabının şifresiyle girer):
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <input
                   type="text"
-                  placeholder="Moderatör Kullanıcı Adı (Örn: elfi, apoo)"
+                  placeholder="Moderatör olacak kullanıcının kullanıcı adı"
                   value={modUsernameInput}
                   onChange={(e) => setModUsernameInput(e.target.value)}
-                  style={{
-                    width: '100%', padding: '12px 16px', borderRadius: '12px',
-                    background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff', fontSize: '0.9rem', outline: 'none'
-                  }}
-                />
-                <input
-                  type="text"
-                  placeholder="Moderatöre Verilecek Şifre (Örn: Elfi2026!)"
-                  value={modPasswordInput}
-                  onChange={(e) => setModPasswordInput(e.target.value)}
                   style={{
                     width: '100%', padding: '12px 16px', borderRadius: '12px',
                     background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)',
@@ -2647,7 +2579,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
                   }}
                 >
-                  <UserCheck size={18} /> Moderatör Şifresini Oluştur & Yetkilendir
+                  <UserCheck size={18} /> Moderatör Yetkilendir
                 </button>
               </div>
             </form>
@@ -2673,12 +2605,12 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
               <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Yükleniyor...</p>
             ) : moderatorsList.length === 0 ? (
               <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', textAlign: 'center' }}>
-                Henüz kayıtlı başka moderatör bulunmuyor. Yukarıdaki formdan istediğiniz kullanıcı adına özel şifre ile moderatörlük tanımlayabilirsiniz.
+                Henüz kayıtlı başka moderatör bulunmuyor. Yukarıdaki formdan istediğiniz kullanıcı adına moderatörlük tanımlayabilirsiniz.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '220px', overflowY: 'auto' }}>
                 {moderatorsList.map((m: any) => {
-                  const isOwner = (m.display_name || '').toLowerCase() === 'omer' || m.id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b';
+                  const isOwner = m.role === 'admin';
                   return (
                     <div
                       key={m.id || m.display_name}
@@ -2696,9 +2628,6 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
                           <span style={{ fontSize: '0.72rem', color: isOwner ? '#f39c12' : '#00f2fe', background: isOwner ? 'rgba(243, 156, 18, 0.15)' : 'rgba(0, 242, 254, 0.15)', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
                             {isOwner ? '👑 Admin' : '🛡️ Moderatör'}
                           </span>
-                        </div>
-                        <div style={{ fontSize: '0.76rem', color: '#00f2fe', marginTop: '4px', fontWeight: '600' }}>
-                          🔑 Şifre: <code>{m.assignedPassword || 'Atanmış'}</code>
                         </div>
                       </div>
                       {isOmer && !isOwner && (
