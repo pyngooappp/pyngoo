@@ -191,7 +191,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     setApplePurchaseState('processing');
     soundManager.playCoinSound();
 
-    const outcome = await purchaseGoldProduct(selectedPackage.appleProductId);
+    const outcome = await purchaseGoldProduct(selectedPackage.appleProductId, userId);
 
     if (outcome.status === 'cancelled') {
       setApplePurchaseState('idle');

@@ -24,6 +24,7 @@ const REVENUECAT_IOS_API_KEY = (import.meta.env.VITE_REVENUECAT_IOS_API_KEY || '
 
 let PurchasesRef: any = null;
 let configuredForUserId: string | null = null;
+let configuringPromise: Promise<void> | null = null;
 
 async function getPurchases(): Promise<any> {
   if (!PurchasesRef) {
@@ -31,6 +32,38 @@ async function getPurchases(): Promise<any> {
     PurchasesRef = mod.Purchases;
   }
   return PurchasesRef;
+}
+
+// Native köprü yanıt vermezse (RevenueCat eklentisi ile bir sorun olursa) sonsuza kadar
+// beklemek yerine belirli sürede net bir hata fırlatır.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timeout:${label}`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
+// configure() çağrısını (henüz yapılmadıysa veya önceki deneme hiç bitmediyse) garanti eder.
+async function ensureConfigured(userId: string): Promise<void> {
+  if (configuredForUserId === userId) return;
+  if (!configuringPromise) {
+    configuringPromise = (async () => {
+      const Purchases = await getPurchases();
+      await withTimeout(
+        Purchases.configure({ apiKey: REVENUECAT_IOS_API_KEY, appUserID: userId }),
+        15000,
+        'configure'
+      );
+      configuredForUserId = userId;
+    })().catch((err) => {
+      configuringPromise = null; // basarisiz olursa bir sonraki denemede tekrar dene
+      throw err;
+    });
+  }
+  await configuringPromise;
 }
 
 // RevenueCat anahtarı .env'e girilmeden IAP hiçbir şekilde devreye girmez (uygulama çökmez,
@@ -42,11 +75,9 @@ export function iapAvailable(): boolean {
 // Uygulama açılışında / kullanıcı giriş yaptığında bir kere çağrılır (Market.tsx mount).
 // appUserID = Supabase kullanıcı UUID'si: webhook bu kimlikle profiles.id eşleştirir.
 export async function initIAP(userId: string): Promise<void> {
-  if (!iapAvailable() || !userId || configuredForUserId === userId) return;
+  if (!iapAvailable() || !userId) return;
   try {
-    const Purchases = await getPurchases();
-    await Purchases.configure({ apiKey: REVENUECAT_IOS_API_KEY, appUserID: userId });
-    configuredForUserId = userId;
+    await ensureConfigured(userId);
   } catch (err) {
     console.error('RevenueCat baslatma hatasi:', err);
   }
@@ -57,15 +88,29 @@ export type IapPurchaseOutcome =
   | { status: 'cancelled' }
   | { status: 'error'; message: string };
 
-export async function purchaseGoldProduct(productId: string): Promise<IapPurchaseOutcome> {
+export async function purchaseGoldProduct(productId: string, userId: string): Promise<IapPurchaseOutcome> {
   if (!iapAvailable()) return { status: 'error', message: 'not_available' };
   try {
+    try {
+      await ensureConfigured(userId);
+    } catch (cfgErr: any) {
+      return { status: 'error', message: `not_configured: ${cfgErr?.message || cfgErr}` };
+    }
+
     const Purchases = await getPurchases();
-    const { products } = await Purchases.getProducts({ productIdentifiers: [productId] });
+    const { products } = await withTimeout<any>(
+      Purchases.getProducts({ productIdentifiers: [productId] }),
+      25000,
+      'getProducts'
+    );
     const product = products && products[0];
     if (!product) return { status: 'error', message: 'product_not_found' };
 
-    const result = await Purchases.purchaseStoreProduct({ product });
+    const result = await withTimeout<any>(
+      Purchases.purchaseStoreProduct({ product }),
+      90000,
+      'purchaseStoreProduct'
+    );
     return { status: 'success', productId: result.productIdentifier };
   } catch (err: any) {
     if (err?.userCancelled === true || err?.code === '1' /* PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR */) {
