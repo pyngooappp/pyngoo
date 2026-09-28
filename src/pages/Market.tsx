@@ -76,7 +76,19 @@ export default function Market({ userId }: MarketProps) {
   const [appleRestoreMsg, setAppleRestoreMsg] = useState<string | null>(null);
   // Ham hata metni (Mac/Xcode olmadan da telefon ekranından teşhis edebilmek için).
   const [appleErrorDetail, setAppleErrorDetail] = useState<string | null>(null);
+  // Salt JS/React tabanlı canlı sayaç (native/Promise'lerden tamamen bağımsız). Bu bile
+  // ilerlemiyorsa sorun bizim kodda değil, o an JS motorunun donmasındadır.
+  const [appleTickSeconds, setAppleTickSeconds] = useState(0);
   const applePendingRef = useRef<GoldPackage | null>(null);
+
+  useEffect(() => {
+    if (applePurchaseState !== 'processing') {
+      setAppleTickSeconds(0);
+      return;
+    }
+    const iv = setInterval(() => setAppleTickSeconds((s) => s + 1), 1000);
+    return () => clearInterval(iv);
+  }, [applePurchaseState]);
 
   // NOT: Sayfa açılışında otomatik initIAP() ÇAĞRILMIYOR (bilerek). Bir teoriye göre bu
   // erken çağrı native tarafta takılıp kalıyor ve RevenueCat'in iç kuyruğu, kullanıcı
@@ -325,7 +337,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
           {applePurchaseState === 'processing' ? (
             <>
               <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }} />
-              <span>{t('market_apple_processing')}</span>
+              <span>{t('market_apple_processing')} ({appleTickSeconds}sn)</span>
             </>
           ) : (
             <>
