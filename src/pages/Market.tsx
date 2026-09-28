@@ -191,20 +191,38 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     setApplePurchaseState('processing');
     soundManager.playCoinSound();
 
-    const outcome = await purchaseGoldProduct(selectedPackage.appleProductId, userId);
+    const reportError = (msg: string) => {
+      setApplePurchaseState('error');
+      setAppleErrorDetail(`[${selectedPackage.appleProductId}] ${msg}`);
+      try {
+        sendTelegramAlert(
+          `⚠️ <b>APPLE IAP HATASI</b>\n👤 ${profile?.display_name || 'Kullanıcı'} (<code>${userId.slice(0, 8)}</code>)\n🪙 <b>Ürün:</b> ${selectedPackage.appleProductId}\n❗ <b>Hata:</b> ${msg}`
+        );
+      } catch (_) {}
+    };
+
+    // Ekstra güvence: purchaseGoldProduct içindeki zaman aşımları herhangi bir sebeple
+    // devreye girmezse bile, burada 35 sn sonra kesin bir hata gösterilir (buton sonsuza
+    // kadar "işleniyor" durumunda kalmaz).
+    let outcome: Awaited<ReturnType<typeof purchaseGoldProduct>>;
+    try {
+      outcome = await Promise.race([
+        purchaseGoldProduct(selectedPackage.appleProductId, userId),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('outer_timeout_35s')), 35000)
+        ),
+      ]);
+    } catch (err: any) {
+      reportError(`unhandled: ${err?.message || String(err)}`);
+      return;
+    }
 
     if (outcome.status === 'cancelled') {
       setApplePurchaseState('idle');
       return;
     }
     if (outcome.status === 'error') {
-      setApplePurchaseState('error');
-      setAppleErrorDetail(`[${selectedPackage.appleProductId}] ${outcome.message}`);
-      try {
-        sendTelegramAlert(
-          `⚠️ <b>APPLE IAP HATASI</b>\n👤 ${profile?.display_name || 'Kullanıcı'} (<code>${userId.slice(0, 8)}</code>)\n🪙 <b>Ürün:</b> ${selectedPackage.appleProductId}\n❗ <b>Hata:</b> ${outcome.message}`
-        );
-      } catch (_) {}
+      reportError(outcome.message);
       return;
     }
 
