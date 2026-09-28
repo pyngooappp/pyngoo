@@ -209,7 +209,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       outcome = await Promise.race([
         purchaseGoldProduct(selectedPackage.appleProductId, userId),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('outer_timeout_35s')), 35000)
+          setTimeout(() => reject(new Error('outer_timeout_55s')), 55000)
         ),
       ]);
     } catch (err: any) {
