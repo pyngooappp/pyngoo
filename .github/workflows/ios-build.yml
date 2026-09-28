@@ -26,6 +26,7 @@ jobs:
           VITE_SUPABASE_URL: https://rdqcwzosmikusketghyq.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcWN3em9zbWlrdXNrZXRnaHlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDY2OTQsImV4cCI6MjEwMjcyMjY5NH0.bWBNSXqz3aLCsst0JxBTLt1tbFfCygv0WzUeGasvtdg
           VITE_AGORA_APP_ID: 42f01590d5f14201a201b5d85e2f944a
+          VITE_REVENUECAT_IOS_API_KEY: ${{ secrets.REVENUECAT_IOS_API_KEY }}
         run: npx vite build
 
       - name: Sync Capacitor iOS

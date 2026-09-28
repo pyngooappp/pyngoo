@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,7 @@ import { logTransaction } from '../utils/transactionService';
 import { processCryptoPayment } from '../utils/cryptoVerifyService';
 import { admobService } from '../utils/admobService';
 import { LegalModal, type LegalModalType } from '../components/LegalModal';
+import { isIosNative, iapAvailable, initIAP, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
 
 interface MarketProps {
   userId: string;
@@ -44,6 +45,8 @@ interface GoldPackage {
   isPopular?: boolean;
   isBestValue?: boolean;
   isVip?: boolean;
+  // Apple App Store Connect'teki In-App Purchase ürün kimliği (yalnızca iOS'ta kullanılır).
+  appleProductId?: string;
   iconType: 'pouch' | 'bag' | 'chest' | 'vault' | 'crown' | 'fortune';
 }
 
@@ -64,6 +67,25 @@ export default function Market({ userId }: MarketProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<GoldPackage | null>(null);
   const [legalModalType, setLegalModalType] = useState<LegalModalType>(null);
+
+  // --- iOS Apple In-App Purchase durumları ---
+  // 'waiting_credit': Apple ödemeyi onayladı, altın RevenueCat webhook üzerinden sunucuda ekleniyor.
+  // 'delayed': 20 sn geçti, kredi henüz gelmedi (yine de işlem kaybolmaz, admin_notes'ta kayıtlıdır).
+  const [applePurchaseState, setApplePurchaseState] = useState<'idle' | 'processing' | 'waiting_credit' | 'delayed' | 'error'>('idle');
+  const [appleRestoreMsg, setAppleRestoreMsg] = useState<string | null>(null);
+  const applePendingRef = useRef<GoldPackage | null>(null);
+
+  useEffect(() => {
+    if (isIosNative() && userId) initIAP(userId);
+  }, [userId]);
+
+  useEffect(() => {
+    if (applePurchaseState !== 'waiting_credit') return;
+    const timer = setTimeout(() => {
+      setApplePurchaseState((s) => (s === 'waiting_credit' ? 'delayed' : s));
+    }, 20000);
+    return () => clearTimeout(timer);
+  }, [applePurchaseState]);
 
   // Kripto (USDT - TRC20) Durumları (Binance Global)
   const CRYPTO_WALLET = 'TDwYUwBrV6mSmJvmcP93VSTnBtWrXnpFsu';
@@ -124,6 +146,8 @@ export default function Market({ userId }: MarketProps) {
     setTransferSubmitted(false);
     setCryptoSubmitted(false);
     setValidationError(null);
+    setApplePurchaseState('idle');
+    setAppleRestoreMsg(null);
     if (!isTr && paymentMethod === 'havale_papara') {
       setPaymentMethod('card');
     }
@@ -154,6 +178,131 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
     const popupFeatures = `width=${width},height=${height},left=${left},top=${top},status=no,menubar=no,toolbar=no,location=no,scrollbars=yes`;
     window.open(targetUrl, 'PyngooShopierPay', popupFeatures);
+  };
+
+  // --- iOS: Apple In-App Purchase satın alma akışı (App Store Review 3.1.1) ---
+  const handleApplePurchase = async () => {
+    if (!selectedPackage?.appleProductId) return;
+    setAppleRestoreMsg(null);
+    setApplePurchaseState('processing');
+    soundManager.playCoinSound();
+
+    const outcome = await purchaseGoldProduct(selectedPackage.appleProductId);
+
+    if (outcome.status === 'cancelled') {
+      setApplePurchaseState('idle');
+      return;
+    }
+    if (outcome.status === 'error') {
+      setApplePurchaseState('error');
+      return;
+    }
+
+    // Apple ödemeyi onayladı. Altın İSTEMCİDE eklenmez; RevenueCat webhook -> credit_iap_gold
+    // sunucuda ekler, biz bunu profiles realtime aboneliğinden yakalarız (bkz. yukarıdaki profileChan).
+    try {
+      sendTelegramAlert(
+        `🍏 <b>APPLE IAP SATIN ALMA ONAYLANDI</b>\n👤 <b>Kullanıcı:</b> ${profile?.display_name || 'Kullanıcı'} (<code>${userId.slice(0, 8)}</code>)\n🪙 <b>Ürün:</b> ${selectedPackage.appleProductId}`
+      );
+    } catch (_) {}
+    applePendingRef.current = selectedPackage;
+    setApplePurchaseState('waiting_credit');
+  };
+
+  const handleAppleRestore = async () => {
+    setAppleRestoreMsg(null);
+    const res = await restoreGoldPurchases();
+    setAppleRestoreMsg(res.success ? t('market_restore_success') : t('market_restore_error'));
+  };
+
+  const renderApplePurchasePanel = () => {
+    if (!selectedPackage) return null;
+
+    if (!iapAvailable()) {
+      return (
+        <div style={{
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '16px', padding: '16px', textAlign: 'center',
+          color: 'rgba(255,255,255,0.7)', fontSize: '0.82rem', lineHeight: '1.4'
+        }}>
+          {t('market_apple_unavailable')}
+        </div>
+      );
+    }
+
+    if (applePurchaseState === 'waiting_credit' || applePurchaseState === 'delayed') {
+      return (
+        <div style={{
+          background: 'rgba(0, 230, 118, 0.14)', border: '1.5px solid #00e676',
+          borderRadius: '16px', padding: '16px', textAlign: 'center', animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🍏</div>
+          <h4 style={{ color: '#00e676', margin: '0 0 4px 0', fontSize: '1rem', fontWeight: '800' }}>
+            {t('market_apple_success_title')}
+          </h4>
+          <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontSize: '0.78rem', lineHeight: '1.4' }}>
+            {applePurchaseState === 'delayed' ? t('market_apple_delayed_desc') : t('market_apple_success_desc')}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {applePurchaseState === 'error' && (
+          <div style={{
+            background: 'rgba(255, 65, 108, 0.22)', border: '1.5px solid #ff416c',
+            borderRadius: '12px', padding: '10px 14px', color: '#fff',
+            fontSize: '0.78rem', fontWeight: '800', textAlign: 'center'
+          }}>
+            {t('market_apple_error')}
+          </div>
+        )}
+
+        <button
+          onClick={handleApplePurchase}
+          disabled={applePurchaseState === 'processing'}
+          style={{
+            width: '100%',
+            background: 'linear-gradient(135deg, #ffffff 0%, #d1d1d6 100%)',
+            border: 'none', color: '#000', padding: '14px', borderRadius: '16px',
+            fontWeight: '900', fontSize: '0.95rem',
+            cursor: applePurchaseState === 'processing' ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            boxShadow: '0 6px 20px rgba(255,255,255,0.25)', transition: 'all 0.2s ease'
+          }}
+        >
+          {applePurchaseState === 'processing' ? (
+            <>
+              <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }} />
+              <span>{t('market_apple_processing')}</span>
+            </>
+          ) : (
+            <>
+              <ShieldCheck size={18} color="#000" />
+              <span>
+                {t('market_apple_purchase_button', { price: isTr ? selectedPackage.priceTr : selectedPackage.priceEn })}
+              </span>
+            </>
+          )}
+        </button>
+
+        <span
+          onClick={handleAppleRestore}
+          style={{
+            fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', textAlign: 'center',
+            textDecoration: 'underline', cursor: 'pointer'
+          }}
+        >
+          {t('market_restore_purchases')}
+        </span>
+        {appleRestoreMsg && (
+          <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+            {appleRestoreMsg}
+          </span>
+        )}
+      </div>
+    );
   };
 
   const handleCardSubmit = () => {
@@ -533,6 +682,17 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, (payload: any) => {
         if (payload?.new) {
           setProfile(payload.new);
+          // Bekleyen bir Apple satın alması varsa, bu profil güncellemesi RevenueCat webhook'unun
+          // altını eklediği andır (polling YOK — doğrudan realtime üzerinden yakalanır).
+          if (applePendingRef.current) {
+            const pkg = applePendingRef.current;
+            applePendingRef.current = null;
+            setApplePurchaseState('idle');
+            setSelectedPackage(null);
+            soundManager.playCoinSound();
+            setPurchaseSuccess(pkg);
+            setTimeout(() => setPurchaseSuccess(null), 3000);
+          }
         }
       })
       .subscribe();
@@ -562,6 +722,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       oldPriceTr: '249.99 ₺',
       oldPriceEn: '$6.99',
       discountBadge: t('market_discount_badge', { pct: 45 }),
+      appleProductId: 'com.pyngoo.gold.650',
       iconType: 'pouch'
     },
     {
@@ -576,6 +737,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       oldPriceEn: '$13.99',
       discountBadge: t('market_discount_badge', { pct: 50 }),
       isPopular: true,
+      appleProductId: 'com.pyngoo.gold.1400',
       iconType: 'bag'
     },
     {
@@ -590,6 +752,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       oldPriceEn: '$35.99',
       discountBadge: t('market_discount_badge', { pct: 55 }),
       isBestValue: true,
+      appleProductId: 'com.pyngoo.gold.3800',
       iconType: 'chest'
     },
     {
@@ -604,6 +767,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       oldPriceEn: '$79.99',
       discountBadge: t('market_discount_badge', { pct: 60 }),
       isVip: true,
+      appleProductId: 'com.pyngoo.gold.8500',
       iconType: 'vault'
     },
     {
@@ -618,6 +782,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       oldPriceEn: '$169.99',
       discountBadge: t('market_discount_badge', { pct: 65 }),
       isVip: true,
+      appleProductId: 'com.pyngoo.gold.18000',
       iconType: 'crown'
     },
     {
@@ -632,6 +797,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       oldPriceEn: '$379.99',
       discountBadge: t('market_discount_badge', { pct: 70 }),
       isVip: true,
+      appleProductId: 'com.pyngoo.gold.40000',
       iconType: 'fortune'
     },
     {
@@ -646,6 +812,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       oldPriceEn: '$749.99',
       discountBadge: t('market_discount_badge', { pct: 75 }),
       isVip: true,
+      appleProductId: 'com.pyngoo.gold.85000',
       iconType: 'fortune'
     }
   ];
@@ -1009,6 +1176,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                 oldPriceTr: '299.99 ₺',
                 oldPriceEn: '$9.99',
                 discountBadge: t('market_badge_discount_70'),
+                appleProductId: 'com.pyngoo.gold.vip_pass',
                 iconType: 'crown'
               });
             }}
@@ -1050,7 +1218,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       {selectedPackage && (
         <div
           onClick={() => {
-            if (!isProcessing) setSelectedPackage(null);
+            if (!isProcessing && applePurchaseState !== 'processing') setSelectedPackage(null);
           }}
           style={{
             position: 'fixed', inset: 0,
@@ -1079,7 +1247,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                 {t('market_modal_title')}
               </h3>
               <button
-                disabled={isProcessing}
+                disabled={isProcessing || applePurchaseState === 'processing'}
                 onClick={() => setSelectedPackage(null)}
                 style={{
                   width: '32px', height: '32px', borderRadius: '50%',
@@ -1119,8 +1287,13 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               </div>
             </div>
 
-            {/* Ödeme Yöntemi Seçim Sekmeleri (Shopier Kart vs Kripto vs IBAN / Papara) */}
-            {/* Ödeme Yöntemi Seçim Sekmeleri (Türkçe için 3 Kolon, Diğer Diller için 2 Kolon) */}
+            {isIosNative() ? (
+              /* iOS: Apple App Store Review 3.1.1 uyarınca dış ödeme yöntemleri (kart/kripto/havale)
+                 TAMAMEN GİZLENİR; yerine yalnızca Apple'ın kendi satın alma akışı gösterilir. */
+              <div style={{ marginBottom: '16px' }}>
+                {renderApplePurchasePanel()}
+              </div>
+            ) : (
             <div style={{ marginBottom: '16px' }}>
               <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '8px' }}>
                 {t('market_modal_select_method', 'Select Payment Method:')}
@@ -1482,8 +1655,9 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                 </div>
               )}
             </div>
+            )}
 
-            {cardSubmitted ? (
+            {!isIosNative() && (cardSubmitted ? (
               <div style={{
                 background: 'rgba(255, 215, 0, 0.12)', border: '1.5px solid #ffd700',
                 borderRadius: '18px', padding: '16px', textAlign: 'center', animation: 'fadeIn 0.2s ease'
@@ -1627,7 +1801,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                   )}
                 </button>
               </div>
-            )}
+            ))}
 
             {/* İade Politikası & Tüketici Güvencesi */}
             <div style={{ marginTop: '12px', textAlign: 'center' }}>
