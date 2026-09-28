@@ -90,34 +90,51 @@ export type IapPurchaseOutcome =
 
 export async function purchaseGoldProduct(productId: string, userId: string): Promise<IapPurchaseOutcome> {
   if (!iapAvailable()) return { status: 'error', message: 'not_available' };
+  // Iz (breadcrumb): hangi adima kadar ilerledigimizi hata mesajina ekleriz, boyle
+  // Mac/konsol olmadan da TAM olarak nerede tikandigini goruruz.
+  const steps: string[] = [];
+  const mark = (s: string) => steps.push(s);
   try {
+    mark('start');
     try {
       await ensureConfigured(userId);
+      mark('configured');
     } catch (cfgErr: any) {
-      return { status: 'error', message: `not_configured: ${cfgErr?.message || cfgErr}` };
+      mark(`configure_failed:${cfgErr?.message || cfgErr}`);
+      return { status: 'error', message: `steps=${steps.join('>')}` };
     }
 
     const Purchases = await getPurchases();
+    mark('bridge_loaded');
+
+    // Saglik kontrolu: en basit native cagri (urun/magaza gerektirmez). Bu bile
+    // takilirsa sorun urunlerde/Offerings'te degil, koprunun kendisindedir.
+    await withTimeout<any>(Purchases.getCustomerInfo(), 10000, 'getCustomerInfo');
+    mark('customerInfo_ok');
+
     const { products } = await withTimeout<any>(
       Purchases.getProducts({ productIdentifiers: [productId] }),
       25000,
       'getProducts'
     );
+    mark(`getProducts_ok:${products?.length ?? 0}`);
     const product = products && products[0];
-    if (!product) return { status: 'error', message: 'product_not_found' };
+    if (!product) return { status: 'error', message: `steps=${steps.join('>')} | product_not_found` };
 
     const result = await withTimeout<any>(
       Purchases.purchaseStoreProduct({ product }),
       90000,
       'purchaseStoreProduct'
     );
+    mark('purchase_ok');
     return { status: 'success', productId: result.productIdentifier };
   } catch (err: any) {
     if (err?.userCancelled === true || err?.code === '1' /* PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR */) {
       return { status: 'cancelled' };
     }
-    console.error('Apple satin alma hatasi:', err);
-    return { status: 'error', message: err?.message || 'unknown' };
+    const msg = err?.message || String(err);
+    console.error('Apple satin alma hatasi:', steps.join('>'), err);
+    return { status: 'error', message: `steps=${steps.join('>')} | ${msg}` };
   }
 }
 
