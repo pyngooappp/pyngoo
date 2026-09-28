@@ -73,6 +73,8 @@ export default function Market({ userId }: MarketProps) {
   // 'delayed': 20 sn geçti, kredi henüz gelmedi (yine de işlem kaybolmaz, admin_notes'ta kayıtlıdır).
   const [applePurchaseState, setApplePurchaseState] = useState<'idle' | 'processing' | 'waiting_credit' | 'delayed' | 'error'>('idle');
   const [appleRestoreMsg, setAppleRestoreMsg] = useState<string | null>(null);
+  // Ham hata metni (Mac/Xcode olmadan da telefon ekranından teşhis edebilmek için).
+  const [appleErrorDetail, setAppleErrorDetail] = useState<string | null>(null);
   const applePendingRef = useRef<GoldPackage | null>(null);
 
   useEffect(() => {
@@ -148,6 +150,7 @@ export default function Market({ userId }: MarketProps) {
     setValidationError(null);
     setApplePurchaseState('idle');
     setAppleRestoreMsg(null);
+    setAppleErrorDetail(null);
     if (!isTr && paymentMethod === 'havale_papara') {
       setPaymentMethod('card');
     }
@@ -184,6 +187,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
   const handleApplePurchase = async () => {
     if (!selectedPackage?.appleProductId) return;
     setAppleRestoreMsg(null);
+    setAppleErrorDetail(null);
     setApplePurchaseState('processing');
     soundManager.playCoinSound();
 
@@ -195,6 +199,12 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     }
     if (outcome.status === 'error') {
       setApplePurchaseState('error');
+      setAppleErrorDetail(`[${selectedPackage.appleProductId}] ${outcome.message}`);
+      try {
+        sendTelegramAlert(
+          `⚠️ <b>APPLE IAP HATASI</b>\n👤 ${profile?.display_name || 'Kullanıcı'} (<code>${userId.slice(0, 8)}</code>)\n🪙 <b>Ürün:</b> ${selectedPackage.appleProductId}\n❗ <b>Hata:</b> ${outcome.message}`
+        );
+      } catch (_) {}
       return;
     }
 
@@ -255,7 +265,15 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
             borderRadius: '12px', padding: '10px 14px', color: '#fff',
             fontSize: '0.78rem', fontWeight: '800', textAlign: 'center'
           }}>
-            {t('market_apple_error')}
+            <div>{t('market_apple_error')}</div>
+            {appleErrorDetail && (
+              <div style={{
+                marginTop: '6px', fontWeight: '400', fontFamily: 'monospace',
+                fontSize: '0.68rem', color: 'rgba(255,255,255,0.85)', wordBreak: 'break-word'
+              }}>
+                {appleErrorDetail}
+              </div>
+            )}
           </div>
         )}
 
