@@ -25,7 +25,7 @@ import { logTransaction } from '../utils/transactionService';
 import { processCryptoPayment } from '../utils/cryptoVerifyService';
 import { admobService } from '../utils/admobService';
 import { LegalModal, type LegalModalType } from '../components/LegalModal';
-import { isIosNative, iapAvailable, initIAP, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
+import { isIosNative, iapAvailable, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
 
 interface MarketProps {
   userId: string;
@@ -77,9 +77,10 @@ export default function Market({ userId }: MarketProps) {
   const [appleErrorDetail, setAppleErrorDetail] = useState<string | null>(null);
   const applePendingRef = useRef<GoldPackage | null>(null);
 
-  useEffect(() => {
-    if (isIosNative() && userId) initIAP(userId);
-  }, [userId]);
+  // NOT: Sayfa açılışında otomatik initIAP() ÇAĞRILMIYOR (bilerek). Bir teoriye göre bu
+  // erken çağrı native tarafta takılıp kalıyor ve RevenueCat'in iç kuyruğu, kullanıcı
+  // butona bastığında yapılan asıl isteği o takılı işlemin arkasında bekletiyor olabilir.
+  // configure() artık YALNIZCA butona basıldığında (purchaseGoldProduct içinden) çağrılır.
 
   useEffect(() => {
     if (applePurchaseState !== 'waiting_credit') return;
