@@ -13,25 +13,22 @@
 // kendiliğinden güncellenir (ek bir polling YOK — Supabase Nano kuralına uygun).
 
 import { Capacitor } from '@capacitor/core';
-// NOT: @revenuecat/purchases-capacitor BİLEREK statik olarak import edilmiyor (yalnızca
-// aşağıdaki getPurchases() içinde dynamic import ile). Web/Android bundle'ına hiç girmesin
-// diye — RevenueCat'in PURCHASE_CANCELLED_ERROR kodu ("1") bu yüzden string literal olarak kontrol edilir.
+// NOT: Daha once bilerek dynamic import() kullaniyordu (web/Android bundle'ini kucultmek icin).
+// TANI: ic zaman asimlari (10-25 sn) hic tetiklenmeden yalnizca en distaki 55 sn'lik zaman
+// asimi ateslendi — bu, dynamic import()'un cihazda hic tamamlanmadan takildigini gosteriyor
+// (fonksiyona daha girmeden). Statik import'a gecerek bunu tamamen ortadan kaldiriyoruz.
+import { Purchases } from '@revenuecat/purchases-capacitor';
 
 export const isIosNative = (): boolean =>
   Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
 
 const REVENUECAT_IOS_API_KEY = (import.meta.env.VITE_REVENUECAT_IOS_API_KEY || '').trim();
 
-let PurchasesRef: any = null;
 let configuredForUserId: string | null = null;
 let configuringPromise: Promise<void> | null = null;
 
-async function getPurchases(): Promise<any> {
-  if (!PurchasesRef) {
-    const mod = await import('@revenuecat/purchases-capacitor');
-    PurchasesRef = mod.Purchases;
-  }
-  return PurchasesRef;
+async function getPurchases(): Promise<typeof Purchases> {
+  return Purchases;
 }
 
 // Native köprü yanıt vermezse (RevenueCat eklentisi ile bir sorun olursa) sonsuza kadar
