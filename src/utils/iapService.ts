@@ -93,6 +93,17 @@ export async function purchaseGoldProduct(productId: string, userId: string): Pr
   const mark = (s: string) => steps.push(s);
   try {
     mark('start');
+
+    // ÖNCE (native cagri YAPMADAN, aninda cevap verir): eklenti Capacitor koprusune
+    // gercekten kayitli mi? RevenueCat'in kendi forumunda birebir ayni sikayette
+    // ("purchase call never resolves, no errors, no payment sheet, nothing") ekip
+    // bunun "native eklenti hic kayit olmamis, JS web fallback'ine dusuyor ve o da
+    // hicbir zaman cevap vermiyor" oldugunu teyit etmisti.
+    const pluginRegistered = Capacitor.isPluginAvailable('Purchases');
+    mark(`pluginRegistered:${pluginRegistered}`);
+    if (!pluginRegistered) {
+      return { status: 'error', message: `steps=${steps.join('>')} | NATIVE_PLUGIN_NOT_REGISTERED` };
+    }
     try {
       await ensureConfigured(userId);
       mark('configured');

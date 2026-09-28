@@ -25,6 +25,7 @@ import { logTransaction } from '../utils/transactionService';
 import { processCryptoPayment } from '../utils/cryptoVerifyService';
 import { admobService } from '../utils/admobService';
 import { LegalModal, type LegalModalType } from '../components/LegalModal';
+import { Capacitor } from '@capacitor/core';
 import { isIosNative, iapAvailable, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
 
 interface MarketProps {
@@ -276,8 +277,18 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       );
     }
 
+    // Aninda (native cagri yapmadan) tani: eklenti Capacitor koprusune kayitli mi?
+    // Butona hic basmadan gorunur, boylece saniyeler icinde cevap alinir.
+    const pluginOk = Capacitor.isPluginAvailable('Purchases');
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{
+          fontSize: '0.66rem', fontFamily: 'monospace', textAlign: 'center',
+          color: pluginOk ? 'rgba(0,230,118,0.8)' : '#ff416c'
+        }}>
+          plugin: {pluginOk ? 'kayıtlı ✅' : 'KAYITLI DEĞİL ❌'}
+        </div>
         {applePurchaseState === 'error' && (
           <div style={{
             background: 'rgba(255, 65, 108, 0.22)', border: '1.5px solid #ff416c',
