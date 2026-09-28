@@ -17,7 +17,7 @@ import { Capacitor } from '@capacitor/core';
 // TANI: ic zaman asimlari (10-25 sn) hic tetiklenmeden yalnizca en distaki 55 sn'lik zaman
 // asimi ateslendi — bu, dynamic import()'un cihazda hic tamamlanmadan takildigini gosteriyor
 // (fonksiyona daha girmeden). Statik import'a gecerek bunu tamamen ortadan kaldiriyoruz.
-import { Purchases } from '@revenuecat/purchases-capacitor';
+import { Purchases, STOREKIT_VERSION } from '@revenuecat/purchases-capacitor';
 
 export const isIosNative = (): boolean =>
   Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
@@ -49,8 +49,19 @@ async function ensureConfigured(userId: string): Promise<void> {
   if (!configuringPromise) {
     configuringPromise = (async () => {
       const Purchases = await getPurchases();
+      // ANALIZ: RevenueCat sunucusu/API anahtari/ag ayarlari saglikli oldugu kesin olarak
+      // dogrulandi (RevenueCat Secret API Key ile bizzat test edildi); takilma cihazdaki
+      // native SDK'nin StoreKit ile ilk temasinda oluyor. StoreKit 2'nin otomatik "AppTransaction"
+      // dogrulamasi bazi hesap/cihaz durumlarinda asili kalabiliyor. StoreKit 1'e ZORLAYARAK
+      // bu yeni dogrulama adimini tamamen atliyoruz; ayrica RevenueCat'e teshis verisi
+      // gondermesi icin diagnosticsEnabled acik (Secret Key ile sonradan sorgulanabilir).
       await withTimeout(
-        Purchases.configure({ apiKey: REVENUECAT_IOS_API_KEY, appUserID: userId }),
+        Purchases.configure({
+          apiKey: REVENUECAT_IOS_API_KEY,
+          appUserID: userId,
+          storeKitVersion: STOREKIT_VERSION.STOREKIT_1,
+          diagnosticsEnabled: true,
+        }),
         15000,
         'configure'
       );
@@ -85,14 +96,21 @@ export type IapPurchaseOutcome =
   | { status: 'cancelled' }
   | { status: 'error'; message: string };
 
-export async function purchaseGoldProduct(productId: string, userId: string): Promise<IapPurchaseOutcome> {
+export async function purchaseGoldProduct(
+  productId: string,
+  userId: string,
+  onStep?: (step: string) => void
+): Promise<IapPurchaseOutcome> {
   if (!iapAvailable()) return { status: 'error', message: 'not_available' };
-  // Iz (breadcrumb): hangi adima kadar ilerledigimizi hata mesajina ekleriz, boyle
-  // Mac/konsol olmadan da TAM olarak nerede tikandigini goruruz.
+  // Iz (breadcrumb): hangi adima kadar ilerledigimizi hem CANLI ekrana (onStep) hem de
+  // hata mesajina ekleriz, boyle Mac/konsol olmadan da TAM olarak nerede tikandigini goruruz.
   const steps: string[] = [];
-  const mark = (s: string) => steps.push(s);
+  const mark = (s: string) => {
+    steps.push(s);
+    try { onStep?.(s); } catch (_) {}
+  };
   try {
-    mark('start');
+    mark('▶ başladı');
 
     // ÖNCE (native cagri YAPMADAN, aninda cevap verir): eklenti Capacitor koprusune
     // gercekten kayitli mi? RevenueCat'in kendi forumunda birebir ayni sikayette
@@ -100,47 +118,51 @@ export async function purchaseGoldProduct(productId: string, userId: string): Pr
     // bunun "native eklenti hic kayit olmamis, JS web fallback'ine dusuyor ve o da
     // hicbir zaman cevap vermiyor" oldugunu teyit etmisti.
     const pluginRegistered = Capacitor.isPluginAvailable('Purchases');
-    mark(`pluginRegistered:${pluginRegistered}`);
+    mark(`eklenti kayıtlı mı: ${pluginRegistered}`);
     if (!pluginRegistered) {
       return { status: 'error', message: `steps=${steps.join('>')} | NATIVE_PLUGIN_NOT_REGISTERED` };
     }
     try {
+      mark('configure() çağrılıyor (StoreKit 1)...');
       await ensureConfigured(userId);
-      mark('configured');
+      mark('✅ configure() tamamlandı');
     } catch (cfgErr: any) {
-      mark(`configure_failed:${cfgErr?.message || cfgErr}`);
+      mark(`❌ configure() başarısız: ${cfgErr?.message || cfgErr}`);
       return { status: 'error', message: `steps=${steps.join('>')}` };
     }
 
     const Purchases = await getPurchases();
-    mark('bridge_loaded');
 
     // Saglik kontrolu: en basit native cagri (urun/magaza gerektirmez). Bu bile
     // takilirsa sorun urunlerde/Offerings'te degil, koprunun kendisindedir.
+    mark('getCustomerInfo() çağrılıyor...');
     await withTimeout<any>(Purchases.getCustomerInfo(), 10000, 'getCustomerInfo');
-    mark('customerInfo_ok');
+    mark('✅ getCustomerInfo() tamamlandı');
 
+    mark('getProducts() çağrılıyor...');
     const { products } = await withTimeout<any>(
       Purchases.getProducts({ productIdentifiers: [productId] }),
       25000,
       'getProducts'
     );
-    mark(`getProducts_ok:${products?.length ?? 0}`);
+    mark(`✅ getProducts() tamamlandı (${products?.length ?? 0} ürün bulundu)`);
     const product = products && products[0];
     if (!product) return { status: 'error', message: `steps=${steps.join('>')} | product_not_found` };
 
+    mark('purchaseStoreProduct() çağrılıyor (Apple penceresi açılmalı)...');
     const result = await withTimeout<any>(
       Purchases.purchaseStoreProduct({ product }),
       90000,
       'purchaseStoreProduct'
     );
-    mark('purchase_ok');
+    mark('✅ satın alma tamamlandı');
     return { status: 'success', productId: result.productIdentifier };
   } catch (err: any) {
     if (err?.userCancelled === true || err?.code === '1' /* PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR */) {
       return { status: 'cancelled' };
     }
     const msg = err?.message || String(err);
+    mark(`❌ hata: ${msg}`);
     console.error('Apple satin alma hatasi:', steps.join('>'), err);
     return { status: 'error', message: `steps=${steps.join('>')} | ${msg}` };
   }

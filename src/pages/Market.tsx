@@ -79,6 +79,9 @@ export default function Market({ userId }: MarketProps) {
   // Salt JS/React tabanlı canlı sayaç (native/Promise'lerden tamamen bağımsız). Bu bile
   // ilerlemiyorsa sorun bizim kodda değil, o an JS motorunun donmasındadır.
   const [appleTickSeconds, setAppleTickSeconds] = useState(0);
+  // Canlı log penceresi: purchaseGoldProduct her adıma başladığında/bitirdiğinde buraya
+  // bir satır eklenir, kullanıcı Mac/konsol olmadan saniye saniye neyin olduğunu okuyabilir.
+  const [appleLiveLog, setAppleLiveLog] = useState<{ t: string; msg: string }[]>([]);
   const applePendingRef = useRef<GoldPackage | null>(null);
 
   useEffect(() => {
@@ -165,6 +168,7 @@ export default function Market({ userId }: MarketProps) {
     setApplePurchaseState('idle');
     setAppleRestoreMsg(null);
     setAppleErrorDetail(null);
+    setAppleLiveLog([]);
     if (!isTr && paymentMethod === 'havale_papara') {
       setPaymentMethod('card');
     }
@@ -202,8 +206,14 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     if (!selectedPackage?.appleProductId) return;
     setAppleRestoreMsg(null);
     setAppleErrorDetail(null);
+    setAppleLiveLog([]);
     setApplePurchaseState('processing');
     soundManager.playCoinSound();
+
+    const logStep = (msg: string) => {
+      const t = new Date().toLocaleTimeString('tr-TR', { hour12: false });
+      setAppleLiveLog((prev) => [...prev, { t, msg }]);
+    };
 
     const reportError = (msg: string) => {
       setApplePurchaseState('error');
@@ -223,7 +233,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     let outcome: Awaited<ReturnType<typeof purchaseGoldProduct>>;
     try {
       outcome = await Promise.race([
-        purchaseGoldProduct(selectedPackage.appleProductId, userId),
+        purchaseGoldProduct(selectedPackage.appleProductId, userId, logStep),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('outer_timeout_150s')), 150000)
         ),
@@ -348,6 +358,22 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
             </>
           )}
         </button>
+
+        {appleLiveLog.length > 0 && (
+          <div style={{
+            background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '10px', padding: '8px 10px', maxHeight: '160px', overflowY: 'auto',
+            fontFamily: 'monospace', fontSize: '0.66rem', color: 'rgba(255,255,255,0.85)',
+            display: 'flex', flexDirection: 'column', gap: '3px'
+          }}>
+            {appleLiveLog.map((row, i) => (
+              <div key={i} style={{ display: 'flex', gap: '6px' }}>
+                <span style={{ color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>{row.t}</span>
+                <span style={{ wordBreak: 'break-word' }}>{row.msg}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         <span
           onClick={handleAppleRestore}
