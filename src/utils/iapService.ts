@@ -17,7 +17,7 @@ import { Capacitor } from '@capacitor/core';
 // TANI: ic zaman asimlari (10-25 sn) hic tetiklenmeden yalnizca en distaki 55 sn'lik zaman
 // asimi ateslendi — bu, dynamic import()'un cihazda hic tamamlanmadan takildigini gosteriyor
 // (fonksiyona daha girmeden). Statik import'a gecerek bunu tamamen ortadan kaldiriyoruz.
-import { Purchases, STOREKIT_VERSION } from '@revenuecat/purchases-capacitor';
+import { Purchases, LOG_LEVEL } from '@revenuecat/purchases-capacitor';
 
 export const isIosNative = (): boolean =>
   Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
@@ -49,18 +49,18 @@ async function ensureConfigured(userId: string): Promise<void> {
   if (!configuringPromise) {
     configuringPromise = (async () => {
       const Purchases = await getPurchases();
-      // ANALIZ: RevenueCat sunucusu/API anahtari/ag ayarlari saglikli oldugu kesin olarak
-      // dogrulandi (RevenueCat Secret API Key ile bizzat test edildi); takilma cihazdaki
-      // native SDK'nin StoreKit ile ilk temasinda oluyor. StoreKit 2'nin otomatik "AppTransaction"
-      // dogrulamasi bazi hesap/cihaz durumlarinda asili kalabiliyor. StoreKit 1'e ZORLAYARAK
-      // bu yeni dogrulama adimini tamamen atliyoruz; ayrica RevenueCat'e teshis verisi
-      // gondermesi icin diagnosticsEnabled acik (Secret Key ile sonradan sorgulanabilir).
+      // ANALIZ: storeKitVersion:STOREKIT_1 + diagnosticsEnabled eklenmesine ragmen configure()
+      // YINE tam ayni yerde (148 sn) takildi — yani parametrelerle ilgili degil. Simdi EN
+      // YALIN haliyle (sadece apiKey, appUserID bile yok) deniyoruz: bu bile takilirsa sorun
+      // herhangi bir parametrede degil, cok daha temel bir seydedir (orn. cihazin Keychain
+      // erisimi).
+      await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
       await withTimeout(
         Purchases.configure({
           apiKey: REVENUECAT_IOS_API_KEY,
+          // Webhook (credit_iap_gold) altını bu kimlikle profiles.id'ye eşler; olmazsa
+          // satın alma anonim kimliğe yazılır ve altın hiç yüklenmez.
           appUserID: userId,
-          storeKitVersion: STOREKIT_VERSION.STOREKIT_1,
-          diagnosticsEnabled: true,
         }),
         15000,
         'configure'
@@ -73,6 +73,11 @@ async function ensureConfigured(userId: string): Promise<void> {
   }
   await configuringPromise;
 }
+
+// Android mağaza sürümünde Shopier/kripto/havale UI'ı gösterilmez (Google Play politikası);
+// Play Billing (RevenueCat) kurulana kadar Market.tsx "Yakında" bilgisi gösterir.
+export const isAndroidNative = (): boolean =>
+  Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
 // RevenueCat anahtarı .env'e girilmeden IAP hiçbir şekilde devreye girmez (uygulama çökmez,
 // yalnızca Market.tsx bu değeri kontrol edip iOS satın alma butonunu gizler).

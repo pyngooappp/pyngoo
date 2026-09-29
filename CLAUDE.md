@@ -44,6 +44,11 @@ Bu dosya Claude için hazırlanmış **resmi proje hafızası ve davranış kura
 
 ## 4. 📱 Mobil (iOS / Android) & AdMob Reklam Entegrasyonu
 - Uygulama web ile birlikte Capacitor 8 altyapısıyla iOS ve Android'e derlenmektedir.
+- **Platform Ödeme Ayrımı (App Store / Play Store Politikası):** Apple ve Google'ın "sanal para sadece kendi IAP sistemiyle satılır" kuralı SADECE mağazadan dağıtılan uygulama binary'sini kapsar, web sitesini kapsamaz.
+  - **Web (tarayıcı):** Shopier/kripto/havale serbest.
+  - **iOS app:** SADECE Apple IAP (`iapService.ts`), Shopier/kripto/havale UI'ı hiç gösterilmez.
+  - **Android app:** SADECE Google Play Billing (RevenueCat üzerinden, iOS ile aynı altyapı — henüz kurulmadı), Shopier/kripto/havale UI'ı hiç gösterilmez.
+  - Uygulama içinden ödeme için web sitesine yönlendiren hiçbir link/buton OLAMAZ (bu da mağaza politikası ihlali sayılır); kullanıcı kendi isteğiyle tarayıcıdan siteye girip oradan öderse bu kısıtlamanın dışındadır.
 - **AdMob Ödüllü Reklam Birimi:** `ca-app-pub-6163702675031285/4424784328` ([admobService.ts](file:///c:/Users/PC/.gemini/antigravity/scratch/anonymous-voice-chat/src/utils/admobService.ts))
 - **GADApplicationIdentifier:** `ca-app-pub-6163702675031285~1338244734` ([Info.plist](file:///c:/Users/PC/.gemini/antigravity/scratch/anonymous-voice-chat/ios/App/App/Info.plist))
 - App Store incelemesindeyken akıllı test reklamı fallback'i devrededir; canlı reklam açılana kadar test reklamı üzerinden ödül (+20 altın) akışı korunur.

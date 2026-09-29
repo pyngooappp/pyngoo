@@ -28,3 +28,4 @@ dist-ssr
 scratch/
 
 supabase/.temp/
+.aider*

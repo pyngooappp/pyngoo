@@ -26,7 +26,7 @@ import { processCryptoPayment } from '../utils/cryptoVerifyService';
 import { admobService } from '../utils/admobService';
 import { LegalModal, type LegalModalType } from '../components/LegalModal';
 import { Capacitor } from '@capacitor/core';
-import { isIosNative, iapAvailable, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
+import { isIosNative, isAndroidNative, iapAvailable, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
 
 interface MarketProps {
   userId: string;
@@ -231,16 +231,19 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     // gösterilir. Bu süre İÇERİDEKİ en uzun zaman aşımından (90s) daha KISA OLMAMALI,
     // yoksa asıl (etiketli) hata hiç görünmeden burası araya girer.
     let outcome: Awaited<ReturnType<typeof purchaseGoldProduct>>;
+    let outerTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       outcome = await Promise.race([
         purchaseGoldProduct(selectedPackage.appleProductId, userId, logStep),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('outer_timeout_150s')), 150000)
-        ),
+        new Promise<never>((_, reject) => {
+          outerTimer = setTimeout(() => reject(new Error('outer_timeout_150s')), 150000);
+        }),
       ]);
     } catch (err: any) {
       reportError(`unhandled: ${err?.message || String(err)}`);
       return;
+    } finally {
+      clearTimeout(outerTimer);
     }
 
     if (outcome.status === 'cancelled') {
@@ -1381,6 +1384,15 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               <div style={{ marginBottom: '16px' }}>
                 {renderApplePurchasePanel()}
               </div>
+            ) : isAndroidNative() ? (
+              /* Android: Google Play politikası — Play Billing kurulana kadar dış ödeme gizli. */
+              <div style={{
+                marginBottom: '16px', background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '16px',
+                textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontSize: '0.82rem', lineHeight: '1.4'
+              }}>
+                {t('market_android_coming_soon')}
+              </div>
             ) : (
             <div style={{ marginBottom: '16px' }}>
               <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '8px' }}>
@@ -1745,7 +1757,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
             </div>
             )}
 
-            {!isIosNative() && (cardSubmitted ? (
+            {!isIosNative() && !isAndroidNative() && (cardSubmitted ? (
               <div style={{
                 background: 'rgba(255, 215, 0, 0.12)', border: '1.5px solid #ffd700',
                 borderRadius: '18px', padding: '16px', textAlign: 'center', animation: 'fadeIn 0.2s ease'
