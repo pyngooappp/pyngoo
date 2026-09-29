@@ -392,6 +392,10 @@ export default function Layout({ userId }: LayoutProps) {
             return; // Tam ekran gelen arama modalını açıp görüşmeyi BÖLME!
           }
 
+          // Arkada eşleşme araması (radar) açıksa anında durdur
+          soundManager.stopRadar();
+          window.dispatchEvent(new CustomEvent('pyngoo_stop_matching'));
+
           setIncomingCall({
             callId: data.callId,
             callerName: data.callerName || t('call_friend_fallback'),
@@ -476,6 +480,10 @@ export default function Layout({ userId }: LayoutProps) {
               .single();
             if (callerProf?.display_name) callerName = callerProf.display_name;
           } catch (_) {}
+
+          // Arkada eşleşme araması (radar) açıksa anında durdur
+          soundManager.stopRadar();
+          window.dispatchEvent(new CustomEvent('pyngoo_stop_matching'));
 
           setIncomingCall({
             callId: newMatch.match_id,
@@ -668,6 +676,8 @@ export default function Layout({ userId }: LayoutProps) {
   const handleAcceptIncomingCall = () => {
     if (!incomingCall) return;
     soundManager.stopRingtone();
+    soundManager.stopRadar();
+    window.dispatchEvent(new CustomEvent('pyngoo_stop_matching'));
     try {
       supabase.from('match_history').update({ status: 'active' }).eq('match_id', incomingCall.callId).then();
     } catch (_) {}
@@ -703,6 +713,8 @@ export default function Layout({ userId }: LayoutProps) {
 
   // Doğrudan arama başlatma (Keşfet, Chats veya diğer sayfalardan çağrılabilir)
   const handleStartDirectCall = async (callId: string, partner: { id: string; name: string }) => {
+    soundManager.stopRadar();
+    window.dispatchEvent(new CustomEvent('pyngoo_stop_matching'));
     setDirectCallCallerId(userId);
     setCallPartner(partner);
     setActiveCallChannel(callId);

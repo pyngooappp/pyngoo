@@ -451,6 +451,17 @@ export default function Home({ userId }: HomeProps) {
     await supabase.from('waiting_room').delete().eq('user_id', userId);
   };
 
+  // Özel arama geldiğinde veya cevaplandığında eşleşme aramasını ve sesini derhal durdur
+  useEffect(() => {
+    const handleStop = () => {
+      cancelSearch();
+    };
+    window.addEventListener('pyngoo_stop_matching', handleStop);
+    return () => {
+      window.removeEventListener('pyngoo_stop_matching', handleStop);
+    };
+  }, [userId]);
+
   const checkMediaPermissions = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setMediaErrorType('denied');

@@ -50,7 +50,7 @@ class SoundManager {
     return this.audioContext as AudioContext;
   }
 
-  // Eşleşme Aranıyor (Derin Yükselen Whoosh + Kristal Sonar Ping İkilisi)
+  // Eşleşme Aranıyor (Yumuşak & Mellow Ambient Sonar Sesi - Kulağı yormayan soft ton)
   private playDoublePing() {
     if (!this.isSearching) return;
     
@@ -62,46 +62,50 @@ class SoundManager {
       }
       const now = ctx.currentTime;
       
-      // 1. SES: Alttan yükselen sinematik sihirli ses (Whoosh)
-      // Çift osilatör (Triangle + Sine) ile zengin ve dolgun frekans
-      const sweepOsc = ctx.createOscillator();
-      const sweepGain = ctx.createGain();
+      // 1. SES: Yumuşak, kadife gibi dip dalga (Warm ambient swell)
+      const swellOsc = ctx.createOscillator();
+      const swellGain = ctx.createGain();
+      const swellFilter = ctx.createBiquadFilter();
       
-      sweepOsc.type = 'triangle';
-      sweepOsc.frequency.setValueAtTime(280, now);
-      sweepOsc.frequency.exponentialRampToValueAtTime(760, now + 0.35);
-      
-      sweepGain.gain.setValueAtTime(0, now);
-      sweepGain.gain.linearRampToValueAtTime(0.32, now + 0.08);
-      sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-      
-      sweepOsc.connect(sweepGain);
-      sweepGain.connect(ctx.destination);
-      
-      sweepOsc.start(now);
-      sweepOsc.stop(now + 0.45);
+      swellFilter.type = 'lowpass';
+      swellFilter.frequency.setValueAtTime(450, now);
 
-      // 2. SES: Kristal Berraklığında Radar / Sonar Ping (Acoustic Chime Ping)
-      // Çift armonik: Temel frekans (1046.5Hz = C6) + 5. derece (1567.98Hz = G6)
-      const pingTime = now + 0.30;
-      [1046.5, 1567.98].forEach((freq, idx) => {
+      swellOsc.type = 'sine';
+      swellOsc.frequency.setValueAtTime(220, now);
+      swellOsc.frequency.exponentialRampToValueAtTime(330, now + 0.35);
+      
+      swellGain.gain.setValueAtTime(0, now);
+      swellGain.gain.linearRampToValueAtTime(0.08, now + 0.1);
+      swellGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      
+      swellOsc.connect(swellFilter);
+      swellFilter.connect(swellGain);
+      swellGain.connect(ctx.destination);
+      
+      swellOsc.start(now);
+      swellOsc.stop(now + 0.45);
+
+      // 2. SES: Yumuşak Marimba / Su Damlası Chime (Mellow Acoustic Sine)
+      // C5 (523Hz) ve E5 (659Hz) - Tamamen saf sinüs ve düşük ses seviyesi
+      const pingTime = now + 0.22;
+      [523.25, 659.25].forEach((freq, idx) => {
         const pingOsc = ctx.createOscillator();
         const pingGain = ctx.createGain();
 
-        pingOsc.type = idx === 0 ? 'sine' : 'triangle';
+        pingOsc.type = 'sine';
         pingOsc.frequency.setValueAtTime(freq, pingTime);
-        pingOsc.frequency.exponentialRampToValueAtTime(freq * 0.88, pingTime + 0.22);
 
-        const peakVol = idx === 0 ? 0.48 : 0.25;
+        // Kulağı tırmalamayacak kadar yumuşak ses seviyesi (0.13 ve 0.08)
+        const peakVol = idx === 0 ? 0.13 : 0.08;
         pingGain.gain.setValueAtTime(0, pingTime);
-        pingGain.gain.linearRampToValueAtTime(peakVol, pingTime + 0.025);
-        pingGain.gain.exponentialRampToValueAtTime(0.001, pingTime + 0.55);
+        pingGain.gain.linearRampToValueAtTime(peakVol, pingTime + 0.03);
+        pingGain.gain.exponentialRampToValueAtTime(0.001, pingTime + 0.45);
 
         pingOsc.connect(pingGain);
         pingGain.connect(ctx.destination);
 
         pingOsc.start(pingTime);
-        pingOsc.stop(pingTime + 0.55);
+        pingOsc.stop(pingTime + 0.45);
       });
     } catch (_) {}
   }

@@ -9,6 +9,7 @@ import PrivacyShield from '../components/PrivacyShield';
 import { generateUUID } from '../utils/uuid';
 import { soundManager } from '../utils/SoundManager';
 import { logTransaction } from '../utils/transactionService';
+import { isIosNative, purchaseGoldProduct } from '../utils/iapService';
 
 interface ChatsProps {
   userId: string;
@@ -39,6 +40,125 @@ export default function Chats({ userId }: ChatsProps) {
 
   // Sohbet İçi Altın Satın Alma Modalı
   const [showGoldModal, setShowGoldModal] = useState(false);
+  const [buyingPackageId, setBuyingPackageId] = useState<string | null>(null);
+  const [purchaseNotice, setPurchaseNotice] = useState<string | null>(null);
+
+  const QUICK_GOLD_PACKAGES = [
+    {
+      id: 'pack_650',
+      gold: 650,
+      bonus: 150,
+      priceTr: '139.99 ₺',
+      priceEn: '$3.69',
+      appleProductId: 'com.pyngoo.gold.650',
+      badge: null,
+      badgeColor: '',
+      borderColor: 'rgba(255,255,255,0.12)',
+      btnBg: 'rgba(255,255,255,0.15)',
+      btnColor: '#fff',
+      icon: '🪙'
+    },
+    {
+      id: 'pack_1400',
+      gold: 1400,
+      bonus: 400,
+      priceTr: '279.99 ₺',
+      priceEn: '$6.99',
+      appleProductId: 'com.pyngoo.gold.1400',
+      badge: t('market_badge_popular', { defaultValue: 'POPÜLER' }),
+      badgeColor: '#ff416c',
+      borderColor: '#ff416c',
+      btnBg: 'linear-gradient(135deg, #ff416c, #ff4b2b)',
+      btnColor: '#fff',
+      icon: '🪙'
+    },
+    {
+      id: 'pack_3800',
+      gold: 3800,
+      bonus: 1200,
+      priceTr: '699.99 ₺',
+      priceEn: '$17.99',
+      appleProductId: 'com.pyngoo.gold.3800',
+      badge: t('badge_best_value', { defaultValue: 'EN AVANTAJLI' }),
+      badgeColor: '#ffd700',
+      borderColor: 'rgba(255, 215, 0, 0.5)',
+      btnBg: 'linear-gradient(135deg, #ffd700, #ff9800)',
+      btnColor: '#000',
+      icon: '💎'
+    },
+    {
+      id: 'pack_8500',
+      gold: 8500,
+      bonus: 3500,
+      priceTr: '1,399.99 ₺',
+      priceEn: '$34.99',
+      appleProductId: 'com.pyngoo.gold.8500',
+      badge: 'ELİT KASA',
+      badgeColor: '#00f2fe',
+      borderColor: 'rgba(0, 242, 254, 0.4)',
+      btnBg: 'linear-gradient(135deg, #00f2fe, #4facfe)',
+      btnColor: '#000',
+      icon: '🏆'
+    },
+    {
+      id: 'pack_18000',
+      gold: 18000,
+      bonus: 7000,
+      priceTr: '2,799.99 ₺',
+      priceEn: '$69.99',
+      appleProductId: 'com.pyngoo.gold.18000',
+      badge: 'VIP TAÇ',
+      badgeColor: '#ffd700',
+      borderColor: '#ffd700',
+      btnBg: 'linear-gradient(135deg, #ffd700, #ff9800)',
+      btnColor: '#000',
+      icon: '👑'
+    }
+  ];
+
+  const handleQuickPurchase = async (pkg: typeof QUICK_GOLD_PACKAGES[0]) => {
+    if (buyingPackageId) return;
+    setBuyingPackageId(pkg.id);
+    setPurchaseNotice(t('market_apple_processing', { defaultValue: 'Ödeme başlatılıyor...' }));
+
+    if (isIosNative()) {
+      try {
+        const outcome = await purchaseGoldProduct(pkg.appleProductId, userId);
+        if (outcome.status === 'success') {
+          soundManager.playCoinSound();
+          setPurchaseNotice(t('market_purchase_success', { defaultValue: 'Satın alma onaylandı! Altınınız yükleniyor... ✨' }));
+          setTimeout(() => {
+            setShowGoldModal(false);
+            setBuyingPackageId(null);
+            setPurchaseNotice(null);
+          }, 1800);
+          return;
+        } else if (outcome.status === 'cancelled') {
+          setBuyingPackageId(null);
+          setPurchaseNotice(null);
+          return;
+        } else {
+          alert(outcome.message || 'Satın alma tamamlanamadı.');
+        }
+      } catch (e: any) {
+        alert(e?.message || 'Hata oluştu.');
+      } finally {
+        setBuyingPackageId(null);
+        setPurchaseNotice(null);
+      }
+    } else {
+      const SHOPIER_URLS: Record<string, string> = {
+        pack_650: 'https://www.shopier.com/pyngoo/50771182',
+        pack_1400: 'https://www.shopier.com/pyngoo/50771257',
+        pack_3800: 'https://www.shopier.com/pyngoo/50771291',
+        pack_8500: 'https://www.shopier.com/pyngoo/50771329',
+        pack_18000: 'https://www.shopier.com/pyngoo/50771375',
+      };
+      window.open(SHOPIER_URLS[pkg.id] || 'https://www.shopier.com/pyngoo', '_blank');
+      setBuyingPackageId(null);
+      setPurchaseNotice(null);
+    }
+  };
 
   // Ücretli Arama Sistemi (60 sn = 120 Altın)
   const [showCallModal, setShowCallModal] = useState(false);
@@ -1143,7 +1263,15 @@ export default function Chats({ userId }: ChatsProps) {
               e.preventDefault();
               if (messageText.trim()) handleSendMessage();
             }}
-            style={{ padding: '12px 16px calc(78px + env(safe-area-inset-bottom, 0px)) 16px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(20, 18, 38, 0.95)', display: 'flex', gap: '10px' }}
+            style={{ 
+              padding: '10px 14px max(12px, env(safe-area-inset-bottom, 0px)) 14px', 
+              borderTop: '1px solid rgba(255,255,255,0.08)', 
+              background: '#0e0f1d', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px',
+              flexShrink: 0
+            }}
           >
             {profile?.gender === 'erkek' && (
               <button 
@@ -1303,166 +1431,66 @@ export default function Chats({ userId }: ChatsProps) {
               {t('chats_gold_modal_desc')}
             </p>
 
+            {/* Altın Paketleri (App Store & Market Resmi Paketleri) */}
+            {purchaseNotice && (
+              <div style={{
+                background: 'rgba(0, 242, 254, 0.15)', border: '1px solid #00f2fe',
+                borderRadius: '12px', padding: '8px 12px', marginBottom: '12px',
+                color: '#00f2fe', fontSize: '0.82rem', fontWeight: '700', animation: 'pulse 1.2s infinite'
+              }}>
+                {purchaseNotice}
+              </div>
+            )}
+
             <div style={{
               display: 'flex', flexDirection: 'column', gap: '8px',
-              maxHeight: '280px', overflowY: 'auto', paddingRight: '4px', marginBottom: '14px'
+              maxHeight: '280px', overflowY: 'auto', paddingRight: '4px', marginBottom: '16px'
             }}>
-              {/* Paket 1: 150 Altın */}
-              <div style={{
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '16px', padding: '10px 14px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-              }}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ color: '#fff', fontWeight: '800', fontSize: '0.92rem' }}>150 {t('gold_currency_label')} 🪙</div>
-                  <div style={{ color: '#2ecc71', fontSize: '0.68rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 30 })}</div>
-                </div>
-                <button
-                  onClick={() => { setShowGoldModal(false); navigate('/market'); }}
+              {QUICK_GOLD_PACKAGES.map((pkg) => (
+                <div 
+                  key={pkg.id}
                   style={{
-                    background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)',
-                    color: '#fff', padding: '7px 14px', borderRadius: '16px',
-                    fontWeight: '800', fontSize: '0.80rem', cursor: 'pointer'
+                    background: 'rgba(255,255,255,0.04)', 
+                    border: `1px solid ${pkg.borderColor}`,
+                    borderRadius: '16px', padding: '10px 14px',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                   }}
                 >
-                  {i18n.language.startsWith('tr') ? '29.99 ₺' : '$0.99'}
-                </button>
-              </div>
-
-              {/* Paket 2: 450 Altın */}
-              <div style={{
-                background: 'rgba(255, 65, 108, 0.12)', border: '2px solid #ff416c',
-                borderRadius: '16px', padding: '10px 14px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                boxShadow: '0 4px 15px rgba(255, 65, 108, 0.25)'
-              }}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.95rem' }}>450 {t('gold_currency_label')} 🪙</span>
-                    <span style={{ background: '#ff416c', color: '#fff', fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' }}>
-                      {t('market_badge_popular')}
-                    </span>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.94rem' }}>
+                        {pkg.gold.toLocaleString()} {t('gold_currency_label')} {pkg.icon}
+                      </span>
+                      {pkg.badge && (
+                        <span style={{ 
+                          background: pkg.badgeColor, 
+                          color: pkg.badgeColor === '#ffd700' ? '#000' : '#fff', 
+                          fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' 
+                        }}>
+                          {pkg.badge}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ color: '#2ecc71', fontSize: '0.70rem', fontWeight: '700', marginTop: '2px' }}>
+                      {t('market_modal_bonus', { count: pkg.bonus })}!
+                    </div>
                   </div>
-                  <div style={{ color: '#ff416c', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 150 })}! ({t('market_badge_discount_50')})</div>
+                  <button
+                    onClick={() => handleQuickPurchase(pkg)}
+                    disabled={buyingPackageId === pkg.id}
+                    style={{
+                      background: pkg.btnBg,
+                      border: 'none', color: pkg.btnColor, padding: '7px 15px', borderRadius: '16px',
+                      fontWeight: '900', fontSize: '0.82rem', cursor: 'pointer',
+                      opacity: buyingPackageId === pkg.id ? 0.6 : 1,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                      minWidth: '85px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                  >
+                    {buyingPackageId === pkg.id ? '...' : (i18n.language.startsWith('tr') ? pkg.priceTr : pkg.priceEn)}
+                  </button>
                 </div>
-                <button
-                  onClick={() => { setShowGoldModal(false); navigate('/market'); }}
-                  style={{
-                    background: 'linear-gradient(135deg, #ff416c, #ff4b2b)',
-                    border: 'none', color: '#fff', padding: '7px 15px', borderRadius: '16px',
-                    fontWeight: '900', fontSize: '0.80rem', cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(255, 65, 108, 0.4)'
-                  }}
-                >
-                  {i18n.language.startsWith('tr') ? '79.99 ₺' : '$2.49'}
-                </button>
-              </div>
-
-              {/* Paket 3: 1200 Altın */}
-              <div style={{
-                background: 'rgba(255, 215, 0, 0.10)', border: '1.5px solid rgba(255, 215, 0, 0.5)',
-                borderRadius: '16px', padding: '10px 14px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                boxShadow: '0 4px 15px rgba(255, 215, 0, 0.15)'
-              }}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.95rem' }}>1,200 {t('gold_currency_label')} 💎</span>
-                    <span style={{ background: '#ffd700', color: '#000', fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' }}>
-                      {t('badge_best_value')}
-                    </span>
-                  </div>
-                  <div style={{ color: '#ffd700', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 500 })}! ({t('market_badge_discount_65')})</div>
-                </div>
-                <button
-                  onClick={() => { setShowGoldModal(false); navigate('/market'); }}
-                  style={{
-                    background: 'linear-gradient(135deg, #ffd700, #ff9800)',
-                    border: 'none', color: '#000', padding: '7px 15px', borderRadius: '16px',
-                    fontWeight: '900', fontSize: '0.80rem', cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(255, 215, 0, 0.4)'
-                  }}
-                >
-                  {i18n.language.startsWith('tr') ? '169.99 ₺' : '$4.99'}
-                </button>
-              </div>
-
-              {/* Paket 4: 2800 Altın */}
-              <div style={{
-                background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.3)',
-                borderRadius: '16px', padding: '10px 14px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-              }}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ color: '#fff', fontWeight: '900', fontSize: '0.92rem' }}>2,800 {t('gold_currency_label')} 🏆</div>
-                  <div style={{ color: '#00f2fe', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 1200 })}!</div>
-                </div>
-                <button
-                  onClick={() => { setShowGoldModal(false); navigate('/market'); }}
-                  style={{
-                    background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                    border: 'none', color: '#000', padding: '7px 15px', borderRadius: '16px',
-                    fontWeight: '900', fontSize: '0.80rem', cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(0, 242, 254, 0.3)'
-                  }}
-                >
-                  {i18n.language.startsWith('tr') ? '299.99 ₺' : '$8.99'}
-                </button>
-              </div>
-
-              {/* Paket 5: 6500 Altın (VIP Sultan Kasası) */}
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.1))',
-                border: '1px solid #a855f7',
-                borderRadius: '16px', padding: '10px 14px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-              }}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ color: '#fff', fontWeight: '900', fontSize: '0.92rem' }}>6,500 {t('gold_currency_label')} 👑</div>
-                  <div style={{ color: '#c084fc', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 3000 })}! ({t('market_badge_discount_70')})</div>
-                </div>
-                <button
-                  onClick={() => { setShowGoldModal(false); navigate('/market'); }}
-                  style={{
-                    background: 'linear-gradient(135deg, #a855f7, #ec4899)',
-                    border: 'none', color: '#fff', padding: '7px 15px', borderRadius: '16px',
-                    fontWeight: '900', fontSize: '0.80rem', cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(168, 85, 247, 0.4)'
-                  }}
-                >
-                  {i18n.language.startsWith('tr') ? '599.99 ₺' : '$17.99'}
-                </button>
-              </div>
-
-              {/* Paket 6: 15000 Altın (Milyarder Servet Kasası) */}
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.18), rgba(255, 107, 0, 0.15))',
-                border: '1.5px solid #ffd700',
-                borderRadius: '16px', padding: '10px 14px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                boxShadow: '0 4px 15px rgba(255, 215, 0, 0.25)'
-              }}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: '#ffd700', fontWeight: '900', fontSize: '0.95rem' }}>15,000 {t('gold_currency_label')} 💎</span>
-                    <span style={{ background: 'linear-gradient(135deg, #ff0844, #ffb199)', color: '#fff', fontSize: '0.58rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px' }}>
-                      VIP %80
-                    </span>
-                  </div>
-                  <div style={{ color: '#ffd700', fontSize: '0.70rem', fontWeight: '700' }}>{t('market_modal_bonus', { count: 8000 })}! ({t('market_badge_discount_80')})</div>
-                </div>
-                <button
-                  onClick={() => { setShowGoldModal(false); navigate('/market'); }}
-                  style={{
-                    background: 'linear-gradient(135deg, #ffd700, #ff9800)',
-                    border: 'none', color: '#000', padding: '7px 15px', borderRadius: '16px',
-                    fontWeight: '900', fontSize: '0.80rem', cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(255, 215, 0, 0.4)'
-                  }}
-                >
-                  {i18n.language.startsWith('tr') ? '1,199.99 ₺' : '$34.99'}
-                </button>
-              </div>
+              ))}
             </div>
 
             <button

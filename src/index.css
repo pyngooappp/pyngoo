@@ -1076,11 +1076,18 @@ body.in-call .main-content {
     display: none !important;
   }
   .chats-message-panel {
-    position: absolute;
-    inset: 0;
-    width: 100% !important;
-    height: 100% !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
     z-index: 50;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
   .chats-empty-state {
     display: none !important;
