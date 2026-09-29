@@ -588,17 +588,14 @@ export default function Layout({ userId }: LayoutProps) {
         let newlyCreditedAmount = 0;
 
         if (approvedOrders && approvedOrders.length > 0) {
-          const now = Date.now();
           for (const order of approvedOrders) {
             const idKey = order.id ? String(order.id) : '';
             const codeKey = order.order_code ? String(order.order_code) : '';
             const isAlreadyNotified = (idKey && notifiedSet.has(idKey)) || (codeKey && notifiedSet.has(codeKey));
 
             if (!isAlreadyNotified) {
-              const updatedTime = order.updated_at ? new Date(order.updated_at).getTime() : (order.created_at ? new Date(order.created_at).getTime() : 0);
-              const isRecent = isRealtimeNotification || (updatedTime > 0 && (now - updatedTime < 180000)); // Son 3 dakika
-
-              if (isRecent) {
+              // Yalnızca kullanıcı uygulamadayken canlı gelen yeni ödeme onayında animasyon göster
+              if (isRealtimeNotification) {
                 newlyNotifiedCount++;
                 newlyCreditedAmount += (Number(order.total_gold) || 0);
               }
@@ -622,8 +619,8 @@ export default function Layout({ userId }: LayoutProps) {
           window.dispatchEvent(new CustomEvent('pyngoo_gold_updated', { detail: { newGold: freshProf.total_gold } }));
         }
 
-        // Yalnızca yeni onaylanan siparişler için 1 KEREYE MAHSUS toast göster
-        if (newlyNotifiedCount > 0 && newlyCreditedAmount > 0) {
+        // Yalnızca kullanıcı uygulamadayken gerçekleşen canlı onay için 1 KEREYE MAHSUS animasyon göster
+        if (isRealtimeNotification && newlyNotifiedCount > 0 && newlyCreditedAmount > 0) {
           soundManager.playCoinSound();
           setGoldReward(newlyCreditedAmount);
         }
@@ -923,7 +920,7 @@ export default function Layout({ userId }: LayoutProps) {
           </div>
         )}
         {!isCallActive && !isInsideActiveChat && (
-          <nav className="bottom-nav" style={{ pointerEvents: 'auto', zIndex: 99999 }}>
+          <nav className="bottom-nav" style={{ pointerEvents: 'auto', zIndex: 9999 }}>
             <NavLink 
               to="/" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}

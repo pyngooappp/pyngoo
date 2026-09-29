@@ -769,7 +769,7 @@ img, video {
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: max(8px, calc(env(safe-area-inset-bottom, 0px) * 0.45));
+  bottom: max(12px, calc(env(safe-area-inset-bottom, 0px) + 2px));
   max-width: 440px;
   margin: 0 auto;
   height: 64px;
@@ -778,7 +778,7 @@ img, video {
   align-items: center;
   padding: 0 6px;
   box-sizing: border-box;
-  z-index: 99999 !important;
+  z-index: 9999 !important;
   pointer-events: auto !important;
   touch-action: manipulation !important;
   -webkit-transform: translateZ(0);

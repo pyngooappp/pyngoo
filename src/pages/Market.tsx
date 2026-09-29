@@ -1269,7 +1269,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
             background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-            zIndex: 10000, animation: 'fadeIn 0.2s ease'
+            zIndex: 100005, animation: 'fadeIn 0.2s ease'
           }}
         >
           <div
@@ -1281,7 +1281,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               background: 'linear-gradient(180deg, #1c1d3b 0%, #101124 100%)',
               border: '1px solid rgba(255,255,255,0.15)', borderBottom: 'none',
               borderRadius: '28px 28px 0 0',
-              padding: '20px 20px calc(env(safe-area-inset-bottom, 24px) + 36px) 20px',
+              padding: '20px 20px calc(env(safe-area-inset-bottom, 24px) + 70px) 20px',
               boxShadow: '0 -20px 60px rgba(0,0,0,0.9)',
               animation: 'slideUp 0.3s ease-out'
             }}
