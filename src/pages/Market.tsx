@@ -1895,7 +1895,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
             border: '2px solid #ffd700', borderRadius: '28px',
             padding: '36px 24px', textAlign: 'center', maxWidth: '380px', width: '90%',
             boxShadow: '0 0 50px rgba(255, 215, 0, 0.6)',
-            animation: 'modalBounce 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            animation: 'sweetCenterFade 0.25s ease-out'
           }}>
             <div style={{ fontSize: '4.5rem', marginBottom: '10px', animation: 'pulse 1s infinite' }}>
               🪙✨

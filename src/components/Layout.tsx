@@ -928,29 +928,45 @@ export default function Layout({ userId }: LayoutProps) {
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               end
             >
-              <Phone size={25} />
-              <span>{t('nav_home')}</span>
+              {({ isActive }) => (
+                <>
+                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
+                    <Phone size={22} fill={isActive ? '#ff416c' : 'none'} />
+                  </div>
+                  <span>{t('nav_home')}</span>
+                </>
+              )}
             </NavLink>
 
             <NavLink 
               to="/explore" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <Compass size={25} />
-              <span>{t('nav_explore', 'Keşfet')}</span>
+              {({ isActive }) => (
+                <>
+                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
+                    <Compass size={22} fill={isActive ? 'rgba(255, 65, 108, 0.25)' : 'none'} />
+                  </div>
+                  <span>{t('nav_explore', 'Keşfet')}</span>
+                </>
+              )}
             </NavLink>
 
             <NavLink 
               to="/chats" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <MessageCircle size={25} />
-                {pendingCount > 0 && (
-                  <span className="nav-badge">{pendingCount > 99 ? '99+' : pendingCount}</span>
-                )}
-              </div>
-              <span>{t('nav_chats')}</span>
+              {({ isActive }) => (
+                <>
+                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
+                    <MessageCircle size={22} fill={isActive ? '#ff416c' : 'none'} />
+                    {pendingCount > 0 && (
+                      <span className="nav-badge">{pendingCount > 99 ? '99+' : pendingCount}</span>
+                    )}
+                  </div>
+                  <span>{t('nav_chats')}</span>
+                </>
+              )}
             </NavLink>
             
             {(gender === 'kadin' || profile?.gender === 'kadin') && (
@@ -958,8 +974,14 @@ export default function Layout({ userId }: LayoutProps) {
                 to="/wallet" 
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               >
-                <WalletIcon size={25} />
-                <span>{t('nav_wallet')}</span>
+                {({ isActive }) => (
+                  <>
+                    <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
+                      <WalletIcon size={22} fill={isActive ? '#00e676' : 'none'} />
+                    </div>
+                    <span>{t('nav_wallet')}</span>
+                  </>
+                )}
               </NavLink>
             )}
             
@@ -968,20 +990,26 @@ export default function Layout({ userId }: LayoutProps) {
                 to="/market" 
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               >
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Coins size={25} color="#ffd700" />
-                  <div style={{
-                    position: 'absolute', top: '-4px', right: '-15px',
-                    background: 'linear-gradient(135deg, #ff0844, #ffb199)',
-                    color: 'white', fontSize: '9px', fontWeight: '800',
-                    padding: '0 4px', lineHeight: '14px', borderRadius: '7px',
-                    boxShadow: '0 2px 6px rgba(255,8,68,0.5)',
-                    animation: 'pulse 1.8s infinite'
-                  }}>
-                    %80
-                  </div>
-                </div>
-                <span style={{ color: '#ffd700', fontWeight: '600' }}>{t('profile_gold_market', 'Market')}</span>
+                {({ isActive }) => (
+                  <>
+                    <div className={`nav-icon-wrap ${isActive ? 'active-gold' : ''}`}>
+                      <Coins size={22} color="#ffd700" fill={isActive ? '#ffd700' : 'none'} />
+                      <div style={{
+                        position: 'absolute', top: '-4px', right: '-8px',
+                        background: 'linear-gradient(135deg, #ff0844, #ffb199)',
+                        color: 'white', fontSize: '9px', fontWeight: '800',
+                        padding: '0 4px', lineHeight: '13px', borderRadius: '6px',
+                        boxShadow: '0 2px 5px rgba(255,8,68,0.5)',
+                        animation: 'pulse 1.8s infinite'
+                      }}>
+                        %80
+                      </div>
+                    </div>
+                    <span style={{ color: isActive ? '#ffd700' : 'inherit', fontWeight: isActive ? '700' : '500' }}>
+                      {t('profile_gold_market', 'Market')}
+                    </span>
+                  </>
+                )}
               </NavLink>
             )}
 
@@ -989,8 +1017,14 @@ export default function Layout({ userId }: LayoutProps) {
               to="/profile" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <User size={25} />
-              <span>{t('nav_profile')}</span>
+              {({ isActive }) => (
+                <>
+                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
+                    <User size={22} fill={isActive ? '#ff416c' : 'none'} />
+                  </div>
+                  <span>{t('nav_profile')}</span>
+                </>
+              )}
             </NavLink>
           </nav>
         )}
@@ -998,13 +1032,14 @@ export default function Layout({ userId }: LayoutProps) {
         {/* ALTIN YÜKLENDİ TEBRİK BİLDİRİMİ */}
         {goldToastMessage && (
           <div style={{
-            position: 'fixed', top: 'calc(env(safe-area-inset-top, 20px) + 16px)', left: '50%', transform: 'translateX(-50%)',
+            position: 'fixed', top: 'calc(env(safe-area-inset-top, 20px) + 16px)',
+            left: 0, right: 0, margin: '0 auto',
             zIndex: 99999, background: 'linear-gradient(135deg, #ffd700, #ffaa00)',
-            color: '#000', padding: '12px 22px', borderRadius: '18px',
-            boxShadow: '0 12px 35px rgba(255, 170, 0, 0.5), 0 0 25px rgba(255, 215, 0, 0.4)',
-            fontWeight: '900', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '10px',
+            color: '#000', padding: '12px 24px', borderRadius: '20px',
+            boxShadow: '0 10px 30px rgba(255, 170, 0, 0.45)',
+            fontWeight: '800', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '10px',
             border: '2px solid #fff', maxWidth: 'calc(100vw - 32px)', width: 'max-content',
-            animation: 'modalBounce 0.35s ease'
+            animation: 'sweetCenterFade 0.25s ease-out'
           }}>
             <Coins size={22} color="#000" style={{ flexShrink: 0 }} />
             <span>{goldToastMessage}</span>
