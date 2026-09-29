@@ -651,7 +651,7 @@ export default function HostCenter({ userId }: HostCenterProps) {
           }}
         >
           <Wallet size={18} color="#ffd700" />
-          <span>{t('host_center_payout_btn', 'Nakit Para Çek (IBAN / Papara)')}</span>
+          <span>{t('host_center_payout_btn', 'Yayıncı Ödül Puanı & Dağıtım')}</span>
           <ChevronRight size={17} color="#ffd700" />
         </button>
 

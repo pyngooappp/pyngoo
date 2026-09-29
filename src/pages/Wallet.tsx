@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Gem, CreditCard, CheckCircle2, TrendingUp, History, Clock } from 'lucide-react';
+import { Gem, CheckCircle2, TrendingUp, History, Clock, Sparkles, Award, Building2, CreditCard, Globe, Coins } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { sendTelegramAlert } from '../utils/telegramAlert';
 import { logTransaction } from '../utils/transactionService';
 import { diamondValue, isTurkishLang, useEconomyConfig } from '../utils/economy';
+
+type PayoutMethod = 'bank' | 'crypto' | 'paypal' | 'swift';
 
 const Wallet = () => {
   const { t, i18n } = useTranslation();
@@ -12,16 +14,24 @@ const Wallet = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [iban, setIban] = useState('');
+  const isTr = isTurkishLang(i18n.language);
+  const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>(isTr ? 'bank' : 'crypto');
   const [fullName, setFullName] = useState('');
+  const [iban, setIban] = useState('');
+  const [cryptoAddress, setCryptoAddress] = useState('');
+  const [paypalEmail, setPaypalEmail] = useState('');
+  const [swiftBank, setSwiftBank] = useState('');
+  const [swiftCode, setSwiftCode] = useState('');
+  const [swiftIban, setSwiftIban] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [withdrawalHistory, setWithdrawalHistory] = useState<any[]>([]);
   
   // Elmasın para değeri ve minimum çekim tek kaynaktan: utils/economy.ts (Stüdyo/Kokpit de aynısını kullanır).
-  const isTr = isTurkishLang(i18n.language);
   const exchangeRate = diamondValue(isTr, eco);
+  const hasReachedMilestone = (profile?.total_diamonds || 0) >= eco.minWithdrawDiamonds;
+  const progressPercent = Math.min(100, Math.max(0, Math.round(((profile?.total_diamonds || 0) / eco.minWithdrawDiamonds) * 100)));
 
   const gifts = [
     { emoji: '🌹', name: t('gift_rose'), cost: 10, reward: 3, color: '#ff2d55' },
@@ -105,6 +115,40 @@ const Wallet = () => {
       return;
     }
 
+    if (!fullName.trim()) {
+      setErrorMessage(payoutMethod === 'crypto' ? t('wallet_recipient_name_crypto') : t('wallet_recipient_name'));
+      return;
+    }
+
+    let formattedTransferInfo = '';
+    if (payoutMethod === 'bank') {
+      if (!iban.trim()) {
+        setErrorMessage(t('wallet_iban'));
+        return;
+      }
+      formattedTransferInfo = iban.trim();
+    } else if (payoutMethod === 'crypto') {
+      const cleanAddr = cryptoAddress.trim();
+      if (!cleanAddr || cleanAddr.length < 25) {
+        setErrorMessage(t('wallet_crypto_address_label'));
+        return;
+      }
+      formattedTransferInfo = `[USDT-TRC20] ${cleanAddr}`;
+    } else if (payoutMethod === 'paypal') {
+      const cleanEmail = paypalEmail.trim();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        setErrorMessage(t('wallet_paypal_email_label'));
+        return;
+      }
+      formattedTransferInfo = `[PayPal/Wise] ${cleanEmail}`;
+    } else if (payoutMethod === 'swift') {
+      if (!swiftBank.trim() || !swiftCode.trim() || !swiftIban.trim()) {
+        setErrorMessage(t('wallet_swift_bank_label'));
+        return;
+      }
+      formattedTransferInfo = `[SWIFT: ${swiftCode.trim().toUpperCase()}] Bank: ${swiftBank.trim()} | IBAN/Acc: ${swiftIban.trim()}`;
+    }
+
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -119,7 +163,7 @@ const Wallet = () => {
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('request_diamond_withdrawal', {
         p_amount_diamonds: withdrawAmount,
         p_currency: isTr ? 'TRY' : 'USD',
-        p_iban: iban.trim(),
+        p_iban: formattedTransferInfo,
         p_full_name: fullName.trim()
       });
       if (rpcErr || !rpcRes?.success) {
@@ -135,8 +179,9 @@ const Wallet = () => {
 
       setProfile({ ...profile, total_diamonds: newDiamondBalance });
       logTransaction(session.user.id, -withdrawAmount, 'withdraw_request', {
-        iban: iban.trim(),
+        iban: formattedTransferInfo,
         fullName: fullName.trim(),
+        payoutMethod,
         currencyAmount: moneyAmount
       });
 
@@ -144,14 +189,21 @@ const Wallet = () => {
       try {
         const dateStr = new Date().toLocaleDateString('tr-TR');
         const timeStr = new Date().toLocaleTimeString('tr-TR');
+        const methodLabels: Record<PayoutMethod, string> = {
+          bank: '🏦 Banka IBAN',
+          crypto: '💎 Kripto (USDT TRC-20)',
+          paypal: '💳 PayPal / Wise',
+          swift: '🌍 Uluslararası SWIFT'
+        };
         const tgMsg = `
-💸 <b>YENİ PARA ÇEKİM TALEBİ!</b> 💎
+💸 <b>YENİ İÇERİK ÜRETİCİ ÖDÜL TALEBİ!</b> 💎
 
 👤 <b>Yayıncı:</b> ${fullName.trim()} (@${profile.display_name || 'Kullanıcı'})
 💎 <b>Çekilen Elmas:</b> ${withdrawAmount.toLocaleString()} 💎
 💵 <b>Ödenecek Tutar:</b> ${isTr ? '' : '$'}${moneyAmount.toFixed(2)}${isTr ? ' ₺' : ''}
-🏦 <b>IBAN:</b> <code>${iban.trim()}</code>
-✍️ <b>Hesap Sahibi:</b> ${fullName.trim()}
+💳 <b>Yöntem:</b> ${methodLabels[payoutMethod]}
+🏦 <b>Hesap/Adres:</b> <code>${formattedTransferInfo}</code>
+✍️ <b>Hak Sahibi:</b> ${fullName.trim()}
 📅 <b>Tarih:</b> ${dateStr} • ${timeStr}
 ⏳ <b>Durum:</b> 🟡 İşleme Alındı (Moderatör Onayı Bekliyor)
 
@@ -217,15 +269,109 @@ const Wallet = () => {
         </div>
       </div>
 
-      {/* Para Çekme Formu */}
-      <div style={{ background: '#1a1a2e', padding: '24px 20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', marginBottom: '25px' }}>
-        <h3 style={{ margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.15rem' }}>
-          <CreditCard size={20} color="#ff416c" />
-          {t('wallet_withdraw_btn')}
-        </h3>
-        
-        {/* Çekim Koşulu / Limit Durumu */}
-        {(profile?.total_diamonds || 0) >= eco.minWithdrawDiamonds ? (
+      {/* İÇERİK ÜRETİCİ ÖDÜL PROGRAMI / DAĞITIM FORMU */}
+      {!hasReachedMilestone ? (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(15, 15, 26, 0.95) 100%)',
+          border: '1.5px solid rgba(0, 242, 254, 0.35)',
+          borderRadius: '24px',
+          padding: '24px 20px',
+          boxShadow: '0 8px 30px rgba(0,0,0,0.4)',
+          marginBottom: '25px',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          {/* Arka plan parlama efekti */}
+          <div style={{
+            position: 'absolute', top: '-40px', right: '-40px', width: '130px', height: '130px',
+            background: 'radial-gradient(circle, rgba(0, 242, 254, 0.22) 0%, transparent 70%)',
+            filter: 'blur(20px)', pointerEvents: 'none'
+          }} />
+
+          {/* Başlık ve Rozet */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '14px',
+                background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 15px rgba(0, 242, 254, 0.35)'
+              }}>
+                <Sparkles size={22} color="#000" />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#fff' }}>
+                  {t('wallet_locked_card_title')}
+                </h3>
+                <span style={{ fontSize: '0.74rem', color: '#00f2fe', fontWeight: '700' }}>
+                  {t('wallet_status_milestone_target', 'Seviye 1 Barajı')}
+                </span>
+              </div>
+            </div>
+            <span style={{
+              background: 'rgba(0, 242, 254, 0.12)', border: '1px solid rgba(0, 242, 254, 0.35)',
+              color: '#00f2fe', fontSize: '0.82rem', fontWeight: '800', padding: '4px 12px', borderRadius: '12px'
+            }}>
+              %{progressPercent}
+            </span>
+          </div>
+
+          {/* İlerleme Çubuğu */}
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+              <span>{t('wallet_progress_label', 'Mevcut İlerleme')}</span>
+              <strong style={{ color: '#00f2fe' }}>{profile?.total_diamonds || 0} / {eco.minWithdrawDiamonds} 💎</strong>
+            </div>
+            <div style={{ width: '100%', height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{
+                width: `${progressPercent}%`, height: '100%',
+                background: 'linear-gradient(90deg, #00f2fe, #4facfe, #ffd700)',
+                borderRadius: '10px', transition: 'width 0.4s ease',
+                boxShadow: '0 0 10px rgba(0, 242, 254, 0.5)'
+              }} />
+            </div>
+          </div>
+
+          {/* Açıklama Kartı */}
+          <div style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '14px',
+            padding: '14px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px'
+          }}>
+            <span style={{ fontSize: '1.25rem', lineHeight: 1, marginTop: '1px' }}>🎯</span>
+            <p style={{ margin: 0, fontSize: '0.82rem', lineHeight: '1.45', color: 'rgba(255,255,255,0.85)' }}>
+              {t('wallet_locked_card_desc')}
+            </p>
+          </div>
+
+          {/* Nasıl Puan Toplanır İpuçları */}
+          <div style={{
+            background: 'rgba(0, 242, 254, 0.05)',
+            border: '1px dashed rgba(0, 242, 254, 0.25)',
+            borderRadius: '14px',
+            padding: '12px 14px'
+          }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '0.82rem', color: '#00f2fe', fontWeight: '800' }}>
+              {t('wallet_locked_how_to_earn')}
+            </h4>
+            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.78rem', color: 'rgba(255,255,255,0.75)', lineHeight: '1.5' }}>
+              <li>{t('wallet_locked_tip_1')}</li>
+              <li>{t('wallet_locked_tip_2')}</li>
+            </ul>
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: '#1a1a2e', padding: '24px 20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', marginBottom: '25px' }}>
+          <h3 style={{ margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.15rem' }}>
+            <Award size={22} color="#00f2fe" />
+            {t('wallet_withdraw_btn')}
+          </h3>
+          
           <div style={{
             background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.12) 0%, rgba(0, 242, 254, 0.08) 100%)',
             border: '1px solid rgba(46, 204, 113, 0.35)',
@@ -244,105 +390,233 @@ const Wallet = () => {
               {t('wallet_threshold_reached')}
             </div>
           </div>
-        ) : (
-          <div style={{
-            background: 'rgba(255, 193, 7, 0.08)',
-            border: '1px solid rgba(255, 193, 7, 0.3)',
-            borderRadius: '12px',
-            padding: '10px 14px',
-            marginBottom: '18px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontSize: '0.8rem',
-            color: '#ffeaa7'
-          }}>
-            <span style={{ fontSize: '1.1rem' }}>⏳</span>
-            <span>{t('wallet_threshold_not_reached', { current: profile?.total_diamonds || 0 })}</span>
-          </div>
-        )}
 
-        {successMessage && (
-          <div style={{ background: 'rgba(46, 204, 113, 0.12)', padding: '14px', borderRadius: '12px', border: '1px solid #2ecc71', marginBottom: '18px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-            <CheckCircle2 color="#2ecc71" size={22} style={{ flexShrink: 0, marginTop: '2px' }} />
-            <p style={{ color: '#2ecc71', margin: 0, fontWeight: '600', fontSize: '0.86rem', lineHeight: '1.4' }}>{successMessage}</p>
-          </div>
-        )}
+          {successMessage && (
+            <div style={{ background: 'rgba(46, 204, 113, 0.12)', padding: '14px', borderRadius: '12px', border: '1px solid #2ecc71', marginBottom: '18px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <CheckCircle2 color="#2ecc71" size={22} style={{ flexShrink: 0, marginTop: '2px' }} />
+              <p style={{ color: '#2ecc71', margin: 0, fontWeight: '600', fontSize: '0.86rem', lineHeight: '1.4' }}>{successMessage}</p>
+            </div>
+          )}
 
-        {errorMessage && (
-          <div style={{ background: 'rgba(255, 107, 107, 0.1)', padding: '14px', borderRadius: '12px', border: '1px solid #ff6b6b', marginBottom: '18px' }}>
-            <p style={{ color: '#ff6b6b', margin: 0, fontSize: '0.86rem' }}>{errorMessage}</p>
-          </div>
-        )}
+          {errorMessage && (
+            <div style={{ background: 'rgba(255, 107, 107, 0.1)', padding: '14px', borderRadius: '12px', border: '1px solid #ff6b6b', marginBottom: '18px' }}>
+              <p style={{ color: '#ff6b6b', margin: 0, fontSize: '0.86rem' }}>{errorMessage}</p>
+            </div>
+          )}
 
-        <form onSubmit={handleWithdrawal} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>{t('wallet_name')}</label>
-            <input 
-              type="text" 
-              required
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Full Name"
-              style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>{t('wallet_iban')}</label>
-            <input 
-              type="text" 
-              required
-              value={iban}
-              onChange={(e) => setIban(e.target.value)}
-              placeholder="TR00 0000..."
-              style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>{t('wallet_amount')}</label>
-            <input 
-              type="number" 
-              required
-              min={eco.minWithdrawDiamonds}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              placeholder={`Min. ${eco.minWithdrawDiamonds}`}
-              style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
-            />
-          </div>
-          
-          <button 
-            type="submit"
-            disabled={submitting}
-            style={{
-              background: submitting ? 'rgba(255,255,255,0.2)' : 'linear-gradient(to right, #ff416c, #ff4b2b)',
-              color: 'white', border: 'none', padding: '14px', borderRadius: '10px',
-              fontWeight: 'bold', fontSize: '1.05rem', cursor: submitting ? 'not-allowed' : 'pointer', marginTop: '6px',
-              boxShadow: '0 4px 15px rgba(255, 65, 108, 0.4)'
-            }}
-          >
-            {submitting ? '...' : t('wallet_submit')}
-          </button>
+          <form onSubmit={handleWithdrawal} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Transfer Yöntemi Seçimi */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', color: 'rgba(255,255,255,0.85)', fontSize: '0.85rem', fontWeight: '700' }}>
+                {t('wallet_method_title')}
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                {([
+                  { id: 'bank', name: t('wallet_method_bank'), icon: Building2 },
+                  { id: 'crypto', name: t('wallet_method_crypto'), icon: Coins },
+                  { id: 'paypal', name: t('wallet_method_paypal'), icon: CreditCard },
+                  { id: 'swift', name: t('wallet_method_swift'), icon: Globe }
+                ] as const).map((m) => {
+                  const active = payoutMethod === m.id;
+                  const Icon = m.icon;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setPayoutMethod(m.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 12px',
+                        borderRadius: '12px',
+                        background: active ? 'linear-gradient(135deg, rgba(0, 242, 254, 0.22) 0%, rgba(79, 172, 254, 0.22) 100%)' : 'rgba(255,255,255,0.04)',
+                        border: active ? '1.5px solid #00f2fe' : '1px solid rgba(255,255,255,0.08)',
+                        color: active ? '#00f2fe' : 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer',
+                        fontWeight: active ? '700' : '500',
+                        fontSize: '0.82rem',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'left'
+                      }}
+                    >
+                      <Icon size={16} color={active ? '#00f2fe' : 'rgba(255,255,255,0.5)'} style={{ flexShrink: 0 }} />
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-          {/* Çekim Takip Bilgilendirme Notu */}
-          <div style={{
-            marginTop: '4px',
-            background: 'rgba(0, 242, 254, 0.06)',
-            border: '1px dashed rgba(0, 242, 254, 0.25)',
-            borderRadius: '10px',
-            padding: '10px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '0.78rem',
-            color: '#a0e7ff',
-            lineHeight: '1.35'
-          }}>
-            <span style={{ fontSize: '1rem', flexShrink: 0 }}>ℹ️</span>
-            <span>{t('wallet_withdraw_track_hint')}</span>
-          </div>
-        </form>
-      </div>
+            {/* Hak Sahibi / Alıcı Adı */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                {payoutMethod === 'crypto' ? t('wallet_recipient_name_crypto') : t('wallet_recipient_name')}
+              </label>
+              <input 
+                type="text" 
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder={payoutMethod === 'crypto' ? 'Name or Alias' : 'Full Name'}
+                style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
+              />
+            </div>
+
+            {/* Yönteme Özel Dinamik Alanlar */}
+            {payoutMethod === 'bank' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>{t('wallet_iban')}</label>
+                <input 
+                  type="text" 
+                  required
+                  value={iban}
+                  onChange={(e) => setIban(e.target.value)}
+                  placeholder="TR00 0000 0000..."
+                  style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
+                />
+              </div>
+            )}
+
+            {payoutMethod === 'crypto' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                  {t('wallet_crypto_address_label')}
+                </label>
+                <input 
+                  type="text" 
+                  required
+                  value={cryptoAddress}
+                  onChange={(e) => setCryptoAddress(e.target.value)}
+                  placeholder={t('wallet_crypto_address_ph')}
+                  style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.88rem' }}
+                />
+                <div style={{ marginTop: '6px', fontSize: '0.78rem', color: '#00f2fe', opacity: 0.9 }}>
+                  {t('wallet_crypto_hint')}
+                </div>
+              </div>
+            )}
+
+            {payoutMethod === 'paypal' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                  {t('wallet_paypal_email_label')}
+                </label>
+                <input 
+                  type="email" 
+                  required
+                  value={paypalEmail}
+                  onChange={(e) => setPaypalEmail(e.target.value)}
+                  placeholder={t('wallet_paypal_email_ph')}
+                  style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
+                />
+                <div style={{ marginTop: '6px', fontSize: '0.78rem', color: '#00f2fe', opacity: 0.9 }}>
+                  {t('wallet_paypal_hint')}
+                </div>
+              </div>
+            )}
+
+            {payoutMethod === 'swift' && (
+              <>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                    {t('wallet_swift_bank_label')}
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    value={swiftBank}
+                    onChange={(e) => setSwiftBank(e.target.value)}
+                    placeholder={t('wallet_swift_bank_ph')}
+                    style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                    {t('wallet_swift_code_label')}
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    value={swiftCode}
+                    onChange={(e) => setSwiftCode(e.target.value.toUpperCase())}
+                    placeholder={t('wallet_swift_code_ph')}
+                    style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                    {t('wallet_swift_iban_label')}
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    value={swiftIban}
+                    onChange={(e) => setSwiftIban(e.target.value)}
+                    placeholder={t('wallet_swift_iban_ph')}
+                    style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
+                  />
+                </div>
+                <div style={{ marginTop: '2px', fontSize: '0.78rem', color: '#00f2fe', opacity: 0.9 }}>
+                  {t('wallet_swift_hint')}
+                </div>
+              </>
+            )}
+
+            {/* Miktar */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>{t('wallet_amount')}</label>
+                {Number(amount) >= eco.minWithdrawDiamonds && (
+                  <span style={{ fontSize: '0.8rem', color: '#4caf50', fontWeight: 'bold' }}>
+                    ≈ {isTr ? '' : '$'}{((Number(amount) || 0) * exchangeRate).toFixed(2)} {isTr ? '₺' : 'USD'}
+                  </span>
+                )}
+              </div>
+              <input 
+                type="number" 
+                required
+                min={eco.minWithdrawDiamonds}
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value))}
+                placeholder={`Min. ${eco.minWithdrawDiamonds}`}
+                style={{ width: '100%', padding: '12px 15px', borderRadius: '10px', border: 'none', background: '#0f0f1a', color: 'white', boxSizing: 'border-box', fontSize: '0.9rem' }}
+              />
+            </div>
+            
+            <button 
+              type="submit"
+              disabled={submitting}
+              style={{
+                background: submitting ? 'rgba(255,255,255,0.2)' : 'linear-gradient(to right, #00f2fe, #4facfe)',
+                color: '#000', border: 'none', padding: '14px', borderRadius: '10px',
+                fontWeight: '900', fontSize: '1.05rem', cursor: submitting ? 'not-allowed' : 'pointer', marginTop: '6px',
+                boxShadow: '0 4px 15px rgba(0, 242, 254, 0.4)'
+              }}
+            >
+              {submitting ? '...' : t('wallet_submit')}
+            </button>
+
+            {/* Çekim Takip Bilgilendirme Notu */}
+            <div style={{
+              marginTop: '4px',
+              background: 'rgba(0, 242, 254, 0.06)',
+              border: '1px dashed rgba(0, 242, 254, 0.25)',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.78rem',
+              color: '#a0e7ff',
+              lineHeight: '1.35'
+            }}>
+              <span style={{ fontSize: '1rem', flexShrink: 0 }}>ℹ️</span>
+              <span>{t('wallet_withdraw_track_hint')}</span>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Kazanç Tablosu (12 Hediye Birebir Tam Liste - Kompakt Tasarım) */}
       <div style={{ background: '#1a1a2e', padding: '16px 14px', borderRadius: '18px', marginBottom: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>

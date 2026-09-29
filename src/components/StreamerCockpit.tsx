@@ -311,7 +311,7 @@ export default function StreamerCockpit({
             }}
           >
             <Wallet size={16} />
-            <span>{t('streamer_withdraw_btn', 'Nakit Çek')}</span>
+            <span>{t('streamer_withdraw_btn', 'Ödül Puanları')}</span>
           </button>
 
           {/* Keşfet Vitrinim */}

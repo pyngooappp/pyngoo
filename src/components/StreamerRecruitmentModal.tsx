@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   Sparkles, ShieldCheck, 
-  Upload, Camera, X, Check, DollarSign, Wallet, Coins
+  Upload, Camera, X, Check, Award, Coins
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { validateAndSanitizeImage } from '../utils/imageSecurity';
@@ -235,7 +235,7 @@ export default function StreamerRecruitmentModal({
               marginBottom: '14px',
               boxShadow: '0 0 20px rgba(255, 215, 0, 0.35)'
             }}>
-              <DollarSign size={15} color="#2ecc71" strokeWidth={3} />
+              <Sparkles size={15} color="#ffd700" />
               <span>{t('recruit_badge')}</span>
             </div>
 
@@ -262,10 +262,10 @@ export default function StreamerRecruitmentModal({
               <span dangerouslySetInnerHTML={{ __html: t('recruit_desc') }} />
             </p>
 
-            {/* 4 Ana Avantaj Kartı - Gerçek Para ve Dolar Simgeleriyle */}
+            {/* 4 Ana Avantaj Kartı - Ödül Puanları ve İçerik Üretici Simgeleriyle */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '22px', textAlign: 'left' }}>
               
-              {/* Kart 1: Dakika Başı Nakit Para */}
+              {/* Kart 1: Dakika Başı Ödül Puanı */}
               <div style={{
                 background: 'rgba(255, 255, 255, 0.05)',
                 border: '1px solid rgba(46, 204, 113, 0.4)',
@@ -274,7 +274,7 @@ export default function StreamerRecruitmentModal({
                 boxShadow: '0 4px 15px rgba(46, 204, 113, 0.1)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2ecc71', fontWeight: '800', fontSize: '0.82rem', marginBottom: '4px' }}>
-                  <DollarSign size={16} strokeWidth={3} />
+                  <Sparkles size={16} color="#2ecc71" />
                   <span>{t('recruit_perk_cash_title')}</span>
                 </div>
                 <p style={{ margin: 0, color: 'rgba(255,255,255,0.72)', fontSize: '0.73rem', lineHeight: '1.35' }}>
@@ -299,7 +299,7 @@ export default function StreamerRecruitmentModal({
                 </p>
               </div>
 
-              {/* Kart 3: Hızlı IBAN & Papara Çekimi */}
+              {/* Kart 3: İçerik Üretici Dağıtımı */}
               <div style={{
                 background: 'rgba(255, 255, 255, 0.05)',
                 border: '1px solid rgba(0, 242, 254, 0.4)',
@@ -308,7 +308,7 @@ export default function StreamerRecruitmentModal({
                 boxShadow: '0 4px 15px rgba(0, 242, 254, 0.1)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#00f2fe', fontWeight: '800', fontSize: '0.82rem', marginBottom: '4px' }}>
-                  <Wallet size={16} />
+                  <Award size={16} color="#00f2fe" />
                   <span>{t('recruit_perk_payout_title')}</span>
                 </div>
                 <p style={{ margin: 0, color: 'rgba(255,255,255,0.72)', fontSize: '0.73rem', lineHeight: '1.35' }}>
