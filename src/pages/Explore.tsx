@@ -474,6 +474,7 @@ export default function Explore({ userId }: ExploreProps) {
   return (
     <div className="explore-container" style={{
       width: '100%',
+      paddingTop: 'calc(env(safe-area-inset-top, 8px) + 6px)',
       paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
       background: 'linear-gradient(180deg, #0b0c16 0%, #121324 100%)',
       color: '#fff'

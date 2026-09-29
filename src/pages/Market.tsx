@@ -917,7 +917,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
         position: 'sticky', top: 0, zIndex: 40,
         background: 'rgba(12, 13, 26, 0.85)', backdropFilter: 'blur(16px)',
         borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+        padding: 'calc(env(safe-area-inset-top, 8px) + 6px) 16px 12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
       }}>
         <button
           onClick={() => navigate(-1)}

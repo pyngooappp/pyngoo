@@ -679,7 +679,7 @@ export default function Chats({ userId }: ChatsProps) {
         paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
         display: (window.innerWidth < 768 && activeChat) ? 'none' : 'block' // Mobilde mesajlaşırken listeyi gizle
       }}>
-        <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ padding: 'calc(env(safe-area-inset-top, 8px) + 8px) 16px 14px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <h2>{t('chats_title')}</h2>
         </div>
         

@@ -370,7 +370,7 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
       {/* 1. PROFİL KART BAŞLIĞI */}
       <header className="home-header glassmorphism" style={{
         flexDirection: 'column', gap: '14px', padding: '24px 20px',
-        margin: '16px 14px', borderRadius: '28px',
+        margin: 'max(6px, env(safe-area-inset-top, 6px)) 12px 14px 12px', borderRadius: '28px',
         background: 'linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
         border: '1px solid rgba(255,255,255,0.1)'
       }}>
