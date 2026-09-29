@@ -236,7 +236,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       outcome = await Promise.race([
         purchaseGoldProduct(selectedPackage.appleProductId, userId, logStep),
         new Promise<never>((_, reject) => {
-          outerTimer = setTimeout(() => reject(new Error('outer_timeout_30s')), 30000);
+          outerTimer = setTimeout(() => reject(new Error('outer_timeout_60s')), 60000);
         }),
       ]);
     } catch (err: any) {
@@ -1262,12 +1262,12 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                 name: 'Pyngoo VIP Pass',
                 gold: 1500,
                 bonus: 500,
-                priceTr: '149.99 ₺',
+                priceTr: '249.99 ₺',
                 priceEn: '$4.99',
-                oldPriceTr: '299.99 ₺',
+                oldPriceTr: '499.99 ₺',
                 oldPriceEn: '$9.99',
                 discountBadge: t('market_badge_discount_70'),
-                appleProductId: 'com.pyngoo.gold.vip_pass',
+                appleProductId: 'com.pyngoo.vip.monthly',
                 iconType: 'crown'
               });
             }}

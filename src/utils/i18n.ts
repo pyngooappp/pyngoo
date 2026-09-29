@@ -899,7 +899,7 @@ const trTranslation = {
       "market_free_text": "Ücretsiz",
       "market_vip_title": "Pyngoo VIP Club",
       "market_vip_subtitle": "Ayrıcalıklı Deneyim & Öncelik",
-      "market_vip_period": "149.99 ₺ / Ay",
+      "market_vip_period": "249.99 ₺ / Ay",
       "market_vip_perk_1": "✨ Her gün 50 Ücretsiz Altın bakiyene eklenir",
       "market_vip_perk_2": "⏱️ Günde 5 adet ücretsiz görüşme uzatma hakkı (+60s)",
       "market_vip_perk_3": "👑 İsminin yanında parlayan altın VIP tacı rozeti",
