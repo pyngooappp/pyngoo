@@ -367,10 +367,10 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
   return (
     <div className="home-container" style={{ paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))', width: '100%' }}>
       
-      {/* 1. PROFİL KART BAŞLIĞI */}
+      {/* 1. PROFİL KART BAŞLIĞI (KOMPAKT & MODERN) */}
       <header className="home-header glassmorphism" style={{
-        flexDirection: 'column', gap: '14px', padding: '24px 20px',
-        margin: 'max(6px, env(safe-area-inset-top, 6px)) 12px 14px 12px', borderRadius: '28px',
+        flexDirection: 'column', gap: '8px', padding: '14px 16px 12px 16px',
+        margin: 'max(4px, env(safe-area-inset-top, 4px)) 12px 8px 12px', borderRadius: '24px',
         background: 'linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
         border: '1px solid rgba(255,255,255,0.1)'
       }}>
@@ -380,12 +380,12 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
           title={t('host_center_change_photo', 'Profil Resminizi Düzenle')}
         >
           <div className="avatar" style={{
-            width: '84px', height: '84px', fontSize: '2.4rem',
+            width: '64px', height: '64px', fontSize: '1.8rem',
             background: avatarUrl 
               ? 'linear-gradient(135deg, #ffd700, #ff416c)' 
               : 'linear-gradient(135deg, #ff0844, #ffb199)',
-            boxShadow: '0 8px 25px rgba(255, 8, 68, 0.4)',
-            border: '3px solid rgba(255,255,255,0.4)',
+            boxShadow: '0 6px 20px rgba(255, 8, 68, 0.35)',
+            border: '2.5px solid rgba(255,255,255,0.4)',
             borderRadius: '50%',
             overflow: 'hidden',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -402,70 +402,70 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
           </div>
           {profile.is_premium && (
             <div style={{
-              position: 'absolute', bottom: '-4px', right: '-4px',
+              position: 'absolute', bottom: '-2px', right: '-2px',
               background: 'linear-gradient(135deg, #ffd700, #ff9800)',
-              width: '26px', height: '26px', borderRadius: '50%',
+              width: '22px', height: '22px', borderRadius: '50%',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
+              boxShadow: '0 2px 6px rgba(0,0,0,0.5)'
             }}>
-              <Crown size={15} color="#000" />
+              <Crown size={12} color="#000" />
             </div>
           )}
           {/* Kamera Rozeti */}
           <div style={{
-            position: 'absolute', bottom: '0px', left: '-2px',
+            position: 'absolute', bottom: '-2px', left: '-2px',
             background: 'linear-gradient(135deg, #2ecc71, #11998e)',
-            width: '26px', height: '26px', borderRadius: '50%',
+            width: '22px', height: '22px', borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
             border: '1.5px solid #fff'
           }}>
-            <Camera size={14} color="#fff" />
+            <Camera size={11} color="#fff" />
           </div>
         </div>
         
         <div className="user-details" style={{ textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-            <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: '800' }}>
+            <h2 style={{ fontSize: '1.25rem', margin: 0, fontWeight: '800' }}>
               {profile.display_name}
             </h2>
             {profile.is_premium && (
               <span style={{
                 background: 'linear-gradient(135deg, #ffd700, #ff9800)',
-                color: '#000', fontSize: '0.65rem', fontWeight: '900',
-                padding: '2px 7px', borderRadius: '8px', letterSpacing: '0.5px'
+                color: '#000', fontSize: '0.62rem', fontWeight: '900',
+                padding: '1px 6px', borderRadius: '6px', letterSpacing: '0.4px'
               }}>
                 VIP
               </span>
             )}
           </div>
 
-          <p style={{ color: 'rgba(255,255,255,0.6)', margin: '6px 0 8px 0', fontSize: '0.85rem' }}>
+          <p style={{ color: 'rgba(255,255,255,0.6)', margin: '2px 0 6px 0', fontSize: '0.78rem' }}>
             {profile.gender === 'erkek' ? t('login_male', 'Erkek') : t('login_female', 'Kadın')}
-            <span style={{ margin: '0 6px', opacity: 0.4 }}>•</span>
+            <span style={{ margin: '0 5px', opacity: 0.4 }}>•</span>
             <span style={{ color: '#2ecc71', fontWeight: '600' }}>{t('profile_active_member')}</span>
           </p>
 
           {/* Profil Resmini Düzenle Butonu */}
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '6px' }}>
             <button
               onClick={() => setShowPhotoModal(true)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '20px',
+                gap: '5px',
+                padding: '4px 12px',
+                borderRadius: '16px',
                 background: 'rgba(255, 215, 0, 0.12)',
-                border: '1px solid rgba(255, 215, 0, 0.5)',
+                border: '1px solid rgba(255, 215, 0, 0.45)',
                 color: '#ffd700',
-                fontSize: '0.78rem',
+                fontSize: '0.74rem',
                 fontWeight: '800',
                 cursor: 'pointer',
                 transition: 'all 0.2s'
               }}
             >
-              <Camera size={14} />
+              <Camera size={12} />
               <span>{t('host_center_change_photo', 'Profil Resminizi Düzenle')}</span>
             </button>
           </div>
@@ -475,37 +475,37 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
             <div 
               onClick={() => navigate('/market')}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: '8px',
-                padding: '10px 22px', borderRadius: '20px',
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '7px 18px', borderRadius: '18px',
                 background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.18), rgba(255, 140, 0, 0.1))',
-                border: '1.5px solid rgba(255, 215, 0, 0.4)',
-                boxShadow: '0 4px 15px rgba(255, 215, 0, 0.2)',
+                border: '1.2px solid rgba(255, 215, 0, 0.4)',
+                boxShadow: '0 3px 12px rgba(255, 215, 0, 0.2)',
                 cursor: 'pointer'
               }}
             >
-              <Coins size={22} color="#ffd700" />
-              <span style={{ fontWeight: '900', color: '#ffd700', fontSize: '1.15rem' }}>
+              <Coins size={18} color="#ffd700" />
+              <span style={{ fontWeight: '900', color: '#ffd700', fontSize: '1.02rem' }}>
                 {profile.total_gold} {t('gold_currency_label')}
               </span>
-              <ChevronRight size={16} color="rgba(255, 215, 0, 0.7)" />
+              <ChevronRight size={15} color="rgba(255, 215, 0, 0.7)" />
             </div>
           ) : (
             <div 
               onClick={() => navigate('/wallet')}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: '8px',
-                padding: '10px 22px', borderRadius: '20px',
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '7px 18px', borderRadius: '18px',
                 background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.18), rgba(79, 172, 254, 0.1))',
-                border: '1.5px solid rgba(0, 242, 254, 0.4)',
-                boxShadow: '0 4px 15px rgba(0, 242, 254, 0.2)',
+                border: '1.2px solid rgba(0, 242, 254, 0.4)',
+                boxShadow: '0 3px 12px rgba(0, 242, 254, 0.2)',
                 cursor: 'pointer'
               }}
             >
-              <span style={{ fontSize: '1.3rem' }}>💎</span>
-              <span style={{ fontWeight: '900', color: '#00f2fe', fontSize: '1.15rem' }}>
+              <span style={{ fontSize: '1.1rem' }}>💎</span>
+              <span style={{ fontWeight: '900', color: '#00f2fe', fontSize: '1.02rem' }}>
                 {profile.total_diamonds || 0} {t('diamond_currency_label')}
               </span>
-              <ChevronRight size={16} color="rgba(0, 242, 254, 0.7)" />
+              <ChevronRight size={15} color="rgba(0, 242, 254, 0.7)" />
             </div>
           )}
         </div>

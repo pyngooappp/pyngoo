@@ -923,7 +923,7 @@ export default function Layout({ userId }: LayoutProps) {
           </div>
         )}
         {!isCallActive && !isInsideActiveChat && (
-          <nav className="bottom-nav">
+          <nav className="bottom-nav" style={{ pointerEvents: 'auto', zIndex: 99999 }}>
             <NavLink 
               to="/" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}

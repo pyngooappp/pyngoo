@@ -769,7 +769,7 @@ img, video {
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: 8px;
+  bottom: max(8px, calc(env(safe-area-inset-bottom, 0px) * 0.45));
   max-width: 440px;
   margin: 0 auto;
   height: 64px;
@@ -778,7 +778,12 @@ img, video {
   align-items: center;
   padding: 0 6px;
   box-sizing: border-box;
-  z-index: 100;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform;
   border-radius: 36px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 42%, rgba(255, 255, 255, 0) 55%, rgba(255, 255, 255, 0.06) 100%),
@@ -858,6 +863,14 @@ body.in-call .main-content {
   transition: color 0.2s ease, background 0.22s ease;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+}
+
+.nav-item * {
+  pointer-events: none !important;
 }
 
 .nav-icon-wrap {
@@ -1011,6 +1024,80 @@ body.in-call .main-content {
   100% {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+/* --- SOHBETLER (CHATS) EKRANI (WhatsApp / Telegram Tam Ekran Düzeni) --- */
+.chats-screen-wrapper {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  background: radial-gradient(circle at top, #1c1d3b 0%, #0c0d1a 100%);
+  color: #fff;
+}
+
+.chats-list-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding-bottom: calc(95px + env(safe-area-inset-bottom, 0px));
+}
+
+.chats-message-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 11, 24, 0.98);
+  min-height: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.chats-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+  color: #fff;
+}
+
+@media (max-width: 767px) {
+  .chats-list-panel.hidden-on-mobile {
+    display: none !important;
+  }
+  .chats-message-panel {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 50;
+  }
+  .chats-empty-state {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .chats-list-panel {
+    width: 360px !important;
+    max-width: 380px;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex !important;
+    flex-shrink: 0;
+  }
+  .chats-message-panel {
+    flex: 1;
+    position: relative;
   }
 }
 

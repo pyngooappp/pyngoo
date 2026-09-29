@@ -912,34 +912,34 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
     }}>
-      {/* 1. ÜST BAR & BAŞLIK */}
+      {/* 1. ÜST BAR & BAŞLIK (DARALTILMIŞ / SLIM) */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 40,
-        background: 'rgba(12, 13, 26, 0.85)', backdropFilter: 'blur(16px)',
+        background: 'rgba(12, 13, 26, 0.92)', backdropFilter: 'blur(16px)',
         borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        padding: 'calc(env(safe-area-inset-top, 8px) + 6px) 16px 12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+        padding: 'max(env(safe-area-inset-top, 0px), 6px) 14px 6px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
       }}>
         <button
           onClick={() => navigate(-1)}
           style={{
             background: 'rgba(255,255,255,0.08)', border: 'none',
-            color: '#fff', width: '38px', height: '38px', borderRadius: '50%',
+            color: '#fff', width: '34px', height: '34px', borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
           }}
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={18} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
           <div style={{
-            width: '28px', height: '28px', borderRadius: '50%',
+            width: '24px', height: '24px', borderRadius: '50%',
             background: 'linear-gradient(135deg, #ffd700, #ff8800)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 12px rgba(255, 215, 0, 0.5)'
+            boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
           }}>
-            <Coins size={16} color="#000" />
+            <Coins size={14} color="#000" />
           </div>
-          <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800', letterSpacing: '0.3px' }}>
+          <h2 style={{ margin: 0, fontSize: '1.02rem', fontWeight: '800', letterSpacing: '0.2px' }}>
             {t('market_title')}
           </h2>
         </div>
@@ -947,43 +947,43 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
         {/* Canlı Bakiye Rozeti */}
         <div style={{
           background: 'rgba(255, 215, 0, 0.12)', border: '1px solid rgba(255, 215, 0, 0.35)',
-          padding: '4px 12px', borderRadius: '20px',
-          display: 'flex', alignItems: 'center', gap: '6px',
-          boxShadow: '0 2px 10px rgba(255, 215, 0, 0.15)'
+          padding: '3px 10px', borderRadius: '18px',
+          display: 'flex', alignItems: 'center', gap: '5px',
+          boxShadow: '0 2px 8px rgba(255, 215, 0, 0.15)'
         }}>
-          <span style={{ fontSize: '1rem' }}>🪙</span>
-          <span style={{ color: '#ffd700', fontWeight: '800', fontSize: '0.9rem' }}>
+          <span style={{ fontSize: '0.9rem' }}>🪙</span>
+          <span style={{ color: '#ffd700', fontWeight: '800', fontSize: '0.84rem' }}>
             {profile?.total_gold || 0}
           </span>
         </div>
       </div>
 
-      <div style={{ maxWidth: '520px', margin: '0 auto', padding: '16px 14px' }}>
+      <div style={{ maxWidth: '520px', margin: '0 auto', padding: '6px 12px 14px 12px' }}>
 
-        {/* 3. GÜNÜN FLAŞ FIRSATI (CANLI GERİ SAYIM SAYACI) */}
+        {/* 3. GÜNÜN FLAŞ FIRSATI (CANLI GERİ SAYIM SAYACI - İNCELTİLMİŞ) */}
         <div style={{
           background: 'linear-gradient(90deg, #ff0844 0%, #ff4e50 100%)',
-          borderRadius: '18px', padding: '12px 16px',
-          marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          boxShadow: '0 6px 20px rgba(255, 8, 68, 0.35)', animation: 'pulse 2s infinite'
+          borderRadius: '14px', padding: '7px 12px',
+          marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: '0 4px 14px rgba(255, 8, 68, 0.3)', animation: 'pulse 2s infinite'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '1.5rem' }}>⚡</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.2rem' }}>⚡</span>
             <div>
-              <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#fff', letterSpacing: '0.3px' }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff', letterSpacing: '0.2px' }}>
                 {t('market_flash_sale_title')}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600' }}>
+              <div style={{ fontSize: '0.67rem', color: 'rgba(255,255,255,0.92)', fontWeight: '600', lineHeight: 1.15 }}>
                 {t('market_flash_sale_desc')}
               </div>
             </div>
           </div>
 
           <div style={{
-            background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: '12px',
-            display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: '800', color: '#fff'
+            background: 'rgba(0,0,0,0.35)', padding: '3px 8px', borderRadius: '10px',
+            display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', fontWeight: '800', color: '#fff', flexShrink: 0
           }}>
-            <Clock size={13} />
+            <Clock size={12} />
             <span>
               {String(countdown.hours).padStart(2, '0')}:
               {String(countdown.minutes).padStart(2, '0')}:
@@ -992,32 +992,32 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
           </div>
         </div>
 
-        {/* 🎬 3.5 ÜCRETSİZ ALTIN KAZAN (ÖDÜLLÜ REKLAM BANNERI) */}
+        {/* 🎬 3.5 ÜCRETSİZ ALTIN KAZAN (ÖDÜLLÜ REKLAM BANNERI - İNCELTİLMİŞ) */}
         <div 
           onClick={handleStartWatchAd}
           style={{
             background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.15) 0%, rgba(79, 172, 254, 0.05) 100%)',
-            border: '1.5px solid rgba(0, 242, 254, 0.4)',
-            borderRadius: '20px', padding: '14px 16px',
-            marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            border: '1.2px solid rgba(0, 242, 254, 0.4)',
+            borderRadius: '16px', padding: '8px 12px',
+            marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             cursor: remainingDailyAds > 0 ? 'pointer' : 'default',
-            boxShadow: '0 4px 20px rgba(0, 242, 254, 0.15)',
+            boxShadow: '0 3px 14px rgba(0, 242, 254, 0.12)',
             position: 'relative', overflow: 'hidden'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
-              width: '44px', height: '44px', borderRadius: '14px',
+              width: '36px', height: '36px', borderRadius: '10px',
               background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0, 242, 254, 0.4)', flexShrink: 0
+              boxShadow: '0 3px 10px rgba(0, 242, 254, 0.35)', flexShrink: 0
             }}>
-              <Play size={22} color="#000" fill="#000" />
+              <Play size={18} color="#000" fill="#000" />
             </div>
 
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.92rem', fontWeight: '900', color: '#fff' }}>
+                <span style={{ fontSize: '0.84rem', fontWeight: '900', color: '#fff' }}>
                   {t('market_free_gold_title')}
                 </span>
                 <span style={{

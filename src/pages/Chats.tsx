@@ -667,20 +667,12 @@ export default function Chats({ userId }: ChatsProps) {
   }
 
   return (
-    <div className="home-container" style={{ display: 'flex', height: '100%', width: '100%', overflow: 'hidden' }}>
+    <div className="chats-screen-wrapper">
       
-      {/* Sol Taraf: Arkadaş Listesi (Mobilde activeChat yoksa tam ekran) */}
-      <div style={{ 
-        width: activeChat ? '30%' : '100%', 
-        borderRight: '1px solid rgba(255,255,255,0.1)', 
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        touchAction: 'pan-y',
-        paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
-        display: (window.innerWidth < 768 && activeChat) ? 'none' : 'block' // Mobilde mesajlaşırken listeyi gizle
-      }}>
-        <div style={{ padding: 'calc(env(safe-area-inset-top, 8px) + 8px) 16px 14px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <h2>{t('chats_title')}</h2>
+      {/* Sol Taraf: Arkadaş Listesi (WhatsApp / Telegram Tam Ekran Liste) */}
+      <div className={`chats-list-panel ${activeChat ? 'hidden-on-mobile' : ''}`}>
+        <div style={{ padding: 'max(env(safe-area-inset-top, 0px), 8px) 16px 12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+          <h2 style={{ fontSize: '1.2rem', margin: 0, fontWeight: '800' }}>{t('chats_title')}</h2>
         </div>
         
         {pendingRequests.length > 0 && (
@@ -831,16 +823,16 @@ export default function Chats({ userId }: ChatsProps) {
         )}
       </div>
 
-      {/* Sağ Taraf: Mesajlaşma Alanı */}
+      {/* Sağ Taraf: Mesajlaşma Alanı (WhatsApp / Telegram Tam Ekran) */}
       {activeChat ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.2)', minHeight: 0 }}>
+        <div className="chats-message-panel">
           {/* Header */}
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ padding: 'max(env(safe-area-inset-top, 0px), 8px) 16px 10px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button 
               onClick={handleCloseChat}
-              style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '50%' }}
             >
-              <ArrowLeft size={24} />
+              <ArrowLeft size={20} />
             </button>
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <div style={{
@@ -1200,7 +1192,7 @@ export default function Chats({ userId }: ChatsProps) {
 
         </div>
       ) : (
-        <div style={{ flex: 1, display: (window.innerWidth < 768) ? 'none' : 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>
+        <div className="chats-empty-state">
           <MessageSquare size={64} style={{ marginBottom: '20px' }} />
           <h3>{t('chats_no_active')}</h3>
         </div>
