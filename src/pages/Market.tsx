@@ -26,6 +26,7 @@ import { logTransaction } from '../utils/transactionService';
 import { processCryptoPayment } from '../utils/cryptoVerifyService';
 import { admobService } from '../utils/admobService';
 import { LegalModal, type LegalModalType } from '../components/LegalModal';
+import { TreasureRewardModal } from '../components/TreasureRewardModal';
 import { isIosNative, isAndroidNative, iapAvailable, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
 
 interface MarketProps {
@@ -908,7 +909,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       width: '100%',
       background: 'radial-gradient(circle at top, #1c1d3b 0%, #0c0d1a 100%)',
       color: '#fff',
-      paddingBottom: 'calc(75px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       {/* 1. ÜST BAR & BAŞLIK */}
@@ -1882,52 +1883,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       )}
 
       {/* 8. BAŞARILI SATIN ALMA TEBRİK OVERLAY'İ (KUTLAMA / CONFETTI) */}
-      {purchaseSuccess && createPortal(
-        <div style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 11000, animation: 'fadeIn 0.2s ease', padding: '16px'
-        }}>
-          <div style={{
-            background: 'linear-gradient(145deg, #1c1d3b, #121324)',
-            border: '2px solid #ffd700', borderRadius: '28px',
-            padding: '36px 24px', textAlign: 'center', maxWidth: '380px', width: '90%',
-            boxShadow: '0 0 50px rgba(255, 215, 0, 0.6)',
-            animation: 'sweetCenterFade 0.25s ease-out'
-          }}>
-            <div style={{ fontSize: '4.5rem', marginBottom: '10px', animation: 'pulse 1s infinite' }}>
-              🪙✨
-            </div>
-
-            <h2 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#ffd700', margin: '0 0 6px 0' }}>
-              {t('market_success_title')}
-            </h2>
-
-            <p style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 12px 0' }}>
-              {t('market_success_amount', { amount: purchaseSuccess.gold + purchaseSuccess.bonus })}
-            </p>
-
-            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', margin: '0 0 20px 0', lineHeight: '1.4' }}>
-              {t('market_success_desc')}
-            </p>
-
-            <button
-              onClick={() => setPurchaseSuccess(null)}
-              style={{
-                background: 'linear-gradient(135deg, #ffd700, #ff8800)',
-                border: 'none', color: '#000', padding: '12px 32px', borderRadius: '20px',
-                fontWeight: '900', fontSize: '0.95rem', cursor: 'pointer',
-                boxShadow: '0 4px 15px rgba(255, 215, 0, 0.4)'
-              }}
-            >
-              {t('market_success_continue_btn')}
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+      {purchaseSuccess && <TreasureRewardModal amount={purchaseSuccess.gold + purchaseSuccess.bonus} onClose={() => setPurchaseSuccess(null)} />}
 
       {/* 9. ÖDÜLLÜ VİDEO REKLAM OYNATICI MODALI (ADSENSE / REWARDED AD SIMULATION) */}
       {showAdModal && (

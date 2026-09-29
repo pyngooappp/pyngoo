@@ -7,6 +7,7 @@ import { createPresenceSync } from '../utils/presenceSync';
 import { soundManager } from '../utils/SoundManager';
 import VoiceChat from './VoiceChat';
 import PrivacyShield from './PrivacyShield';
+import { TreasureRewardModal } from './TreasureRewardModal';
 
 interface LayoutProps {
   userId: string;
@@ -80,7 +81,8 @@ export default function Layout({ userId }: LayoutProps) {
     // Yayıncı olunca / rol değişince presence bilgisini yenile
     window.dispatchEvent(new Event('pyngoo_presence_retrack'));
   }, [profile?.is_streamer, profile?.role]);
-  const [goldToastMessage, setGoldToastMessage] = useState<string | null>(null);
+  const [goldReward, setGoldReward] = useState<number | null>(null);
+  const closeGoldReward = useCallback(() => setGoldReward(null), []);
 
   const isCallActiveRef = useRef(false);
   isCallActiveRef.current = isCallActive || !!activeCallChannel;
@@ -623,8 +625,7 @@ export default function Layout({ userId }: LayoutProps) {
         // Yalnızca yeni onaylanan siparişler için 1 KEREYE MAHSUS toast göster
         if (newlyNotifiedCount > 0 && newlyCreditedAmount > 0) {
           soundManager.playCoinSound();
-          setGoldToastMessage(t('gold_credited_toast', { amount: newlyCreditedAmount.toLocaleString() }));
-          setTimeout(() => setGoldToastMessage(null), 6000);
+          setGoldReward(newlyCreditedAmount);
         }
       } catch (err) {
         console.warn('syncApprovedPayments hatası:', err);
@@ -930,8 +931,8 @@ export default function Layout({ userId }: LayoutProps) {
             >
               {({ isActive }) => (
                 <>
-                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
-                    <Phone size={22} fill={isActive ? '#ff416c' : 'none'} />
+                  <div className={`nav-icon-wrap`}>
+                    <Phone size={22} fill={isActive ? '#fff' : 'none'} />
                   </div>
                   <span>{t('nav_home')}</span>
                 </>
@@ -944,8 +945,8 @@ export default function Layout({ userId }: LayoutProps) {
             >
               {({ isActive }) => (
                 <>
-                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
-                    <Compass size={22} fill={isActive ? 'rgba(255, 65, 108, 0.25)' : 'none'} />
+                  <div className={`nav-icon-wrap`}>
+                    <Compass size={22} fill={isActive ? '#fff' : 'none'} />
                   </div>
                   <span>{t('nav_explore', 'Keşfet')}</span>
                 </>
@@ -958,8 +959,8 @@ export default function Layout({ userId }: LayoutProps) {
             >
               {({ isActive }) => (
                 <>
-                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
-                    <MessageCircle size={22} fill={isActive ? '#ff416c' : 'none'} />
+                  <div className={`nav-icon-wrap`}>
+                    <MessageCircle size={22} fill={isActive ? '#fff' : 'none'} />
                     {pendingCount > 0 && (
                       <span className="nav-badge">{pendingCount > 99 ? '99+' : pendingCount}</span>
                     )}
@@ -976,8 +977,8 @@ export default function Layout({ userId }: LayoutProps) {
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
-                      <WalletIcon size={22} fill={isActive ? '#00e676' : 'none'} />
+                    <div className={`nav-icon-wrap`}>
+                      <WalletIcon size={22} fill={isActive ? '#fff' : 'none'} />
                     </div>
                     <span>{t('nav_wallet')}</span>
                   </>
@@ -992,7 +993,7 @@ export default function Layout({ userId }: LayoutProps) {
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`nav-icon-wrap ${isActive ? 'active-gold' : ''}`}>
+                    <div className={`nav-icon-wrap`}>
                       <Coins size={22} color="#ffd700" fill={isActive ? '#ffd700' : 'none'} />
                       <div style={{
                         position: 'absolute', top: '-4px', right: '-8px',
@@ -1005,7 +1006,7 @@ export default function Layout({ userId }: LayoutProps) {
                         %80
                       </div>
                     </div>
-                    <span style={{ color: isActive ? '#ffd700' : 'inherit', fontWeight: isActive ? '700' : '500' }}>
+                    <span >
                       {t('profile_gold_market', 'Market')}
                     </span>
                   </>
@@ -1019,8 +1020,8 @@ export default function Layout({ userId }: LayoutProps) {
             >
               {({ isActive }) => (
                 <>
-                  <div className={`nav-icon-wrap ${isActive ? 'active' : ''}`}>
-                    <User size={22} fill={isActive ? '#ff416c' : 'none'} />
+                  <div className={`nav-icon-wrap`}>
+                    <User size={22} fill={isActive ? '#fff' : 'none'} />
                   </div>
                   <span>{t('nav_profile')}</span>
                 </>
@@ -1030,21 +1031,7 @@ export default function Layout({ userId }: LayoutProps) {
         )}
 
         {/* ALTIN YÜKLENDİ TEBRİK BİLDİRİMİ */}
-        {goldToastMessage && (
-          <div style={{
-            position: 'fixed', top: 'calc(env(safe-area-inset-top, 20px) + 16px)',
-            left: 0, right: 0, margin: '0 auto',
-            zIndex: 99999, background: 'linear-gradient(135deg, #ffd700, #ffaa00)',
-            color: '#000', padding: '12px 24px', borderRadius: '20px',
-            boxShadow: '0 10px 30px rgba(255, 170, 0, 0.45)',
-            fontWeight: '800', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '10px',
-            border: '2px solid #fff', maxWidth: 'calc(100vw - 32px)', width: 'max-content',
-            animation: 'sweetCenterFade 0.25s ease-out'
-          }}>
-            <Coins size={22} color="#000" style={{ flexShrink: 0 }} />
-            <span>{goldToastMessage}</span>
-          </div>
-        )}
+        {goldReward !== null && <TreasureRewardModal amount={goldReward} onClose={closeGoldReward} />}
       </div>
     );
   }
