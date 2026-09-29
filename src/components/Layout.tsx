@@ -922,13 +922,13 @@ export default function Layout({ userId }: LayoutProps) {
           </div>
         )}
         {!isCallActive && !isInsideActiveChat && (
-          <nav className="bottom-nav glassmorphism">
+          <nav className="bottom-nav">
             <NavLink 
               to="/" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               end
             >
-              <Phone size={24} />
+              <Phone size={25} />
               <span>{t('nav_home')}</span>
             </NavLink>
 
@@ -936,22 +936,21 @@ export default function Layout({ userId }: LayoutProps) {
               to="/explore" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <Compass size={24} />
+              <Compass size={25} />
               <span>{t('nav_explore', 'Keşfet')}</span>
             </NavLink>
 
             <NavLink 
               to="/chats" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              style={{ position: 'relative' }}
             >
-              <MessageCircle size={24} />
-              {pendingCount > 0 && (
-                <div style={{ position: 'absolute', top: '0px', right: '10px', background: 'red', color: 'white', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 'bold', border: '2px solid #1a1a2e' }}>
-                  {pendingCount}
-                </div>
-              )}
-              <span className="nav-text">{t('nav_chats')}</span>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <MessageCircle size={25} />
+                {pendingCount > 0 && (
+                  <span className="nav-badge">{pendingCount > 99 ? '99+' : pendingCount}</span>
+                )}
+              </div>
+              <span>{t('nav_chats')}</span>
             </NavLink>
             
             {(gender === 'kadin' || profile?.gender === 'kadin') && (
@@ -959,7 +958,7 @@ export default function Layout({ userId }: LayoutProps) {
                 to="/wallet" 
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               >
-                <WalletIcon size={24} />
+                <WalletIcon size={25} />
                 <span>{t('nav_wallet')}</span>
               </NavLink>
             )}
@@ -968,22 +967,21 @@ export default function Layout({ userId }: LayoutProps) {
               <NavLink 
                 to="/market" 
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                style={{ position: 'relative' }}
               >
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Coins size={24} color="#ffd700" />
+                  <Coins size={25} color="#ffd700" />
                   <div style={{
-                    position: 'absolute', top: '-7px', right: '-14px',
+                    position: 'absolute', top: '-4px', right: '-15px',
                     background: 'linear-gradient(135deg, #ff0844, #ffb199)',
-                    color: 'white', fontSize: '0.58rem', fontWeight: '900',
-                    padding: '1px 5px', borderRadius: '6px',
-                    boxShadow: '0 2px 6px rgba(255,8,68,0.6)',
+                    color: 'white', fontSize: '9px', fontWeight: '800',
+                    padding: '0 4px', lineHeight: '14px', borderRadius: '7px',
+                    boxShadow: '0 2px 6px rgba(255,8,68,0.5)',
                     animation: 'pulse 1.8s infinite'
                   }}>
                     %80
                   </div>
                 </div>
-                <span style={{ color: '#ffd700', fontWeight: '700' }}>{t('profile_gold_market', 'Market')}</span>
+                <span style={{ color: '#ffd700', fontWeight: '600' }}>{t('profile_gold_market', 'Market')}</span>
               </NavLink>
             )}
 
@@ -991,7 +989,7 @@ export default function Layout({ userId }: LayoutProps) {
               to="/profile" 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <User size={24} />
+              <User size={25} />
               <span>{t('nav_profile')}</span>
             </NavLink>
           </nav>
@@ -1000,14 +998,15 @@ export default function Layout({ userId }: LayoutProps) {
         {/* ALTIN YÜKLENDİ TEBRİK BİLDİRİMİ */}
         {goldToastMessage && (
           <div style={{
-            position: 'fixed', top: '24px', left: '50%', transform: 'translateX(-50%)',
+            position: 'fixed', top: 'calc(env(safe-area-inset-top, 20px) + 16px)', left: '50%', transform: 'translateX(-50%)',
             zIndex: 99999, background: 'linear-gradient(135deg, #ffd700, #ffaa00)',
-            color: '#000', padding: '14px 28px', borderRadius: '18px',
+            color: '#000', padding: '12px 22px', borderRadius: '18px',
             boxShadow: '0 12px 35px rgba(255, 170, 0, 0.5), 0 0 25px rgba(255, 215, 0, 0.4)',
-            fontWeight: '900', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '10px',
-            border: '2px solid #fff'
+            fontWeight: '900', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '10px',
+            border: '2px solid #fff', maxWidth: 'calc(100vw - 32px)', width: 'max-content',
+            animation: 'modalBounce 0.35s ease'
           }}>
-            <Coins size={24} color="#000" />
+            <Coins size={22} color="#000" style={{ flexShrink: 0 }} />
             <span>{goldToastMessage}</span>
           </div>
         )}

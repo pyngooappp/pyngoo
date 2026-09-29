@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -25,7 +26,6 @@ import { logTransaction } from '../utils/transactionService';
 import { processCryptoPayment } from '../utils/cryptoVerifyService';
 import { admobService } from '../utils/admobService';
 import { LegalModal, type LegalModalType } from '../components/LegalModal';
-import { Capacitor } from '@capacitor/core';
 import { isIosNative, isAndroidNative, iapAvailable, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
 
 interface MarketProps {
@@ -76,22 +76,7 @@ export default function Market({ userId }: MarketProps) {
   const [appleRestoreMsg, setAppleRestoreMsg] = useState<string | null>(null);
   // Ham hata metni (Mac/Xcode olmadan da telefon ekranından teşhis edebilmek için).
   const [appleErrorDetail, setAppleErrorDetail] = useState<string | null>(null);
-  // Salt JS/React tabanlı canlı sayaç (native/Promise'lerden tamamen bağımsız). Bu bile
-  // ilerlemiyorsa sorun bizim kodda değil, o an JS motorunun donmasındadır.
-  const [appleTickSeconds, setAppleTickSeconds] = useState(0);
-  // Canlı log penceresi: purchaseGoldProduct her adıma başladığında/bitirdiğinde buraya
-  // bir satır eklenir, kullanıcı Mac/konsol olmadan saniye saniye neyin olduğunu okuyabilir.
-  const [appleLiveLog, setAppleLiveLog] = useState<{ t: string; msg: string }[]>([]);
   const applePendingRef = useRef<GoldPackage | null>(null);
-
-  useEffect(() => {
-    if (applePurchaseState !== 'processing') {
-      setAppleTickSeconds(0);
-      return;
-    }
-    const iv = setInterval(() => setAppleTickSeconds((s) => s + 1), 1000);
-    return () => clearInterval(iv);
-  }, [applePurchaseState]);
 
   // NOT: Sayfa açılışında otomatik initIAP() ÇAĞRILMIYOR (bilerek). Bir teoriye göre bu
   // erken çağrı native tarafta takılıp kalıyor ve RevenueCat'in iç kuyruğu, kullanıcı
@@ -168,7 +153,6 @@ export default function Market({ userId }: MarketProps) {
     setApplePurchaseState('idle');
     setAppleRestoreMsg(null);
     setAppleErrorDetail(null);
-    setAppleLiveLog([]);
     if (!isTr && paymentMethod === 'havale_papara') {
       setPaymentMethod('card');
     }
@@ -206,14 +190,8 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
     if (!selectedPackage?.appleProductId) return;
     setAppleRestoreMsg(null);
     setAppleErrorDetail(null);
-    setAppleLiveLog([]);
     setApplePurchaseState('processing');
     soundManager.playCoinSound();
-
-    const logStep = (msg: string) => {
-      const t = new Date().toLocaleTimeString('tr-TR', { hour12: false });
-      setAppleLiveLog((prev) => [...prev, { t, msg }]);
-    };
 
     const reportError = (msg: string) => {
       setApplePurchaseState('error');
@@ -225,18 +203,13 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       } catch (_) {}
     };
 
-    // Ekstra güvence: purchaseGoldProduct içindeki zaman aşımları (configure 15s +
-    // getCustomerInfo 10s + getProducts 25s + purchaseStoreProduct 90s = en kötü 140s)
-    // herhangi bir sebeple hiç devreye girmezse, burada 30 sn sonra kesin bir hata
-    // gösterilir. NOT: ensureConfigured artık en fazla 3 sn sürer; ancak Apple ödeme
-    // sayfası 30 sn'den uzun açık kalırsa bu zaman aşımı araya girer.
     let outcome: Awaited<ReturnType<typeof purchaseGoldProduct>>;
     let outerTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       outcome = await Promise.race([
-        purchaseGoldProduct(selectedPackage.appleProductId, userId, logStep),
+        purchaseGoldProduct(selectedPackage.appleProductId, userId),
         new Promise<never>((_, reject) => {
-          outerTimer = setTimeout(() => reject(new Error('outer_timeout_60s')), 60000);
+          outerTimer = setTimeout(() => reject(new Error('outer_timeout_90s')), 90000);
         }),
       ]);
     } catch (err: any) {
@@ -304,18 +277,8 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       );
     }
 
-    // Aninda (native cagri yapmadan) tani: eklenti Capacitor koprusune kayitli mi?
-    // Butona hic basmadan gorunur, boylece saniyeler icinde cevap alinir.
-    const pluginOk = Capacitor.isPluginAvailable('Purchases');
-
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div style={{
-          fontSize: '0.66rem', fontFamily: 'monospace', textAlign: 'center',
-          color: pluginOk ? 'rgba(0,230,118,0.8)' : '#ff416c'
-        }}>
-          plugin: {pluginOk ? 'kayıtlı ✅' : 'KAYITLI DEĞİL ❌'}
-        </div>
         {applePurchaseState === 'error' && (
           <div style={{
             background: 'rgba(255, 65, 108, 0.22)', border: '1.5px solid #ff416c',
@@ -350,7 +313,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
           {applePurchaseState === 'processing' ? (
             <>
               <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }} />
-              <span>{t('market_apple_processing')} ({appleTickSeconds}sn)</span>
+              <span>{t('market_apple_processing')}</span>
             </>
           ) : (
             <>
@@ -362,33 +325,22 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
           )}
         </button>
 
-        {appleLiveLog.length > 0 && (
-          <div style={{
-            background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: '10px', padding: '8px 10px', maxHeight: '160px', overflowY: 'auto',
-            fontFamily: 'monospace', fontSize: '0.66rem', color: 'rgba(255,255,255,0.85)',
-            display: 'flex', flexDirection: 'column', gap: '3px'
-          }}>
-            {appleLiveLog.map((row, i) => (
-              <div key={i} style={{ display: 'flex', gap: '6px' }}>
-                <span style={{ color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>{row.t}</span>
-                <span style={{ wordBreak: 'break-word' }}>{row.msg}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <span
-          onClick={handleAppleRestore}
-          style={{
-            fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', textAlign: 'center',
-            textDecoration: 'underline', cursor: 'pointer'
-          }}
-        >
-          {t('market_restore_purchases')}
-        </span>
+        <div style={{ marginTop: '4px', textAlign: 'center' }}>
+          <button
+            type="button"
+            onClick={handleAppleRestore}
+            style={{
+              background: 'none', border: 'none',
+              fontSize: '0.76rem', color: 'rgba(255,255,255,0.7)',
+              textDecoration: 'underline', cursor: 'pointer', padding: '6px 12px',
+              fontWeight: '600'
+            }}
+          >
+            {t('market_restore_purchases')}
+          </button>
+        </div>
         {appleRestoreMsg && (
-          <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+          <span style={{ fontSize: '0.74rem', color: '#ffd700', textAlign: 'center', fontWeight: '700' }}>
             {appleRestoreMsg}
           </span>
         )}
@@ -956,7 +908,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       width: '100%',
       background: 'radial-gradient(circle at top, #1c1d3b 0%, #0c0d1a 100%)',
       color: '#fff',
-      paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'calc(75px + env(safe-area-inset-bottom, 0px))',
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       {/* 1. ÜST BAR & BAŞLIK */}
@@ -1306,26 +1258,29 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       </div>
 
       {/* 7. ÖDEME ONAY MODALI (BOTTOM SHEET / POPUP) */}
-      {selectedPackage && (
+      {selectedPackage && createPortal(
         <div
           onClick={() => {
             if (!isProcessing && applePurchaseState !== 'processing') setSelectedPackage(null);
           }}
           style={{
             position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)',
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-            zIndex: 2000, animation: 'fadeIn 0.2s ease'
+            zIndex: 10000, animation: 'fadeIn 0.2s ease'
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
               width: '100%', maxWidth: '480px',
+              maxHeight: '90vh', overflowY: 'auto',
+              WebkitOverflowScrolling: 'touch',
               background: 'linear-gradient(180deg, #1c1d3b 0%, #101124 100%)',
               border: '1px solid rgba(255,255,255,0.15)', borderBottom: 'none',
               borderRadius: '28px 28px 0 0',
-              padding: '20px 20px calc(env(safe-area-inset-bottom, 0px) + 24px) 20px',
+              padding: '20px 20px calc(env(safe-area-inset-bottom, 24px) + 36px) 20px',
               boxShadow: '0 -20px 60px rgba(0,0,0,0.9)',
               animation: 'slideUp 0.3s ease-out'
             }}
@@ -1922,23 +1877,25 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               </span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 8. BAŞARILI SATIN ALMA TEBRİK OVERLAY'İ (KUTLAMA / CONFETTI) */}
-      {purchaseSuccess && (
+      {purchaseSuccess && createPortal(
         <div style={{
           position: 'fixed', inset: 0,
           background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 3000, animation: 'fadeIn 0.2s ease'
+          zIndex: 11000, animation: 'fadeIn 0.2s ease', padding: '16px'
         }}>
           <div style={{
             background: 'linear-gradient(145deg, #1c1d3b, #121324)',
             border: '2px solid #ffd700', borderRadius: '28px',
             padding: '36px 24px', textAlign: 'center', maxWidth: '380px', width: '90%',
             boxShadow: '0 0 50px rgba(255, 215, 0, 0.6)',
-            animation: 'giftPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            animation: 'modalBounce 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
           }}>
             <div style={{ fontSize: '4.5rem', marginBottom: '10px', animation: 'pulse 1s infinite' }}>
               🪙✨
@@ -1968,7 +1925,8 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               {t('market_success_continue_btn')}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 9. ÖDÜLLÜ VİDEO REKLAM OYNATICI MODALI (ADSENSE / REWARDED AD SIMULATION) */}
