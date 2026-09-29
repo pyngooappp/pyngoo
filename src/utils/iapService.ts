@@ -17,7 +17,7 @@ import { Capacitor } from '@capacitor/core';
 // TANI: ic zaman asimlari (10-25 sn) hic tetiklenmeden yalnizca en distaki 55 sn'lik zaman
 // asimi ateslendi — bu, dynamic import()'un cihazda hic tamamlanmadan takildigini gosteriyor
 // (fonksiyona daha girmeden). Statik import'a gecerek bunu tamamen ortadan kaldiriyoruz.
-import { Purchases, LOG_LEVEL } from '@revenuecat/purchases-capacitor';
+import { Purchases } from '@revenuecat/purchases-capacitor';
 
 export const isIosNative = (): boolean =>
   Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
@@ -25,7 +25,6 @@ export const isIosNative = (): boolean =>
 const REVENUECAT_IOS_API_KEY = (import.meta.env.VITE_REVENUECAT_IOS_API_KEY || '').trim();
 
 let configuredForUserId: string | null = null;
-let configuringPromise: Promise<void> | null = null;
 
 async function getPurchases(): Promise<typeof Purchases> {
   return Purchases;
@@ -46,50 +45,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // configure() çağrısını (henüz yapılmadıysa veya önceki deneme hiç bitmediyse) garanti eder.
 async function ensureConfigured(userId: string): Promise<void> {
   if (configuredForUserId === userId) return;
-  if (!configuringPromise) {
-    configuringPromise = (async () => {
-      const Purchases = await getPurchases();
-      // ANALIZ: storeKitVersion:STOREKIT_1 + diagnosticsEnabled eklenmesine ragmen configure()
-      // YINE tam ayni yerde (148 sn) takildi — yani parametrelerle ilgili degil. Simdi EN
-      // YALIN haliyle (sadece apiKey, appUserID bile yok) deniyoruz: bu bile takilirsa sorun
-      // herhangi bir parametrede degil, cok daha temel bir seydedir (orn. cihazin Keychain
-      // erisimi).
-      // setLogLevel de native koprudur; timeout disinda kalirsa 15 sn'lik korumayi atlatip
-      // en distaki 150 sn'ye kadar asili kalir.
-      // Native çağrılar await EDİLMEZ (köprü asılırsa 15-150 sn bloklanmasın); asıl doğrulama
-      // isConfigured() yoklamasıyla yapılır (300ms x 15).
-      // Bu köprü çağrıları returnType none olduğundan undefined dönebilir; .catch körü körüne çağrılmaz.
-      try {
-        const p = Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
-        if (p && typeof p.catch === 'function') p.catch(() => {});
-      } catch (_) {}
-      try {
-        const p = Purchases.configure({
-          apiKey: REVENUECAT_IOS_API_KEY,
-          // Webhook (credit_iap_gold) altını bu kimlikle profiles.id'ye eşler; olmazsa
-          // satın alma anonim kimliğe yazılır ve altın hiç yüklenmez.
-          appUserID: userId,
-        });
-        if (p && typeof p.catch === 'function') p.catch(() => {});
-      } catch (_) {}
-      for (let i = 0; i < 15; i++) {
-        await new Promise((r) => setTimeout(r, 300));
-        try {
-          const es = await withTimeout(Purchases.isConfigured(), 500, 'isConfigured').catch(() => null);
-          if (es?.isConfigured === true) {
-            configuredForUserId = userId;
-            return;
-          }
-        } catch (_) {}
-      }
-      // Zarif geri dönüş: configure gönderildiyse getCustomerInfo aşamasına devam edilir.
-      configuredForUserId = userId;
-    })().catch((err) => {
-      configuringPromise = null; // basarisiz olursa bir sonraki denemede tekrar dene
-      throw err;
+  try {
+    // Webhook (credit_iap_gold) altını bu kimlikle profiles.id'ye eşler; olmazsa
+    // satın alma anonim kimliğe yazılır ve altın hiç yüklenmez.
+    Purchases.configure({
+      apiKey: REVENUECAT_IOS_API_KEY,
+      appUserID: userId,
     });
+  } catch (err) {
+    console.warn('Purchases.configure call error:', err);
   }
-  await configuringPromise;
+  // Native köprünün configure'ı alması için kısa 500ms bekleme
+  await new Promise((r) => setTimeout(r, 500));
+  configuredForUserId = userId;
 }
 
 // Android mağaza sürümünde Shopier/kripto/havale UI'ı gösterilmez (Google Play politikası);
@@ -140,39 +108,24 @@ export async function purchaseGoldProduct(
     // ("purchase call never resolves, no errors, no payment sheet, nothing") ekip
     // bunun "native eklenti hic kayit olmamis, JS web fallback'ine dusuyor ve o da
     // hicbir zaman cevap vermiyor" oldugunu teyit etmisti.
-    const pluginRegistered = Capacitor.isPluginAvailable('Purchases');
-    mark(`eklenti kayıtlı mı: ${pluginRegistered}`);
-    if (!pluginRegistered) {
+    if (!Capacitor.isPluginAvailable('Purchases')) {
       return { status: 'error', message: `steps=${steps.join('>')} | NATIVE_PLUGIN_NOT_REGISTERED` };
     }
-    try {
-      mark('configure() çağrılıyor (StoreKit 1)...');
-      await ensureConfigured(userId);
-      mark('✅ configure() tamamlandı');
-    } catch (cfgErr: any) {
-      mark(`❌ configure() başarısız: ${cfgErr?.message || cfgErr}`);
-      return { status: 'error', message: `steps=${steps.join('>')}` };
-    }
+    mark('1. configure gönderiliyor...');
+    await ensureConfigured(userId);
+    mark('✅ configure tamam');
 
-    const Purchases = await getPurchases();
-
-    // Saglik kontrolu: en basit native cagri (urun/magaza gerektirmez). Bu bile
-    // takilirsa sorun urunlerde/Offerings'te degil, koprunun kendisindedir.
-    mark('getCustomerInfo() çağrılıyor...');
-    await withTimeout<any>(Purchases.getCustomerInfo(), 10000, 'getCustomerInfo');
-    mark('✅ getCustomerInfo() tamamlandı');
-
-    mark('getProducts() çağrılıyor...');
+    mark('2. getProducts (' + productId + ')...');
     const { products } = await withTimeout<any>(
       Purchases.getProducts({ productIdentifiers: [productId] }),
       25000,
       'getProducts'
     );
-    mark(`✅ getProducts() tamamlandı (${products?.length ?? 0} ürün bulundu)`);
+    mark('✅ getProducts tamam (' + (products?.length ?? 0) + ' ürün)');
     const product = products && products[0];
     if (!product) return { status: 'error', message: `steps=${steps.join('>')} | product_not_found` };
 
-    mark('purchaseStoreProduct() çağrılıyor (Apple penceresi açılmalı)...');
+    mark('3. purchaseStoreProduct (Apple ödeme penceresi)...');
     const result = await withTimeout<any>(
       Purchases.purchaseStoreProduct({ product }),
       90000,
