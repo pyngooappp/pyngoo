@@ -56,18 +56,24 @@ async function ensureConfigured(userId: string): Promise<void> {
       // erisimi).
       // setLogLevel de native koprudur; timeout disinda kalirsa 15 sn'lik korumayi atlatip
       // en distaki 150 sn'ye kadar asili kalir.
-      await withTimeout(Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG }), 5000, 'setLogLevel');
-      await withTimeout(
-        Purchases.configure({
-          apiKey: REVENUECAT_IOS_API_KEY,
-          // Webhook (credit_iap_gold) altını bu kimlikle profiles.id'ye eşler; olmazsa
-          // satın alma anonim kimliğe yazılır ve altın hiç yüklenmez.
-          appUserID: userId,
-        }),
-        15000,
-        'configure'
-      );
-      configuredForUserId = userId;
+      // Native çağrılar await EDİLMEZ (köprü asılırsa 15-150 sn bloklanmasın); asıl doğrulama
+      // isConfigured() yoklamasıyla yapılır (300ms x 10 = en fazla 3 sn).
+      Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG }).catch(() => {});
+      Purchases.configure({
+        apiKey: REVENUECAT_IOS_API_KEY,
+        // Webhook (credit_iap_gold) altını bu kimlikle profiles.id'ye eşler; olmazsa
+        // satın alma anonim kimliğe yazılır ve altın hiç yüklenmez.
+        appUserID: userId,
+      }).catch(() => {});
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 300));
+        const es = await withTimeout(Purchases.isConfigured(), 300, 'isConfigured').catch(() => null);
+        if (es?.isConfigured === true) {
+          configuredForUserId = userId;
+          return;
+        }
+      }
+      throw new Error('isConfigured_timeout_3s');
     })().catch((err) => {
       configuringPromise = null; // basarisiz olursa bir sonraki denemede tekrar dene
       throw err;

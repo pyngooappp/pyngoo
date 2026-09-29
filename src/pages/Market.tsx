@@ -227,16 +227,16 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
 
     // Ekstra güvence: purchaseGoldProduct içindeki zaman aşımları (configure 15s +
     // getCustomerInfo 10s + getProducts 25s + purchaseStoreProduct 90s = en kötü 140s)
-    // herhangi bir sebeple hiç devreye girmezse, burada 150 sn sonra kesin bir hata
-    // gösterilir. Bu süre İÇERİDEKİ en uzun zaman aşımından (90s) daha KISA OLMAMALI,
-    // yoksa asıl (etiketli) hata hiç görünmeden burası araya girer.
+    // herhangi bir sebeple hiç devreye girmezse, burada 30 sn sonra kesin bir hata
+    // gösterilir. NOT: ensureConfigured artık en fazla 3 sn sürer; ancak Apple ödeme
+    // sayfası 30 sn'den uzun açık kalırsa bu zaman aşımı araya girer.
     let outcome: Awaited<ReturnType<typeof purchaseGoldProduct>>;
     let outerTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       outcome = await Promise.race([
         purchaseGoldProduct(selectedPackage.appleProductId, userId, logStep),
         new Promise<never>((_, reject) => {
-          outerTimer = setTimeout(() => reject(new Error('outer_timeout_150s')), 150000);
+          outerTimer = setTimeout(() => reject(new Error('outer_timeout_30s')), 30000);
         }),
       ]);
     } catch (err: any) {
