@@ -769,7 +769,7 @@ img, video {
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: calc(env(safe-area-inset-bottom, 8px) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 4px) + 2px);
   max-width: 440px;
   margin: 0 auto;
   height: 64px;
@@ -780,11 +780,14 @@ img, video {
   box-sizing: border-box;
   z-index: 100;
   border-radius: 36px;
-  background: rgba(26, 28, 38, 0.88);
-  backdrop-filter: blur(30px) saturate(190%);
-  -webkit-backdrop-filter: blur(30px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 42%, rgba(255, 255, 255, 0) 55%, rgba(255, 255, 255, 0.06) 100%),
+    rgba(26, 28, 38, 0.82);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.45), inset 0 -1px 1px rgba(255, 255, 255, 0.08);
 }
 
 /* --- GÖRÜNTÜLÜ & SESLİ GÖRÜŞME VE MOBİLDE AKTİF SOHBET SIRASINDA ALT DOCK GİZLEME --- */
