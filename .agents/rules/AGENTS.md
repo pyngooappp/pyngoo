@@ -23,10 +23,11 @@
 ## 3. 🛡️ Zorunlu Kadın AI Yüz Doğrulaması
 - Kadın profilleri için kayıt sırasında yapay zekâ yüz doğrulama katı ve tavizsiz şekilde zorunludur. Sahte profilleri ve erkeklerin kadın taklidi yapmasını engeller.
 
-## 4. 🚀 Otomatik Derleme ve Masaüstü Yayını
-- Kodlarda yapılan her değişiklikten sonra:
-  1. `npm run build` çalıştırılarak TypeScript ve derleme doğrulanmalıdır.
-  2. `dist\*` içeriği masaüstündeki `C:\Users\PC\Desktop\Pyngoo_Site` klasörüne kopyalanarak canlıya alınmalıdır.
+## 4. 🚀 Derleme ve Canlı Yayın Disiplini
+- Kodlarda yapılan her değişiklikten sonra `npm run build` çalıştırılarak TypeScript ve derleme doğrulanmalıdır.
+- **KULLANICI ONAYI (ZORUNLU):** Kullanıcı açıkça **"yayınla"** veya **"pushla"** demeden ASLA masaüstü yayını veya `git push` yapılmaz. Derleme doğrulaması bu onayı gerektirmez, sadece canlıya alma/push adımları gerektirir.
+- **iOS Eşitleme:** `npx cap copy ios` (native tarafın web bundle'ını güncel tutmak için).
+- **Masaüstü Canlı Yayını (yalnızca onay sonrası):** `dist\*` içeriği masaüstündeki `C:\Users\PC\Desktop\Pyngoo_Site` klasörüne kopyalanarak canlıya alınmalıdır (bkz. madde 10 "Deploy Hijyeni" için önce temizleme sırası).
 
 ## 5. 🔐 Kesin ve Değiştirilemez Oturum & Giriş Kuralları (Strict Auth & Registration Security)
 - **KAYIT OL MODUNDA ZORUNLU ALAN KONTROLÜ:** Kullanıcı "Kayıt Ol" sekmesindeyken Kullanıcı Adı (min 3 karakter), Cinsiyet seçimi ve Sözleşme onayı yapılmadan HİÇBİR ŞEKİLDE Google/Apple OAuth veya E-posta kaydı başlatılamaz! `handleOAuthLogin` kesinlikle `checkPreconditionsAndRun` üzerinden ön koşulları doğrulamalıdır.
@@ -55,7 +56,7 @@
   4. **PROFİL SORGUSU HATA KONTROLÜ ZORUNLUDUR:** `handleSession` içinde ilk profil sorgusu (`supabase.from('profiles').select('*').eq('id', uid)`) yapılırken dönen `error` MUTLAKA destructure edilip kontrol edilmelidir. Sorgu hata döndürürse (`error` doluysa) bir kez tekrar denenmeli; ikinci denemede de hata devam ediyorsa hiçbir hesap silme (`delete_user_account`), oturum kapatma veya `not_found=1`/`deleted=1` yönlendirmesi yapılmadan sadece `setLoading(false)` ile çıkılmalıdır. `data`'nın `null` gelmesi tek başına asla "profil yok" ile eş tutulamaz.
   5. **REALTIME SİLME DİNLEYİCİSİ:** `postgres_changes` üzerinden dinlenen profil silme olayında oturum SADECE `payload.eventType === 'DELETE'` şartında kapatılabilir; `!payload.new` gibi gereğinden geniş ek şartlar (RLS/policy kaynaklı görünmezlik gibi yanlış pozitiflere yol açabileceğinden) kullanılamaz.
 - **SÜPER ADMİN HESABI ("omer") — KASITLI SİLİNEMEZLİK KURALI (HATA SANILIP KALDIRILMAZ):**
-  1. `App.tsx` ~536'daki `isOmer` kimliği şu üçünden biriyle eşleşir: sabit uid `d6afbbb7-9a25-4552-a913-e80a1bae7e2b`, e-posta `omersahin1623@hotmail.com` veya e-posta `cosmicdreamersleep@gmail.com`.
+  1. `App.tsx` ~536'daki `isOmer` kimliği şu dördünden biriyle eşleşir: sabit uid'ler `d6afbbb7-9a25-4552-a913-e80a1bae7e2b` ve `22b3c0e7-e1e2-4cb5-9532-990066b5a80c`, e-postalar `omersahin1623@hotmail.com` ve `cosmicdreamersleep@gmail.com`.
   2. Bu hesap için normal akış bilinçli olarak atlanır: profili olmasa bile "profil yok -> auth hesabını sil + Kayıt Ol'a yönlendir" dalı ÇALIŞMAZ (`&& !isOmer`); rumuz zorla `omer`, rol `admin`, cinsiyet `erkek` olarak profil (gerekirse) SIFIRDAN oluşturulur; profil mevcutsa aynı değerler `profiles` tablosuna geri yazılır; localStorage/cookie değerleri de zorlanır.
   3. **SONUÇ:** Bu hesap Supabase panelinden (Authentication -> Users) silinse dahi, aynı Google hesabıyla yapılan ilk girişte otomatik olarak yeniden oluşturulur. Bu bir hata DEĞİL, sahibin admin erişimini kaybetmemesi için konulmuş **kilitlenme sigortasıdır**; "gizemli bug" sanılıp koddan ASLA kaldırılmamalıdır.
   4. Aynı sabit uid; `Home.tsx`, `Layout.tsx`, `Market.tsx`, `Profile.tsx`, `ModeratorPanel.tsx` içinde de özel yetki/istisna kontrolü olarak geçer. `ModeratorPanel.tsx` ayrıca "omer" kullanıcı adlı panel girişini kod içinde tanır ve moderatör listesine yoksa elle ekler.
@@ -155,4 +156,15 @@
 - **SİSTEMDE HİÇBİR BOT YOKTUR:** Veritabanındaki tüm yapay/bot hesaplar tamamen temizlenmiştir. Sistemde ASLA bot oluşturulamaz, bot simülasyonu yapılamaz, sahte kullanıcı/yayıncı profilleri basılamaz.
 - Pyngoo tamamen %100 gerçek insanlardan oluşan canlı görüntülü ve sesli sohbet platformudur.
 - Keşfet vitrini, arama, filtreleme ve eşleşme mekanizmaları YALNIZCA veritabanındaki gerçek aktif kullanıcılarla çalışır; arayüzde yapay kullanıcı veya sahte bot doldurması ASLA yapılamaz.
+
+## 15. 📱 Mobil (iOS / Android) & AdMob Reklam Entegrasyonu, Platform Ödeme Politikası
+- Uygulama web ile birlikte Capacitor 8 altyapısıyla iOS ve Android'e derlenmektedir.
+- **Platform Ödeme Ayrımı (App Store / Play Store Politikası):** Apple ve Google'ın "sanal para sadece kendi IAP sistemiyle satılır" kuralı SADECE mağazadan dağıtılan uygulama binary'sini kapsar, web sitesini kapsamaz.
+  - **Web (tarayıcı):** Shopier/kripto/havale serbest.
+  - **iOS app:** SADECE Apple IAP (`iapService.ts`), Shopier/kripto/havale UI'ı hiç gösterilmez.
+  - **Android app:** SADECE Google Play Billing (RevenueCat üzerinden, iOS ile aynı altyapı — henüz kurulmadı), Shopier/kripto/havale UI'ı hiç gösterilmez.
+  - Uygulama içinden ödeme için web sitesine yönlendiren hiçbir link/buton OLAMAZ (bu da mağaza politikası ihlali sayılır); kullanıcı kendi isteğiyle tarayıcıdan siteye girip oradan öderse bu kısıtlamanın dışındadır.
+- **AdMob Ödüllü Reklam Birimi:** `ca-app-pub-6163702675031285/4424784328` ([admobService.ts](file:///c:/Users/PC/.gemini/antigravity/scratch/anonymous-voice-chat/src/utils/admobService.ts))
+- **GADApplicationIdentifier:** `ca-app-pub-6163702675031285~1338244734` ([Info.plist](file:///c:/Users/PC/.gemini/antigravity/scratch/anonymous-voice-chat/ios/App/App/Info.plist))
+- App Store incelemesindeyken akıllı test reklamı fallback'i devrededir; canlı reklam açılana kadar test reklamı üzerinden ödül (+20 altın) akışı korunur.
 

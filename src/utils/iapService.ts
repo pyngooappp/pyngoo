@@ -54,7 +54,9 @@ async function ensureConfigured(userId: string): Promise<void> {
       // YALIN haliyle (sadece apiKey, appUserID bile yok) deniyoruz: bu bile takilirsa sorun
       // herhangi bir parametrede degil, cok daha temel bir seydedir (orn. cihazin Keychain
       // erisimi).
-      await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
+      // setLogLevel de native koprudur; timeout disinda kalirsa 15 sn'lik korumayi atlatip
+      // en distaki 150 sn'ye kadar asili kalir.
+      await withTimeout(Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG }), 5000, 'setLogLevel');
       await withTimeout(
         Purchases.configure({
           apiKey: REVENUECAT_IOS_API_KEY,
