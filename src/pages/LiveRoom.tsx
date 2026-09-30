@@ -202,6 +202,20 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, userId, isHost, profile?.display_name]);
 
+  // Yayıncı gerçekten canlıya geçtiğinde (isLive), Explore'daki hikaye şeridinin okuduğu
+  // paylaşılan dizine Presence ile kaydolur. Bağlantı kesilirse (uygulama kapanırsa)
+  // presence otomatik silinir — ayrı bir "yayın bitti" sinyaline gerek yok.
+  useEffect(() => {
+    if (!isHost || !isLive || !roomId) return;
+    const dir = supabase.channel('pyngoo_live_rooms_directory', { config: { presence: { key: roomId } } });
+    dir.subscribe(async (status: string) => {
+      if (status === 'SUBSCRIBED') {
+        await dir.track({ name: profile?.display_name || 'Yayıncı', avatar: profile?.avatar || '' });
+      }
+    });
+    return () => { supabase.removeChannel(dir); };
+  }, [isHost, isLive, roomId, profile?.display_name, profile?.avatar]);
+
   // Agora: 'live' modu — yayıncı 'host', izleyici 'audience' rolünde tek yönlü akış alır.
   useEffect(() => {
     if (!roomId || !appId) return;

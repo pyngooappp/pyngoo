@@ -51,10 +51,30 @@ export default function Explore({ userId }: ExploreProps) {
   });
   const [liveAlert, setLiveAlert] = useState<{ id: string; name: string; avatar: string } | null>(null);
 
-  // Canlı Oda hikaye şeridi: gerçek oda/yayın backend'i henüz kurulmadı, bu yüzden
-  // bilerek boş diziyle başlıyor (sahte veri YOK). Dolu geldiğinde backend bu state'i
-  // dolduracak; boşken de şerit "ilk canlıya sen geç" davetiyle görünür kalır.
-  const [liveRooms] = useState<{ id: string; name: string; avatar: string; viewers: number }[]>([]);
+  // Canlı Oda hikaye şeridi: LiveRoom.tsx yayına başladığında (isHost && isLive) kendini
+  // paylaşılan 'pyngoo_live_rooms_directory' realtime kanalına Presence ile ekliyor;
+  // burada SADECE dinliyoruz (kendi presence'ımızı track ETMİYORUZ — bu da Supabase
+  // Nano kuralına uygun: polling YOK, tek bir olay-tabanlı abonelik). Yayıncı
+  // bağlantıyı keserse (uygulamayı kapatırsa) presence otomatik silinir, manuel bir
+  // "yayın bitti" sinyaline gerek kalmaz.
+  const [liveRooms, setLiveRooms] = useState<{ id: string; name: string; avatar: string; viewers: number }[]>([]);
+
+  useEffect(() => {
+    const dir = supabase.channel('pyngoo_live_rooms_directory');
+    const sync = () => {
+      const state = dir.presenceState() as Record<string, any[]>;
+      const rooms = Object.entries(state)
+        .filter(([id]) => id !== userId) // kendi odamızı kendi şeridimizde göstermeyelim
+        .map(([id, presences]) => {
+          const p = presences[0] || {};
+          return { id, name: p.name || 'Yayıncı', avatar: p.avatar || '', viewers: 0 };
+        });
+      setLiveRooms(rooms);
+    };
+    dir.on('presence', { event: 'sync' }, sync);
+    dir.subscribe();
+    return () => { supabase.removeChannel(dir); };
+  }, [userId]);
 
   // Takip listesini sunucudan yükle (başka cihazdan yapılan takipler de görünsün)
   useEffect(() => {
@@ -633,7 +653,9 @@ export default function Explore({ userId }: ExploreProps) {
                 fontSize: '0.6rem', fontWeight: '800', color: '#fff',
                 background: 'rgba(255, 45, 85, 0.85)', padding: '1px 6px', borderRadius: '8px', marginTop: '-14px'
               }}>
-                <Eye size={9} />{room.viewers}
+                {/* Keşif şeridinde gerçek izleyici sayısı yok (yeni polling eklememek için
+                    kasıtlı) — oda içine girince LiveRoom.tsx'teki gerçek presence sayacı görünür. */}
+                <Eye size={9} /> {t('badge_live')}
               </div>
               <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '64px' }}>
                 {room.name}
