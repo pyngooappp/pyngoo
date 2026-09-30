@@ -49,6 +49,8 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
   const [kickTarget, setKickTarget] = useState<ChatMsg | null>(null);
   const [kickedMessage, setKickedMessage] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [isLive, setIsLive] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showReportMenu, setShowReportMenu] = useState(false);
   const [reportSent, setReportSent] = useState(false);
@@ -209,34 +211,55 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       }
     });
 
+    // Breadcrumb: gerçek cihazda konsol erişimi yok, bu yüzden hangi adımda takıldığını
+    // (iapService.ts'teki aynı disiplinle) doğrudan ekranda göstereceğiz — sessizce
+    // yutulan bir hata "siyah ekran, sebepsiz" görünümüne yol açar.
+    const steps: string[] = [];
+    const mark = (s: string) => { steps.push(s); };
+
     const start = async () => {
       try {
+        if (!appId) { setConnectError('VITE_AGORA_APP_ID tanımlı değil.'); setConnecting(false); return; }
+        mark('setClientRole');
         await client.setClientRole(isHost ? 'host' : 'audience');
+
+        mark('token isteniyor');
         const uid = Math.floor(Math.random() * 100000);
         let token: string | null = null;
         try {
-          const { data } = await supabase.functions.invoke('agora-token', {
+          const { data, error } = await supabase.functions.invoke('agora-token', {
             body: { channelName: `room_${roomId}`, uid, expireSeconds: 7200 }
           });
+          if (error) mark(`token hatası: ${error.message || error}`);
           token = data?.token || null;
-        } catch (_) {}
+        } catch (tokErr: any) {
+          mark(`token edge function erişilemedi: ${tokErr?.message || tokErr}`);
+        }
 
+        mark('kanala katılınıyor');
         await client.join(appId, `room_${roomId}`, token, uid);
 
         if (isHost) {
+          mark('kamera/mikrofon isteniyor');
           const [aTrack, vTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
             { AEC: true, ANS: true, AGC: true },
             { encoderConfig: '480p_1' }
           );
           if (!isMounted) { aTrack.close(); vTrack.close(); return; }
           localTracksRef.current = { audio: aTrack, video: vTrack };
+          mark('video oynatılıyor');
           vTrack.play(localVideoRef.current!);
+          mark('yayına başlanıyor (publish)');
           await client.publish([aTrack, vTrack]);
         }
-        if (isMounted) setConnecting(false);
-      } catch (err) {
-        console.error('Canlı Oda bağlantı hatası:', err);
-        if (isMounted) setConnecting(false);
+        if (isMounted) { setConnecting(false); setIsLive(true); }
+      } catch (err: any) {
+        const msg = err?.message || err?.code || String(err);
+        console.error('Canlı Oda bağlantı hatası:', steps.join(' > '), err);
+        if (isMounted) {
+          setConnecting(false);
+          setConnectError(`${steps[steps.length - 1] || '?'} adımında hata: ${msg}`);
+        }
       }
     };
     start();
@@ -291,7 +314,7 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
 
   if (kickedMessage) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0b0c16', color: '#fff', textAlign: 'center', padding: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: '#0b0c16', color: '#fff', textAlign: 'center', padding: 24 }}>
         <div>
           <p style={{ fontSize: '1.1rem', fontWeight: 700 }}>{kickedMessage}</p>
         </div>
@@ -300,13 +323,22 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
   }
 
   return (
-    <div style={{ position: 'relative', height: '100vh', width: '100%', background: '#000', overflow: 'hidden', color: '#fff' }}>
+    <div style={{ position: 'relative', height: '100dvh', width: '100%', background: '#000', overflow: 'hidden', color: '#fff' }}>
       {/* Video: host kendi kamerasını, izleyici yayıncının akışını görür */}
       <div ref={isHost ? localVideoRef : remoteVideoRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {connecting && (
+      {connecting && !connectError && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}>
           <span style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>{t('room_connecting', 'Odaya bağlanılıyor...')}</span>
+        </div>
+      )}
+
+      {connectError && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', padding: 24, gap: 16, zIndex: 40 }}>
+          <span style={{ fontSize: '0.85rem', color: '#ff8fa3', textAlign: 'center', maxWidth: '32ch' }}>{connectError}</span>
+          <button onClick={() => navigate('/explore', { replace: true })} style={{ ...roomIconBtnStyle, width: 'auto', borderRadius: 20, padding: '10px 20px' }}>
+            {t('room_cancel', 'İptal')}
+          </button>
         </div>
       )}
 
@@ -317,16 +349,18 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px',
         background: 'linear-gradient(180deg, rgba(0,0,0,0.65) 0%, transparent 100%)'
       }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <button onClick={() => navigate('/explore', { replace: true })} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ArrowLeft size={18} color="#fff" />
         </button>
         {!isHost && (
           <img src={hostProfile?.avatar} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', border: '1px solid #ff2d55' }} />
         )}
         <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>
-          {isHost ? t('room_you_are_live', 'Yayındasın') : (hostProfile?.display_name || '...')}
+          {isHost ? (isLive ? t('room_you_are_live', 'Yayındasın') : t('room_connecting', 'Odaya bağlanılıyor...')) : (hostProfile?.display_name || '...')}
         </span>
-        <span style={{ background: '#ff2d55', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: 8 }}>LIVE</span>
+        {(isLive || !isHost) && (
+          <span style={{ background: '#ff2d55', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: 8 }}>LIVE</span>
+        )}
 
         {!isHost && (
           <button onClick={handleFollow} style={{
