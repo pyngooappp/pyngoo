@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Send, Check, CheckCheck, Gift, ArrowLeft, X, MessageSquare, Clock, UserX, PhoneCall, PhoneOff, PhoneIncoming, Trash2, Heart } from 'lucide-react';
+import { Send, Check, CheckCheck, Gift, ArrowLeft, X, MessageSquare, Clock, UserX, PhoneCall, PhoneOff, PhoneIncoming, Trash2, Heart, Globe } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { blockUser, getLocalBlockedIds } from '../utils/blockService';
 import VoiceChat from '../components/VoiceChat';
@@ -10,6 +10,7 @@ import { generateUUID } from '../utils/uuid';
 import { soundManager } from '../utils/SoundManager';
 import { logTransaction } from '../utils/transactionService';
 import { isIosNative, purchaseGoldProduct } from '../utils/iapService';
+import { translateText } from '../utils/translator';
 
 interface ChatsProps {
   userId: string;
@@ -33,10 +34,20 @@ export default function Chats({ userId }: ChatsProps) {
   const [messageText, setMessageText] = useState('');
   const [profile, setProfile] = useState<any>(null);
   
+  // Çeviri Sistemi
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
+  const [translatingIds, setTranslatingIds] = useState<Record<string, boolean>>({});
+  const [hiddenTranslations, setHiddenTranslations] = useState<Record<string, boolean>>({});
+
+  // iPhone / Mobil Geri Kaydırma (Swipe to Back Gesture)
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
   // Hediye Sistemi
   const [showGiftMenu, setShowGiftMenu] = useState(false);
   const [showGiftRequestMenu, setShowGiftRequestMenu] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const sendingGiftRef = useRef(false);
 
   // Sohbet İçi Altın Satın Alma Modalı
   const [showGoldModal, setShowGoldModal] = useState(false);
@@ -612,30 +623,54 @@ export default function Chats({ userId }: ChatsProps) {
     }
   };
 
-  const [sendingGift, setSendingGift] = useState(false);
+  // Mesaj Çevirme Fonksiyonu (Google Translate + MyMemory fallback)
+  const handleTranslateMessage = async (msgId: string, content: string) => {
+    if (translatingIds[msgId]) return;
+    
+    // Zaten çevrildiyse gizle/göster yap
+    if (translatedMessages[msgId]) {
+      setHiddenTranslations(prev => ({ ...prev, [msgId]: !prev[msgId] }));
+      return;
+    }
+
+    setTranslatingIds(prev => ({ ...prev, [msgId]: true }));
+    try {
+      const userLang = i18n.language ? i18n.language.substring(0, 2).toLowerCase() : 'tr';
+      const res = await translateText(content, userLang, 'auto');
+      if (res) {
+        setTranslatedMessages(prev => ({ ...prev, [msgId]: res }));
+      }
+    } catch (err) {
+      console.warn('Translate error:', err);
+    } finally {
+      setTranslatingIds(prev => ({ ...prev, [msgId]: false }));
+    }
+  };
 
   const handleSendGift = async (cost: number, reward: number, emoji: string, giftName: string) => {
-    if (sendingGift) return;
-    if (!profile || (profile.total_gold || 0) < cost) {
+    if (sendingGiftRef.current) return;
+
+    const myGold = outletContext?.profile?.total_gold ?? profile?.total_gold ?? 0;
+    if (myGold < cost) {
       setShowGiftMenu(false);
       setShowGoldModal(true);
       return;
     }
 
-    setSendingGift(true);
+    sendingGiftRef.current = true;
     try {
-      // 1. Veritabanından güncel bakiye kontrolü ve atomik koşullu düşme
+      // 1. Veritabanından güncel bakiye kontrolü
       const { data: freshProfile } = await supabase.from('profiles').select('total_gold').eq('id', userId).single();
-      const currentGold = freshProfile?.total_gold ?? 0;
+      const currentGold = freshProfile?.total_gold ?? myGold;
       if (currentGold < cost) {
-        setProfile({ ...profile, total_gold: currentGold });
+        setProfile((prev: any) => ({ ...(prev || {}), total_gold: currentGold }));
+        outletContext.refreshProfile?.();
         setShowGiftMenu(false);
         setShowGoldModal(true);
-        setSendingGift(false);
         return;
       }
 
-      // 1. Güvenli RPC transferini çağır (Atomik altın düşme ve alıcı kadınsa elmas aktarma)
+      // 2. Güvenli RPC transferini çağır (Atomik altın düşme ve alıcı kadınsa elmas aktarma)
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('send_gift_transaction', {
         p_sender_id: userId,
         p_receiver_id: activeChat.id,
@@ -643,30 +678,32 @@ export default function Chats({ userId }: ChatsProps) {
         p_diamond_reward: reward
       });
 
+      let newGold = Math.max(0, currentGold - cost);
       if (rpcErr || (rpcRes && !rpcRes.success)) {
         console.warn('Chats send_gift_transaction RPC fallback:', rpcErr || rpcRes?.error);
-        const newGold = currentGold - cost;
         const { error: deductErr } = await supabase.from('profiles').update({ total_gold: newGold }).eq('id', userId).gte('total_gold', cost);
         if (deductErr) {
-          setSendingGift(false);
           return;
         }
-        setProfile({ ...profile, total_gold: newGold });
-      } else {
-        const newGold = rpcRes?.new_gold !== undefined ? rpcRes.new_gold : currentGold - cost;
-        setProfile({ ...profile, total_gold: newGold });
+      } else if (rpcRes?.new_gold !== undefined) {
+        newGold = rpcRes.new_gold;
       }
 
-      logTransaction(userId, -cost, 'gift_sent', { targetUserId: activeChat.id, details: `${emoji} ${giftName}`, giftName });
-      logTransaction(activeChat.id, reward, 'gift_received', { targetUserId: userId, details: `${emoji} ${giftName}`, giftName });
+      setProfile((prev: any) => ({ ...(prev || {}), total_gold: newGold }));
+      outletContext.refreshProfile?.();
 
-      // Mesaj olarak gönder
-      handleSendMessage(`${emoji} ${giftName} (+${reward} 💎)`);
-      setShowGiftMenu(false);
+      logTransaction(userId, -cost, 'gift_sent', { targetUserId: activeChat.id, details: `${emoji} ${giftName}`, giftName });
+
+      // Mesaj olarak gönder (await ile senkron ilerlet)
+      await handleSendMessage(`${emoji} ${giftName} (+${reward} 💎)`);
+
+      try {
+        soundManager.playCoinSound();
+      } catch (_) {}
     } catch (err) {
       console.error('Hediye gönderim hatası:', err);
     } finally {
-      setSendingGift(false);
+      sendingGiftRef.current = false;
     }
   };
 
@@ -848,9 +885,19 @@ export default function Chats({ userId }: ChatsProps) {
                     fontSize: '1.25rem',
                     fontWeight: 'bold',
                     color: 'white',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    overflow: 'hidden'
                   }}>
-                    {friend.display_name.charAt(0).toUpperCase()}
+                    {friend.avatar ? (
+                      <img 
+                        src={friend.avatar} 
+                        alt={friend.display_name} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      friend.display_name.charAt(0).toUpperCase()
+                    )}
                   </div>
                   {/* Durum Rozeti (Yeşil / Gri) */}
                   <span 
@@ -945,7 +992,24 @@ export default function Chats({ userId }: ChatsProps) {
 
       {/* Sağ Taraf: Mesajlaşma Alanı (WhatsApp / Telegram Tam Ekran) */}
       {activeChat ? (
-        <div className="chats-message-panel">
+        <div 
+          className="chats-message-panel"
+          onTouchStart={(e) => {
+            touchStartX.current = e.touches[0].clientX;
+            touchStartY.current = e.touches[0].clientY;
+          }}
+          onTouchEnd={(e) => {
+            if (touchStartX.current === null || touchStartY.current === null) return;
+            const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+            const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+            // Ekranda sola veya sağa doğru kaydırma ile geri dönme (iOS geri hareketi)
+            if (Math.abs(deltaX) > 75 && Math.abs(deltaY) < 65) {
+              handleCloseChat();
+            }
+            touchStartX.current = null;
+            touchStartY.current = null;
+          }}
+        >
           {/* Header */}
           <div style={{ padding: 'max(env(safe-area-inset-top, 0px), 8px) 16px 10px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button 
@@ -966,9 +1030,19 @@ export default function Chats({ userId }: ChatsProps) {
                 fontSize: '1.05rem',
                 fontWeight: 'bold',
                 color: 'white',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.3)'
+                boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+                overflow: 'hidden'
               }}>
-                {activeChat.display_name.charAt(0).toUpperCase()}
+                {activeChat.avatar ? (
+                  <img 
+                    src={activeChat.avatar} 
+                    alt={activeChat.display_name} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  activeChat.display_name.charAt(0).toUpperCase()
+                )}
               </div>
               <span 
                 style={{
@@ -1147,6 +1221,63 @@ export default function Chats({ userId }: ChatsProps) {
                     )}
                   </div>
                   
+                  {/* Çeviri Butonu & Çevrilmiş Metin (Karşı Tarafın Mesajları İçin) */}
+                  {!isMine && !msg.gift_emoji && (
+                    <div style={{ maxWidth: '75%', marginTop: '3px' }}>
+                      {translatedMessages[msg.id] && !hiddenTranslations[msg.id] && (
+                        <div style={{
+                          background: 'rgba(0, 242, 254, 0.12)',
+                          border: '1px solid rgba(0, 242, 254, 0.3)',
+                          borderRadius: '12px',
+                          padding: '6px 10px',
+                          fontSize: '0.82rem',
+                          color: '#e0f7fa',
+                          lineHeight: '1.4',
+                          marginBottom: '3px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '2px' }}>
+                            <span style={{ fontSize: '0.68rem', color: '#00f2fe', fontWeight: '800' }}>
+                              🌐 {t('chat_translated_badge')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleTranslateMessage(msg.id, msg.content)}
+                              style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem', cursor: 'pointer', padding: 0 }}
+                            >
+                              {t('chat_hide_translation')}
+                            </button>
+                          </div>
+                          {translatedMessages[msg.id]}
+                        </div>
+                      )}
+
+                      {!translatedMessages[msg.id] && (
+                        <button
+                          type="button"
+                          onClick={() => handleTranslateMessage(msg.id, msg.content)}
+                          disabled={translatingIds[msg.id]}
+                          style={{
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.12)',
+                            color: '#00f2fe',
+                            fontSize: '0.68rem',
+                            fontWeight: '700',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <Globe size={11} />
+                          <span>{translatingIds[msg.id] ? t('chat_translating') : t('chat_translate_btn')}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Görüldü ve Saat */}
                   <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1307,7 +1438,19 @@ export default function Chats({ userId }: ChatsProps) {
                 }
               }}
               placeholder={t('chats_input_placeholder')}
-              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '25px', padding: '0 20px', color: 'white', fontSize: '16px', outline: 'none' }}
+              style={{ 
+                flex: 1, 
+                minHeight: '44px', 
+                height: '44px', 
+                background: 'rgba(255,255,255,0.07)', 
+                border: '1px solid rgba(255,255,255,0.15)', 
+                borderRadius: '22px', 
+                padding: '0 18px', 
+                color: 'white', 
+                fontSize: '15px', 
+                outline: 'none', 
+                boxSizing: 'border-box' 
+              }}
             />
             <button 
               type="submit"

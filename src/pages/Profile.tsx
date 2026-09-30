@@ -677,49 +677,84 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
           </div>
         )}
 
-        {/* 3. KULLANICI İSTATİSTİK TABLOSU */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px'
-        }}>
+        {/* 3. KULLANICI İSTATİSTİK TABLOSU (Kadınlarda Giriş Serisi Yoktur, Beğeni ve Elmas Kazancı Gösterilir) */}
+        {profile.gender === 'kadin' ? (
           <div style={{
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '18px', padding: '14px 10px', textAlign: 'center'
+            display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px'
           }}>
-            <Heart size={20} color="#ff2d55" style={{ margin: '0 auto 6px auto' }} />
-            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>
-              {profile.total_likes || 0}
+            <div style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '18px', padding: '14px 10px', textAlign: 'center'
+            }}>
+              <Heart size={20} color="#ff2d55" style={{ margin: '0 auto 6px auto' }} />
+              <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>
+                {profile.total_likes || 0}
+              </div>
+              <div style={{ fontSize: '0.70rem', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                {t('profile_likes')}
+              </div>
             </div>
-            <div style={{ fontSize: '0.70rem', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-              {t('profile_likes')}
-            </div>
-          </div>
 
-          <div style={{
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '18px', padding: '14px 10px', textAlign: 'center'
-          }}>
-            <Flame size={20} color="#ff9800" style={{ margin: '0 auto 6px auto' }} />
-            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>
-              {profile.login_streak || 1} {t('profile_days')}
-            </div>
-            <div style={{ fontSize: '0.70rem', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-              {t('profile_streak')}
+            <div 
+              onClick={() => navigate('/wallet')}
+              style={{
+                background: 'rgba(0, 242, 254, 0.05)', border: '1px solid rgba(0, 242, 254, 0.2)',
+                borderRadius: '18px', padding: '14px 10px', textAlign: 'center', cursor: 'pointer'
+              }}
+            >
+              <div style={{ fontSize: '1.25rem', marginBottom: '4px', lineHeight: 1 }}>💎</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#00f2fe' }}>
+                {profile.total_diamonds || 0}
+              </div>
+              <div style={{ fontSize: '0.70rem', color: 'rgba(0, 242, 254, 0.8)', fontWeight: '700' }}>
+                {t('profile_total_diamonds_stat')}
+              </div>
             </div>
           </div>
+        ) : (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px'
+          }}>
+            <div style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '18px', padding: '14px 10px', textAlign: 'center'
+            }}>
+              <Heart size={20} color="#ff2d55" style={{ margin: '0 auto 6px auto' }} />
+              <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>
+                {profile.total_likes || 0}
+              </div>
+              <div style={{ fontSize: '0.70rem', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                {t('profile_likes')}
+              </div>
+            </div>
 
-          <div style={{
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '18px', padding: '14px 10px', textAlign: 'center'
-          }}>
-            <Clock size={20} color="#00f2fe" style={{ margin: '0 auto 6px auto' }} />
-            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>
-              {profile.free_extensions ?? 2}
+            <div style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '18px', padding: '14px 10px', textAlign: 'center'
+            }}>
+              <Flame size={20} color="#ff9800" style={{ margin: '0 auto 6px auto' }} />
+              <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>
+                {profile.login_streak || 1} {t('profile_days')}
+              </div>
+              <div style={{ fontSize: '0.70rem', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                {t('profile_streak')}
+              </div>
             </div>
-            <div style={{ fontSize: '0.70rem', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-              {t('profile_free_extensions')}
+
+            <div style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '18px', padding: '14px 10px', textAlign: 'center'
+            }}>
+              <Clock size={20} color="#00f2fe" style={{ margin: '0 auto 6px auto' }} />
+              <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>
+                {profile.free_extensions ?? 2}
+              </div>
+              <div style={{ fontSize: '0.70rem', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                {t('profile_free_extensions')}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* 4. HESAP AYARLARI & AKSİYONLAR */}
         <div style={{

@@ -5,7 +5,22 @@
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>tr</string>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>tr</string>
+		<string>en</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>es</string>
+		<string>ru</string>
+		<string>ar</string>
+		<string>az</string>
+		<string>it</string>
+		<string>pt</string>
+	</array>
 	<key>CFBundleDisplayName</key>
         <string>Pyngoo</string>
 	<key>CFBundleExecutable</key>

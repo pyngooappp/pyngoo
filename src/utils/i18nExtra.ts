@@ -4686,3 +4686,102 @@ for (const [lng, dict] of Object.entries(creatorComplianceTranslations)) {
   }
 }
 
+const chatAndProfileTranslations: Record<string, Record<string, string>> = {
+  tr: {
+    "chat_translate_btn": "Çevir",
+    "chat_translating": "Çevriliyor...",
+    "chat_translated_badge": "Çeviri",
+    "chat_hide_translation": "Orijinali Göster",
+    "profile_total_diamonds_stat": "Kazanılan Elmas",
+    "profile_streamer_badge_stat": "VIP Yayıncı",
+    "photo_library_label": "Fotoğraf Arşivi"
+  },
+  en: {
+    "chat_translate_btn": "Translate",
+    "chat_translating": "Translating...",
+    "chat_translated_badge": "Translated",
+    "chat_hide_translation": "Show Original",
+    "profile_total_diamonds_stat": "Diamonds Earned",
+    "profile_streamer_badge_stat": "VIP Creator",
+    "photo_library_label": "Photo Library"
+  },
+  de: {
+    "chat_translate_btn": "Übersetzen",
+    "chat_translating": "Wird übersetzt...",
+    "chat_translated_badge": "Übersetzung",
+    "chat_hide_translation": "Original anzeigen",
+    "profile_total_diamonds_stat": "Verdiente Diamanten",
+    "profile_streamer_badge_stat": "VIP Creator",
+    "photo_library_label": "Fotomediathek"
+  },
+  fr: {
+    "chat_translate_btn": "Traduire",
+    "chat_translating": "Traduction en cours...",
+    "chat_translated_badge": "Traduit",
+    "chat_hide_translation": "Afficher l'original",
+    "profile_total_diamonds_stat": "Diamants gagnés",
+    "profile_streamer_badge_stat": "Créatrice VIP",
+    "photo_library_label": "Photothèque"
+  },
+  es: {
+    "chat_translate_btn": "Traducir",
+    "chat_translating": "Traduciendo...",
+    "chat_translated_badge": "Traducido",
+    "chat_hide_translation": "Ver original",
+    "profile_total_diamonds_stat": "Diamantes ganados",
+    "profile_streamer_badge_stat": "Creadora VIP",
+    "photo_library_label": "Fototeca"
+  },
+  ru: {
+    "chat_translate_btn": "Перевести",
+    "chat_translating": "Переводится...",
+    "chat_translated_badge": "Перевод",
+    "chat_hide_translation": "Показать оригинал",
+    "profile_total_diamonds_stat": "Заработано алмазов",
+    "profile_streamer_badge_stat": "VIP Автор",
+    "photo_library_label": "Фотопленка"
+  },
+  ar: {
+    "chat_translate_btn": "ترجمة",
+    "chat_translating": "جارٍ الترجمة...",
+    "chat_translated_badge": "مترجم",
+    "chat_hide_translation": "عرض النص الأصلي",
+    "profile_total_diamonds_stat": "الماس المكتسب",
+    "profile_streamer_badge_stat": "بث VIP",
+    "photo_library_label": "مكتبة الصور"
+  },
+  az: {
+    "chat_translate_btn": "Tərcümə et",
+    "chat_translating": "Tərcümə olunur...",
+    "chat_translated_badge": "Tərcümə",
+    "chat_hide_translation": "Orijinalı göstər",
+    "profile_total_diamonds_stat": "Qazanılan Almaz",
+    "profile_streamer_badge_stat": "VIP Yayımçı",
+    "photo_library_label": "Foto Qalereya"
+  },
+  it: {
+    "chat_translate_btn": "Traduci",
+    "chat_translating": "Traduzione in corso...",
+    "chat_translated_badge": "Tradotto",
+    "chat_hide_translation": "Mostra originale",
+    "profile_total_diamonds_stat": "Diamanti guadagnati",
+    "profile_streamer_badge_stat": "Creator VIP",
+    "photo_library_label": "Libreria foto"
+  },
+  pt: {
+    "chat_translate_btn": "Traduzir",
+    "chat_translating": "Traduzindo...",
+    "chat_translated_badge": "Traduzido",
+    "chat_hide_translation": "Mostrar original",
+    "profile_total_diamonds_stat": "Diamantes ganhos",
+    "profile_streamer_badge_stat": "Criadora VIP",
+    "photo_library_label": "Fototeca"
+  }
+};
+
+for (const [lng, dict] of Object.entries(chatAndProfileTranslations)) {
+  if (extraTranslations[lng]) {
+    Object.assign(extraTranslations[lng], dict);
+  }
+}
+
