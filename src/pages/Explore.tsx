@@ -592,7 +592,7 @@ export default function Explore({ userId }: ExploreProps) {
       }}>
         {liveRooms.length === 0 ? (
           <button
-            onClick={() => navigate('/host-center')}
+            onClick={() => navigate(`/room/${userId}`)}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
               background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
