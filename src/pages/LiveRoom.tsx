@@ -230,10 +230,16 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
           const { data, error } = await supabase.functions.invoke('agora-token', {
             body: { channelName: `room_${roomId}`, uid, expireSeconds: 7200 }
           });
-          if (error) mark(`token hatası: ${error.message || error}`);
-          token = data?.token || null;
+          // Token alınamazsa burada DURUYORUZ — sessizce token'sız katılmaya çalışmak
+          // Agora projesi sertifikalıysa (bizimki öyle) her zaman anlaşılmaz bir
+          // "CAN_NOT_GET_GATEWAY_SERVER" hatasıyla sonuçlanır, asıl sebep gizlenir.
+          if (error || !data?.token) {
+            throw new Error(data?.error || error?.message || 'token alınamadı');
+          }
+          token = data.token;
         } catch (tokErr: any) {
-          mark(`token edge function erişilemedi: ${tokErr?.message || tokErr}`);
+          mark(`token hatası: ${tokErr?.message || tokErr}`);
+          throw tokErr;
         }
 
         mark('kanala katılınıyor');

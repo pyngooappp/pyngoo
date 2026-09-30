@@ -76,35 +76,59 @@ Deno.serve(async (req: Request) => {
   }
 
   const channelName = (body.channelName || "").toString().trim();
-  if (!UUID_RE.test(channelName)) {
-    return json({ error: "Gecersiz kanal" }, 400);
-  }
   const uid = Number.isInteger(body.uid) && Number(body.uid) >= 0 && Number(body.uid) < 2 ** 31
     ? Number(body.uid)
     : Math.floor(Math.random() * 10000);
   const expireSeconds = Math.min(Math.max(Number(body.expireSeconds) || 3600, 60), 2 * 3600);
 
-  // 2. Çağıran bu görüşmenin tarafı mı?
-  const { data: match, error: matchErr } = await admin
-    .from("match_history")
-    .select("caller_id, receiver_id, status")
-    .eq("match_id", channelName)
-    .maybeSingle();
+  // Canli Oda (Live Room) kanali: "room_<yayincinin userId'si>" formatinda, match_history'de
+  // bir kaydi YOKTUR (1:1 gorusme degil, tek yayinci/cok izleyici). match_history sahiplik
+  // kontrolu bu kanallara UYGULANAMAZ; onun yerine sadece banli olmayan herhangi bir giris
+  // yapmis kullanici katilabilir, ama YAYINCI (PUBLISHER) rolu SADECE oda sahibine verilir —
+  // izleyiciler SUBSCRIBER rolu alir (yayin yapamaz, sadece izler).
+  const ROOM_RE = /^room_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  const roomMatch = channelName.match(ROOM_RE);
 
-  if (matchErr) {
-    return json({ error: "Sunucu hatasi" }, 500);
-  }
-  if (!match || (match.caller_id !== callerId && match.receiver_id !== callerId)) {
-    return json({ error: "Bu gorusmeye erisim yetkiniz yok" }, 403);
-  }
-  if (["rejected", "busy"].includes(String(match.status || ""))) {
-    return json({ error: "Gorusme aktif degil" }, 403);
-  }
+  let role = RtcRole.PUBLISHER;
 
-  // 3. Banlı kullanıcıya token yok
-  const { data: prof } = await admin.from("profiles").select("is_banned").eq("id", callerId).maybeSingle();
-  if (prof?.is_banned === true) {
-    return json({ error: "Hesap askida" }, 403);
+  if (roomMatch) {
+    const roomOwnerId = roomMatch[1];
+    const { data: prof } = await admin.from("profiles").select("is_banned, role").eq("id", callerId).maybeSingle();
+    if (prof?.is_banned === true) {
+      return json({ error: "Hesap askida" }, 403);
+    }
+    const isOwner = callerId.toLowerCase() === roomOwnerId.toLowerCase();
+    if (isOwner && prof?.role !== "streamer") {
+      // Guvenlik: Canli Oda acma yetkisi yalnizca role='streamer' hesaplara ait
+      // (bkz. HostCenter.tsx ayni kontrolu istemci tarafinda da yapiyor).
+      return json({ error: "Canli oda acma yetkiniz yok" }, 403);
+    }
+    role = isOwner ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER;
+  } else {
+    if (!UUID_RE.test(channelName)) {
+      return json({ error: "Gecersiz kanal" }, 400);
+    }
+    // 1:1 gorusme: cagiran bu gorusmenin tarafi mi?
+    const { data: match, error: matchErr } = await admin
+      .from("match_history")
+      .select("caller_id, receiver_id, status")
+      .eq("match_id", channelName)
+      .maybeSingle();
+
+    if (matchErr) {
+      return json({ error: "Sunucu hatasi" }, 500);
+    }
+    if (!match || (match.caller_id !== callerId && match.receiver_id !== callerId)) {
+      return json({ error: "Bu gorusmeye erisim yetkiniz yok" }, 403);
+    }
+    if (["rejected", "busy"].includes(String(match.status || ""))) {
+      return json({ error: "Gorusme aktif degil" }, 403);
+    }
+
+    const { data: prof } = await admin.from("profiles").select("is_banned").eq("id", callerId).maybeSingle();
+    if (prof?.is_banned === true) {
+      return json({ error: "Hesap askida" }, 403);
+    }
   }
 
   try {
@@ -114,7 +138,7 @@ Deno.serve(async (req: Request) => {
       APP_CERT,
       channelName,
       uid,
-      RtcRole.PUBLISHER,
+      role,
       expireTs,
       expireTs
     );
