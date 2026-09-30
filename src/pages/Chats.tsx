@@ -47,7 +47,8 @@ export default function Chats({ userId }: ChatsProps) {
   const [showGiftMenu, setShowGiftMenu] = useState(false);
   const [showGiftRequestMenu, setShowGiftRequestMenu] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const sendingGiftRef = useRef(false);
+  const giftQueueRef = useRef<{ cost: number; reward: number; emoji: string; giftName: string }[]>([]);
+  const isProcessingGiftQueueRef = useRef(false);
 
   // Sohbet İçi Altın Satın Alma Modalı
   const [showGoldModal, setShowGoldModal] = useState(false);
@@ -234,6 +235,14 @@ export default function Chats({ userId }: ChatsProps) {
       if (data) setProfile(data);
     };
     fetchProfile();
+
+    const handleGoldUpdated = (e: any) => {
+      if (e?.detail?.newGold !== undefined) {
+        setProfile((prev: any) => ({ ...(prev || {}), total_gold: e.detail.newGold }));
+      }
+    };
+    window.addEventListener('pyngoo_gold_updated', handleGoldUpdated);
+    return () => window.removeEventListener('pyngoo_gold_updated', handleGoldUpdated);
   }, [userId]);
 
   const fetchFriends = async () => {
@@ -560,8 +569,10 @@ export default function Chats({ userId }: ChatsProps) {
     if (!activeChat || (!messageText.trim() && !giftEmoji)) return;
     
     const textToSend = messageText.trim();
-    setMessageText(''); // Input'u anında temizle
-    setShowGiftMenu(false);
+    if (!giftEmoji) {
+      setMessageText(''); // Input'u anında temizle
+      setShowGiftMenu(false);
+    }
 
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const nowIso = new Date().toISOString();
@@ -609,10 +620,12 @@ export default function Chats({ userId }: ChatsProps) {
       }
 
       // 4. Arkadaş listesinde son mesaj tarihini güncelle
-      await supabase.from('friends').update({
-        last_message_at: nowIso,
-        last_message: giftEmoji ? giftEmoji : textToSend
-      }).eq('id', activeChat.friendRowId);
+      if (activeChat.friendRowId) {
+        await supabase.from('friends').update({
+          last_message_at: nowIso,
+          last_message: giftEmoji ? giftEmoji : textToSend
+        }).eq('id', activeChat.friendRowId);
+      }
 
       fetchFriends();
 
@@ -647,64 +660,67 @@ export default function Chats({ userId }: ChatsProps) {
     }
   };
 
-  const handleSendGift = async (cost: number, reward: number, emoji: string, giftName: string) => {
-    if (sendingGiftRef.current) return;
+  // Kesintisiz Peş Peşe Hediye Gönderim Kuyruğu (Zero-Drop FIFO Queue)
+  const processGiftQueue = async () => {
+    if (isProcessingGiftQueueRef.current) return;
+    isProcessingGiftQueueRef.current = true;
 
-    const myGold = outletContext?.profile?.total_gold ?? profile?.total_gold ?? 0;
-    if (myGold < cost) {
+    try {
+      while (giftQueueRef.current.length > 0) {
+        const item = giftQueueRef.current.shift();
+        if (!item || !activeChat) break;
+
+        try {
+          // 1. Atomik RPC transferi
+          const { data: rpcRes, error: rpcErr } = await supabase.rpc('send_gift_transaction', {
+            p_sender_id: userId,
+            p_receiver_id: activeChat.id,
+            p_gold_cost: item.cost,
+            p_diamond_reward: item.reward
+          });
+
+          if (rpcErr) {
+            console.warn('send_gift_transaction notice:', rpcErr);
+          }
+
+          if (rpcRes?.new_gold !== undefined) {
+            setProfile((prev: any) => ({ ...(prev || {}), total_gold: rpcRes.new_gold }));
+          }
+
+          logTransaction(userId, -item.cost, 'gift_sent', { targetUserId: activeChat.id, details: `${item.emoji} ${item.giftName}`, giftName: item.giftName });
+
+          // 2. Mesajı veritabanına ve sohbet ekranına aktar (menüyü kapatmaz)
+          await handleSendMessage(`${item.emoji} ${item.giftName} (+${item.reward} 💎)`);
+        } catch (itemErr) {
+          console.error('Hediye gönderim işlemi hatası:', itemErr);
+        }
+      }
+    } finally {
+      isProcessingGiftQueueRef.current = false;
+      outletContext.refreshProfile?.();
+    }
+  };
+
+  const handleSendGift = (cost: number, reward: number, emoji: string, giftName: string) => {
+    const currentGold = profile?.total_gold ?? outletContext?.profile?.total_gold ?? 0;
+    if (currentGold < cost) {
       setShowGiftMenu(false);
       setShowGoldModal(true);
       return;
     }
 
-    sendingGiftRef.current = true;
+    // 1. Arayüzde anında bakiye düş (0ms gecikme ile peş peşe tıklama imkanı)
+    const nextGold = Math.max(0, currentGold - cost);
+    setProfile((prev: any) => ({ ...(prev || {}), total_gold: nextGold }));
+
+    // 2. Ses efekti anında çal
     try {
-      // 1. Veritabanından güncel bakiye kontrolü
-      const { data: freshProfile } = await supabase.from('profiles').select('total_gold').eq('id', userId).single();
-      const currentGold = freshProfile?.total_gold ?? myGold;
-      if (currentGold < cost) {
-        setProfile((prev: any) => ({ ...(prev || {}), total_gold: currentGold }));
-        outletContext.refreshProfile?.();
-        setShowGiftMenu(false);
-        setShowGoldModal(true);
-        return;
-      }
+      soundManager.playCoinSound();
+    } catch (_) {}
 
-      // 2. Güvenli RPC transferini çağır (Atomik altın düşme ve alıcı kadınsa elmas aktarma)
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc('send_gift_transaction', {
-        p_sender_id: userId,
-        p_receiver_id: activeChat.id,
-        p_gold_cost: cost,
-        p_diamond_reward: reward
-      });
-
-      let newGold = Math.max(0, currentGold - cost);
-      if (rpcErr || (rpcRes && !rpcRes.success)) {
-        console.warn('Chats send_gift_transaction RPC fallback:', rpcErr || rpcRes?.error);
-        const { error: deductErr } = await supabase.from('profiles').update({ total_gold: newGold }).eq('id', userId).gte('total_gold', cost);
-        if (deductErr) {
-          return;
-        }
-      } else if (rpcRes?.new_gold !== undefined) {
-        newGold = rpcRes.new_gold;
-      }
-
-      setProfile((prev: any) => ({ ...(prev || {}), total_gold: newGold }));
-      outletContext.refreshProfile?.();
-
-      logTransaction(userId, -cost, 'gift_sent', { targetUserId: activeChat.id, details: `${emoji} ${giftName}`, giftName });
-
-      // Mesaj olarak gönder (await ile senkron ilerlet)
-      await handleSendMessage(`${emoji} ${giftName} (+${reward} 💎)`);
-
-      try {
-        soundManager.playCoinSound();
-      } catch (_) {}
-    } catch (err) {
-      console.error('Hediye gönderim hatası:', err);
-    } finally {
-      sendingGiftRef.current = false;
-    }
+    // 3. Kuyruğa ekle ve art arda gönderimleri kesintisiz yürüt
+    giftQueueRef.current.push({ cost, reward, emoji, giftName });
+    processGiftQueue();
   };
 
   // Ücretli Sesli/Görüntülü Arama Başlat (Telefon mantığı: Ücret karşı taraf açınca başlar)
@@ -1306,7 +1322,7 @@ export default function Chats({ userId }: ChatsProps) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '14px' }}>
                 <Gift size={20} color="#ffd700" />
                 <h4 style={{ margin: 0, textAlign: 'center', color: 'white', fontSize: '1rem' }}>
-                  {t('chats_send_gift_title', { gold: profile?.total_gold || 0 })}
+                  {t('chats_send_gift_title', { gold: profile?.total_gold ?? outletContext?.profile?.total_gold ?? 0 })}
                 </h4>
               </div>
               
@@ -1321,11 +1337,17 @@ export default function Chats({ userId }: ChatsProps) {
                       padding: '10px 6px', 
                       textAlign: 'center', 
                       cursor: 'pointer', 
-                      transition: 'all 0.2s', 
-                      border: `1px solid ${g.color ? g.color + '40' : 'rgba(255,255,255,0.1)'}` 
+                      transition: 'all 0.15s ease', 
+                      border: `1px solid ${g.color ? g.color + '40' : 'rgba(255,255,255,0.1)'}`,
+                      userSelect: 'none',
+                      WebkitTapHighlightColor: 'transparent'
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = g.color || '#ffd700'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = g.color ? g.color + '40' : 'rgba(255,255,255,0.1)'; }}
+                    onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.92)'; }}
+                    onMouseUp={(e) => { e.currentTarget.style.transform = 'none'; }}
+                    onTouchStart={(e) => { e.currentTarget.style.transform = 'scale(0.92)'; }}
+                    onTouchEnd={(e) => { e.currentTarget.style.transform = 'none'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = g.color || '#ffd700'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = g.color ? g.color + '40' : 'rgba(255,255,255,0.1)'; }}
                   >
                     <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{g.emoji}</div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.name}</div>
