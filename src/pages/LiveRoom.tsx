@@ -18,6 +18,7 @@ import { logTransaction } from '../utils/transactionService';
 import { sendReportToTelegram } from '../utils/telegramAlert';
 import { toggleFollowStreamer, isFollowingStreamer } from '../utils/followService';
 import { beautifyVideoTrack } from '../utils/faceBeautify';
+import { soundManager } from '../utils/SoundManager';
 
 const appId = import.meta.env.VITE_AGORA_APP_ID;
 
@@ -59,6 +60,7 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
   const [hostLikes, setHostLikes] = useState<number | null>(null);
   const [beautifyOn, setBeautifyOn] = useState(false);
   const [beautifyLoading, setBeautifyLoading] = useState(false);
+  const [beautifyNotice, setBeautifyNotice] = useState('');
 
   const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLDivElement>(null);
@@ -94,6 +96,14 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       setIsFollowing(isFollowingStreamer(userId, roomId));
     }
   }, [userId, roomId]);
+
+  // Yayıncı "Yayını Bitir"e bastığında: izleyicilere anons + kendi çıkışı. navigate
+  // tetiklendiğinde bu bileşen unmount olur, Agora bağlantı efektinin temizleme kısmı
+  // (client.leave()) zaten otomatik çalışır.
+  const handleEndBroadcast = () => {
+    channelRef.current?.send({ type: 'broadcast', event: 'ended', payload: {} });
+    navigate('/explore', { replace: true });
+  };
 
   const handleFollow = async () => {
     if (!roomId || isHost) return;
@@ -170,6 +180,7 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
     ch.on('broadcast', { event: 'gift' }, (msg: any) => {
       setActiveGiftAnimation(msg.payload.giftEmoji);
       setMessages((prev) => [...prev.slice(-49), msg.payload]);
+      soundManager.playCoinSound();
       setTimeout(() => setActiveGiftAnimation(null), 2500);
     });
     ch.on('broadcast', { event: 'like' }, (msg: any) => {
@@ -185,6 +196,12 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
             : t('room_kicked_only', 'Yayıncı seni odadan çıkardı.')
         );
         setTimeout(() => navigate('/explore', { replace: true }), 2500);
+      }
+    });
+    ch.on('broadcast', { event: 'ended' }, () => {
+      if (!isHost) {
+        setKickedMessage(t('room_ended', 'Yayın sona erdi.'));
+        setTimeout(() => navigate('/explore', { replace: true }), 2000);
       }
     });
     ch.on('presence', { event: 'sync' }, () => {
@@ -232,6 +249,18 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         user.audioTrack?.play();
       }
     });
+
+    // Yedek güvence: 'ended' broadcast'i kaçırırsak (yayıncı uygulamayı aniden kapattıysa)
+    // — 'live' modunda izleyici asla yayın yapmaz, o yüzden audience tarafında görülen
+    // HERHANGİ bir 'user-left' zaten yayıncının kendisidir.
+    if (!isHost) {
+      client.on('user-left', () => {
+        if (isMounted) {
+          setKickedMessage(t('room_ended', 'Yayın sona erdi.'));
+          setTimeout(() => navigate('/explore', { replace: true }), 2000);
+        }
+      });
+    }
 
     // Breadcrumb: gerçek cihazda konsol erişimi yok, bu yüzden hangi adımda takıldığını
     // (iapService.ts'teki aynı disiplinle) doğrudan ekranda göstereceğiz — sessizce
@@ -325,6 +354,12 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         customTrack.play(localVideoRef.current!);
         activeVideoTrackRef.current = customTrack;
         setBeautifyOn(true);
+        setBeautifyNotice(
+          result.usedFallback
+            ? t('room_beautify_failed', 'Filtre başlatılamadı, orijinal görüntü kullanılıyor.')
+            : t('room_beautify_on', 'Güzellik filtresi aktif.')
+        );
+        setTimeout(() => setBeautifyNotice(''), 2500);
       } else {
         if (activeVideoTrackRef.current) await client.unpublish([activeVideoTrackRef.current]);
         beautifyStopRef.current?.();
@@ -333,6 +368,8 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         cameraTrackRef.current.play(localVideoRef.current!);
         activeVideoTrackRef.current = cameraTrackRef.current;
         setBeautifyOn(false);
+        setBeautifyNotice(t('room_beautify_off', 'Güzellik filtresi kapatıldı.'));
+        setTimeout(() => setBeautifyNotice(''), 2000);
       }
     } catch (err) {
       console.error('Yüz filtresi açma/kapama hatası:', err);
@@ -364,7 +401,11 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
 
       const msg: ChatMsg = { id: `${Date.now()}_gift`, senderId: userId, senderName: profile?.display_name || 'Kullanıcı', giftEmoji: emoji };
       channelRef.current?.send({ type: 'broadcast', event: 'gift', payload: msg });
+      // Supabase realtime broadcast varsayılan olarak göndericinin kendisine yankılanmaz —
+      // gönderen kendi hediyesini sohbet akışında görsün diye burada da ekliyoruz.
+      setMessages((prev) => [...prev.slice(-49), msg]);
       setActiveGiftAnimation(emoji);
+      soundManager.playCoinSound();
       setTimeout(() => setActiveGiftAnimation(null), 2500);
     } catch (err) {
       console.error('Canlı Oda hediye hatası:', err);
@@ -382,8 +423,8 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
 
   if (kickedMessage) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: '#0b0c16', color: '#fff', textAlign: 'center', padding: 24 }}>
-        <div>
+      <div style={{ width: '100%', height: '100dvh', background: '#050505', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0b0c16', color: '#fff', textAlign: 'center', padding: 24 }}>
           <p style={{ fontSize: '1.1rem', fontWeight: 700 }}>{kickedMessage}</p>
         </div>
       </div>
@@ -391,7 +432,10 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
   }
 
   return (
-    <div style={{ position: 'relative', height: '100dvh', width: '100%', background: '#000', overflow: 'hidden', color: '#fff' }}>
+    <div style={{ width: '100%', height: '100dvh', background: '#050505', display: 'flex', justifyContent: 'center' }}>
+    {/* PC/web'de tam genişliğe yayvan çekmesin diye telefon oranında (max 480px) ortalanmış
+        bir "kutu" içinde render ediyoruz — masaüstünde bile telefon görünümü. */}
+    <div style={{ position: 'relative', height: '100%', width: '100%', maxWidth: 480, background: '#000', overflow: 'hidden', color: '#fff' }}>
       {/* Video: host kendi kamerasını, izleyici yayıncının akışını görür */}
       <div ref={isHost ? localVideoRef : remoteVideoRef} style={{ position: 'absolute', inset: 0 }} />
 
@@ -418,9 +462,15 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
         background: 'linear-gradient(180deg, rgba(0,0,0,0.65) 0%, transparent 100%)'
       }}>
-        <button onClick={() => navigate('/explore', { replace: true })} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <ArrowLeft size={18} color="#fff" />
-        </button>
+        {isHost ? (
+          <button onClick={handleEndBroadcast} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#dc2626', border: 'none', borderRadius: 16, padding: '6px 12px', color: '#fff', fontWeight: 800, fontSize: '0.72rem', cursor: 'pointer' }}>
+            <X size={13} /> {t('room_end_broadcast', 'Yayını Bitir')}
+          </button>
+        ) : (
+          <button onClick={() => navigate('/explore', { replace: true })} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <ArrowLeft size={18} color="#fff" />
+          </button>
+        )}
         {!isHost && (
           <img src={hostProfile?.avatar} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', border: '1px solid #ff2d55' }} />
         )}
@@ -484,10 +534,11 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         </div>
       )}
 
-      {/* Sohbet akışı */}
+      {/* Sohbet akışı — artık yayıncı da izleyici de aynı yükseklikte alt mesaj çubuğuna
+          sahip, o yüzden ikisi için de aynı (ve mesaj kutusunun biraz üstünde kalan) boşluk */}
       <div style={{
-        position: 'absolute', left: 0, right: 0, bottom: isHost ? 16 : 74,
-        maxHeight: '38%', overflowY: 'auto', padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 6
+        position: 'absolute', left: 0, right: 0, bottom: 84,
+        maxHeight: '36%', overflowY: 'auto', padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 6
       }}>
         {messages.map((m) => (
           <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', padding: '5px 10px', borderRadius: 12, alignSelf: 'flex-start', maxWidth: '85%' }}>
@@ -520,6 +571,14 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         </div>
       )}
 
+      {beautifyNotice && (
+        <div style={{
+          position: 'absolute', left: '50%', bottom: 84, transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '0.72rem', fontWeight: 700,
+          padding: '6px 14px', borderRadius: 20, whiteSpace: 'nowrap', zIndex: 5,
+        }}>{beautifyNotice}</div>
+      )}
+
       {/* Alt bar: herkes mesaj yazabilir; kalp/hediye sadece izleyicide (yayıncı kendine
           hediye/beğeni gönderemez) */}
       <div style={{
@@ -547,7 +606,20 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
             <button onClick={handleLike} disabled={hasLiked} style={{ ...roomIconBtnStyle, opacity: hasLiked ? 0.5 : 1 }}>
               <Heart size={17} color="#ff4d6d" fill={hasLiked ? '#ff4d6d' : 'none'} />
             </button>
-            <button onClick={() => setShowGiftMenu(true)} style={{ ...roomIconBtnStyle, background: 'linear-gradient(135deg, #ff2d55, #ff758c)' }}><GiftIcon size={17} color="#fff" /></button>
+            {/* Hediye gönderme yalnızca erkek izleyicide: kadınlar altın satın almıyor,
+                bu yüzden hediye gönderemez (elmas alıcısı zaten kendisi olurdu). */}
+            {profile?.gender === 'erkek' && (
+              <button
+                onClick={() => setShowGiftMenu(true)}
+                style={{
+                  ...roomIconBtnStyle,
+                  width: 44, height: 44,
+                  background: 'linear-gradient(135deg, #ff2d55, #ff758c)'
+                }}
+              >
+                <GiftIcon size={20} color="#fff" />
+              </button>
+            )}
           </>
         )}
       </div>
@@ -573,6 +645,7 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       )}
 
       <style>{`@keyframes roomGiftPop { 0% { opacity:0; transform:translateX(-50%) scale(.4);} 30% {opacity:1; transform:translateX(-50%) scale(1.15);} 100% {opacity:0; transform:translateX(-50%) scale(1) translateY(-40px);} }`}</style>
+    </div>
     </div>
   );
 }

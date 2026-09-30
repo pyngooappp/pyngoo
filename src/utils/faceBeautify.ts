@@ -36,12 +36,15 @@ function getLandmarker(): Promise<FaceLandmarker> {
 export interface BeautifiedTrack {
   track: MediaStreamTrack;
   stop: () => void;
+  // false ise MediaPipe hiç devreye giremedi (model/WebGL yok, hata vb.) ve orijinal
+  // görüntü hiç değiştirilmeden döndü — çağıran ekran kullanıcıya bunu söyleyebilsin diye.
+  usedFallback: boolean;
 }
 
 // Ham kamera track'ini alır; mümkünse cilt yumuşatma uygulanmış yeni bir track döner.
 // Başarısız olursa (model/WebGL yok, hata vb.) girdi track'in KENDİSİNİ değiştirmeden döner.
 export async function beautifyVideoTrack(inputTrack: MediaStreamTrack): Promise<BeautifiedTrack> {
-  const passthrough: BeautifiedTrack = { track: inputTrack, stop: () => {} };
+  const passthrough: BeautifiedTrack = { track: inputTrack, stop: () => {}, usedFallback: true };
 
   try {
     const landmarker = await getLandmarker();
@@ -80,12 +83,14 @@ export async function beautifyVideoTrack(inputTrack: MediaStreamTrack): Promise<
       const result = landmarker.detectForVideo(video, performance.now());
       const box = faceBoundingBox(result, width, height);
       if (box) {
+        // Belirgin, gerçekten fark edilir bir "yumuşak/parlak cilt" etkisi: daha güçlü blur
+        // + hafif parlaklık/doygunluk artışı (çoğu güzellik filtresinin verdiği "glow" hissi).
         ctx.save();
         ctx.beginPath();
         ctx.ellipse(box.cx, box.cy, box.rw, box.rh, 0, 0, Math.PI * 2);
         ctx.clip();
-        ctx.filter = 'blur(3px)';
-        ctx.globalAlpha = 0.55;
+        ctx.filter = 'blur(6px) brightness(1.06) saturate(1.1)';
+        ctx.globalAlpha = 0.8;
         ctx.drawImage(video, 0, 0, width, height);
         ctx.restore();
       }
@@ -109,7 +114,7 @@ export async function beautifyVideoTrack(inputTrack: MediaStreamTrack): Promise<
       outTrack.stop();
     };
 
-    return { track: outTrack, stop };
+    return { track: outTrack, stop, usedFallback: false };
   } catch (err) {
     console.error('Yüz güzelleştirme başlatılamadı, ham görüntüyle devam ediliyor:', err);
     return passthrough;

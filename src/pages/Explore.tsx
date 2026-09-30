@@ -599,73 +599,6 @@ export default function Explore({ userId }: ExploreProps) {
         </div>
       )}
 
-      {/* Canlı Oda Hikaye Şeridi — kadın kullanıcıya boşken "ilk canlıya sen geç" daveti
-          gösterir; erkek kullanıcıya sadece gerçekten canlı oda varsa görünür (davet yok,
-          oda açma erkeklere kapalı — bkz. HostCenter.tsx role='streamer' kontrolü). */}
-      {(liveRooms.length > 0 || isFemale) && (
-      <div style={{
-        display: 'flex',
-        gap: '14px',
-        overflowX: 'auto',
-        padding: '14px 16px 10px 16px',
-        scrollbarWidth: 'none'
-      }}>
-        {liveRooms.length === 0 ? (
-          <button
-            onClick={() => navigate(`/room/${userId}`)}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-              background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
-            }}
-          >
-            <div style={{
-              width: '58px', height: '58px', borderRadius: '50%',
-              border: '2px dashed rgba(255, 45, 85, 0.55)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#ff4d6d', fontSize: '1.5rem', fontWeight: '300'
-            }}>+</div>
-            <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 1.2 }}>
-              {t('explore_live_room_be_first', 'İlk Canlıya Sen Geç')}
-            </span>
-          </button>
-        ) : (
-          liveRooms.map((room) => (
-            <button
-              key={room.id}
-              onClick={() => navigate(`/room/${room.id}`)}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
-              }}
-            >
-              <div style={{
-                width: '58px', height: '58px', borderRadius: '50%', padding: '2.5px',
-                background: 'linear-gradient(135deg, #ff2d55, #ff758c)'
-              }}>
-                <img
-                  src={room.avatar}
-                  alt={room.name}
-                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0b0c16' }}
-                />
-              </div>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '3px',
-                fontSize: '0.6rem', fontWeight: '800', color: '#fff',
-                background: 'rgba(255, 45, 85, 0.85)', padding: '1px 6px', borderRadius: '8px', marginTop: '-14px'
-              }}>
-                {/* Keşif şeridinde gerçek izleyici sayısı yok (yeni polling eklememek için
-                    kasıtlı) — oda içine girince LiveRoom.tsx'teki gerçek presence sayacı görünür. */}
-                <Eye size={9} /> {t('badge_live')}
-              </div>
-              <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '64px' }}>
-                {room.name}
-              </span>
-            </button>
-          ))
-        )}
-      </div>
-      )}
-
       {/* Hero Header */}
       <div style={{
         padding: '24px 20px 16px 20px',
@@ -789,6 +722,100 @@ export default function Explore({ userId }: ExploreProps) {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Canlı Odalar — Hero Header'ın ALTINDA (madde 8). Erkek kullanıcıya da her zaman
+          görünür: oda varsa şerit, yoksa dikkat çekici bir davet çerçevesi (madde 7).
+          Oda açma daveti ("+") sadece kadın (streamer) kullanıcıya özel kalır. */}
+      <div style={{
+        margin: '4px 16px 18px 16px',
+        padding: '14px 14px 12px 14px',
+        borderRadius: '18px',
+        border: '1px solid rgba(255, 45, 85, 0.3)',
+        background: 'linear-gradient(135deg, rgba(255, 45, 85, 0.1), rgba(124, 77, 255, 0.08))'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+          <Radio size={15} color="#ff4d6d" />
+          <span style={{ fontSize: '0.95rem', fontWeight: '800', color: '#fff' }}>
+            {t('explore_live_rooms_heading', 'Canlı Odalar')}
+          </span>
+        </div>
+
+        {liveRooms.length === 0 && !isFemale ? (
+          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.4 }}>
+            {t('explore_live_rooms_empty_male', 'Yayın açıldığında hemen buradan girebilirsin!')}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {liveRooms.length === 0 ? (
+              <button
+                onClick={() => navigate(`/room/${userId}`)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                  background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
+                }}
+              >
+                <div style={{
+                  width: '58px', height: '58px', borderRadius: '50%',
+                  border: '2px dashed rgba(255, 45, 85, 0.55)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#ff4d6d', fontSize: '1.5rem', fontWeight: '300'
+                }}>+</div>
+                <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 1.2 }}>
+                  {t('explore_live_room_be_first', 'İlk Canlıya Sen Geç')}
+                </span>
+              </button>
+            ) : (
+              liveRooms.map((room) => (
+                <button
+                  key={room.id}
+                  onClick={() => navigate(`/room/${room.id}`)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                    background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
+                  }}
+                >
+                  <div style={{
+                    width: '58px', height: '58px', borderRadius: '50%', padding: '2.5px',
+                    background: 'linear-gradient(135deg, #ff2d55, #ff758c)'
+                  }}>
+                    <img
+                      src={room.avatar}
+                      alt={room.name}
+                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0b0c16' }}
+                    />
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '3px',
+                    fontSize: '0.6rem', fontWeight: '800', color: '#fff',
+                    background: 'rgba(255, 45, 85, 0.85)', padding: '1px 6px', borderRadius: '8px', marginTop: '-14px'
+                  }}>
+                    {/* Keşif şeridinde gerçek izleyici sayısı yok (yeni polling eklememek için
+                        kasıtlı) — oda içine girince LiveRoom.tsx'teki gerçek presence sayacı görünür. */}
+                    <Eye size={9} /> {t('badge_live')}
+                  </div>
+                  <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '64px' }}>
+                    {room.name}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {liveRooms.length > 6 && (
+          <button
+            onClick={() => navigate('/live-rooms')}
+            style={{
+              display: 'block', width: '100%', marginTop: '12px',
+              background: 'rgba(255, 45, 85, 0.18)', border: '1px solid rgba(255, 45, 85, 0.4)',
+              borderRadius: '12px', padding: '9px', color: '#ff4d6d',
+              fontSize: '0.82rem', fontWeight: '800', cursor: 'pointer'
+            }}
+          >
+            {t('explore_live_rooms_see_all', 'Tüm Canlı Yayıncıları Gör')} ({liveRooms.length})
+          </button>
+        )}
       </div>
 
       {/* Profil Kartlari Grid */}

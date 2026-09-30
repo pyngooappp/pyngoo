@@ -27,7 +27,8 @@ export interface EconomyConfig {
 export const DEFAULT_ECONOMY: EconomyConfig = {
   diamondValueTry: 0.1,
   diamondValueUsd: 0.003,
-  minWithdrawDiamonds: 500,
+  // 500 elmas * 0,10 ₺ = 50 ₺ idi; en az 500 ₺ çekim şartına göre 5000 elmasa çıkarıldı.
+  minWithdrawDiamonds: 5000,
 };
 
 /** Varsayılan değerlerle uyumluluk için (tablo okunmadan önce ve testlerde) */
