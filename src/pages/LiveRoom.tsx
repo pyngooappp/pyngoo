@@ -457,7 +457,7 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       {/* Üst bar */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0,
-        paddingTop: 'calc(env(safe-area-inset-top, 12px) + 10px)',
+        paddingTop: 'calc(env(safe-area-inset-top, 12px) + 24px)',
         paddingLeft: 14, paddingRight: 14, paddingBottom: 12,
         display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
         background: 'linear-gradient(180deg, rgba(0,0,0,0.65) 0%, transparent 100%)'

@@ -803,19 +803,21 @@ export default function Explore({ userId }: ExploreProps) {
           </div>
         )}
 
-        {liveRooms.length > 6 && (
-          <button
-            onClick={() => navigate('/live-rooms')}
-            style={{
-              display: 'block', width: '100%', marginTop: '12px',
-              background: 'rgba(255, 45, 85, 0.18)', border: '1px solid rgba(255, 45, 85, 0.4)',
-              borderRadius: '12px', padding: '9px', color: '#ff4d6d',
-              fontSize: '0.82rem', fontWeight: '800', cursor: 'pointer'
-            }}
-          >
-            {t('explore_live_rooms_see_all', 'Tüm Canlı Yayıncıları Gör')} ({liveRooms.length})
-          </button>
-        )}
+        {/* Yayıncı sayısı az olsa da her zaman görünür, küçük ve dikkat çekici bir rozet-buton. */}
+        <button
+          onClick={() => navigate('/live-rooms')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '10px',
+            background: 'linear-gradient(135deg, #ff2d55, #ff758c)', border: 'none',
+            borderRadius: '20px', padding: '6px 12px', color: '#fff',
+            fontSize: '0.68rem', fontWeight: '800', cursor: 'pointer',
+            boxShadow: '0 3px 12px rgba(255, 45, 85, 0.4)'
+          }}
+        >
+          <Eye size={11} />
+          {t('explore_live_rooms_see_all', 'Tüm Canlı Yayıncıları Gör')}
+          {liveRooms.length > 0 && ` (${liveRooms.length})`}
+        </button>
       </div>
 
       {/* Profil Kartlari Grid */}
@@ -852,7 +854,7 @@ export default function Explore({ userId }: ExploreProps) {
             onClick={() => recordProfileView(creator.id)}
           >
             {/* Foto ve Ust Rozetler */}
-            <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 4', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', overflow: 'hidden' }}>
               <img
                 src={creator.avatar}
                 alt={creator.name}
@@ -888,43 +890,45 @@ export default function Explore({ userId }: ExploreProps) {
                           ? 'linear-gradient(135deg, rgba(243, 156, 18, 0.95), rgba(230, 126, 34, 0.95))'
                           : 'linear-gradient(135deg, rgba(100, 100, 110, 0.9), rgba(60, 60, 70, 0.9))')),
                 backdropFilter: 'blur(10px)',
-                padding: '5px 12px',
-                borderRadius: '20px',
+                padding: '3px 8px',
+                borderRadius: '14px',
                 border: '1px solid rgba(255,255,255,0.25)',
-                fontSize: '0.74rem',
+                fontSize: '0.58rem',
                 fontWeight: '800',
                 color: '#fff',
-                boxShadow: creator.isCurrentUser 
-                  ? (creator.isOnline ? '0 2px 12px rgba(0, 230, 118, 0.5)' : '0 2px 10px rgba(0,0,0,0.5)') 
+                maxWidth: '68%',
+                boxShadow: creator.isCurrentUser
+                  ? (creator.isOnline ? '0 2px 12px rgba(0, 230, 118, 0.5)' : '0 2px 10px rgba(0,0,0,0.5)')
                   : (creator.isOnline ? '0 2px 12px rgba(0, 230, 118, 0.5)' : '0 2px 10px rgba(0,0,0,0.5)')
               }}>
                 <span style={{
-                  width: '8px', height: '8px', borderRadius: '50%',
+                  width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
                   background: creator.isCurrentUser 
                     ? (creator.isOnline ? '#fff' : '#bdbdbd') 
                     : ((creator.isOnline || creator.isBusy) ? '#fff' : '#bdbdbd'),
                   boxShadow: creator.isOnline ? '0 0 8px #fff' : 'none'
                 }}></span>
-                <span>
-                  {creator.isCurrentUser 
-                    ? (creator.isOnline ? t('streamer_badge_live_active', '🟢 Çevrim İçi') : t('streamer_badge_offline_break', '⚪ Çevrim Dışı')) 
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {creator.isCurrentUser
+                    ? (creator.isOnline ? t('streamer_badge_live_active', '🟢 Çevrim İçi') : t('streamer_badge_offline_break', '⚪ Çevrim Dışı'))
                     : (creator.isOnline ? t('explore_online_badge', 'Çevrim İçi') : (creator.isBusy ? t('explore_busy_badge', 'Görüşmede') : t('explore_offline_badge', 'Çevrim Dışı')))}
                 </span>
               </div>
 
-              {/* Ulke Bayragi */}
+              {/* Ulke Bayragi — Çevrim İçi/Dışı rozetiyle çakışmasın diye onun altına ve köşeye yakın */}
               <div style={{
                 position: 'absolute',
-                top: '12px',
-                right: '12px',
+                top: '38px',
+                right: '8px',
                 background: 'rgba(0, 0, 0, 0.65)',
                 backdropFilter: 'blur(10px)',
-                padding: '5px 8px',
-                borderRadius: '16px',
+                padding: '3px 6px',
+                borderRadius: '12px',
                 border: '1px solid rgba(255,255,255,0.15)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                fontSize: '0.7rem'
               }}>
                 {getFlag(creator.language)}
               </div>
@@ -932,26 +936,28 @@ export default function Explore({ userId }: ExploreProps) {
               {/* Kart Uzeri Isim, Lokasyon & Yanında Çevrim İçi / Çevrim Dışı Rozeti */}
               <div style={{
                 position: 'absolute',
-                bottom: '12px',
-                left: '14px',
-                right: '14px'
+                bottom: '8px',
+                left: '10px',
+                right: '10px'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
-                      {creator.name}, {creator.age}
-                    </h3>
-                    <CheckCircle2 size={17} color={creator.isOnline ? "#00e676" : "#00f2fe"} />
-                  </div>
-
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+                  <h3 style={{
+                    fontSize: '0.85rem', fontWeight: '800', margin: 0, color: '#fff',
+                    textShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0
+                  }}>
+                    {creator.name}, {creator.age}
+                  </h3>
+                  <CheckCircle2 size={13} color={creator.isOnline ? "#00e676" : "#00f2fe"} style={{ flexShrink: 0 }} />
                 </div>
 
                 <div style={{
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  color: 'rgba(255,255,255,0.85)', fontSize: '0.8rem', marginTop: '4px'
+                  display: 'flex', alignItems: 'center', gap: '3px',
+                  color: 'rgba(255,255,255,0.85)', fontSize: '0.62rem', marginTop: '2px',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
                 }}>
-                  <MapPin size={13} color="#ff2d55" />
-                  <span>{creator.city}, {creator.country}</span>
+                  <MapPin size={10} color="#ff2d55" style={{ flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{creator.city}, {creator.country}</span>
                 </div>
               </div>
             </div>
