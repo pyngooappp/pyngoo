@@ -51,6 +51,11 @@ export default function Explore({ userId }: ExploreProps) {
   });
   const [liveAlert, setLiveAlert] = useState<{ id: string; name: string; avatar: string } | null>(null);
 
+  // Canlı Oda hikaye şeridi: gerçek oda/yayın backend'i henüz kurulmadı, bu yüzden
+  // bilerek boş diziyle başlıyor (sahte veri YOK). Dolu geldiğinde backend bu state'i
+  // dolduracak; boşken de şerit "ilk canlıya sen geç" davetiyle görünür kalır.
+  const [liveRooms] = useState<{ id: string; name: string; avatar: string; viewers: number }[]>([]);
+
   // Takip listesini sunucudan yükle (başka cihazdan yapılan takipler de görünsün)
   useEffect(() => {
     let alive = true;
@@ -574,6 +579,71 @@ export default function Explore({ userId }: ExploreProps) {
         </div>
       )}
 
+      {/* Canlı Oda Hikaye Şeridi — kadın kullanıcıya boşken "ilk canlıya sen geç" daveti
+          gösterir; erkek kullanıcıya sadece gerçekten canlı oda varsa görünür (davet yok,
+          oda açma erkeklere kapalı — bkz. HostCenter.tsx role='streamer' kontrolü). */}
+      {(liveRooms.length > 0 || isFemale) && (
+      <div style={{
+        display: 'flex',
+        gap: '14px',
+        overflowX: 'auto',
+        padding: '14px 16px 10px 16px',
+        scrollbarWidth: 'none'
+      }}>
+        {liveRooms.length === 0 ? (
+          <button
+            onClick={() => navigate('/host-center')}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+              background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
+            }}
+          >
+            <div style={{
+              width: '58px', height: '58px', borderRadius: '50%',
+              border: '2px dashed rgba(255, 45, 85, 0.55)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#ff4d6d', fontSize: '1.5rem', fontWeight: '300'
+            }}>+</div>
+            <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 1.2 }}>
+              {t('explore_live_room_be_first', 'İlk Canlıya Sen Geç')}
+            </span>
+          </button>
+        ) : (
+          liveRooms.map((room) => (
+            <button
+              key={room.id}
+              onClick={() => navigate(`/room/${room.id}`)}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
+              }}
+            >
+              <div style={{
+                width: '58px', height: '58px', borderRadius: '50%', padding: '2.5px',
+                background: 'linear-gradient(135deg, #ff2d55, #ff758c)'
+              }}>
+                <img
+                  src={room.avatar}
+                  alt={room.name}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0b0c16' }}
+                />
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '3px',
+                fontSize: '0.6rem', fontWeight: '800', color: '#fff',
+                background: 'rgba(255, 45, 85, 0.85)', padding: '1px 6px', borderRadius: '8px', marginTop: '-14px'
+              }}>
+                <Eye size={9} />{room.viewers}
+              </div>
+              <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '64px' }}>
+                {room.name}
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+      )}
+
       {/* Hero Header */}
       <div style={{
         padding: '24px 20px 16px 20px',
@@ -705,8 +775,8 @@ export default function Explore({ userId }: ExploreProps) {
         maxWidth: '1200px',
         margin: '0 auto',
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-        gap: '12px'
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '8px'
       }}>
         {filteredList.map((creator, index) => (
           <div
@@ -717,10 +787,10 @@ export default function Explore({ userId }: ExploreProps) {
                     ? 'linear-gradient(180deg, rgba(0, 230, 118, 0.1) 0%, rgba(15, 25, 20, 0.95) 100%)' 
                     : 'linear-gradient(180deg, rgba(120, 120, 130, 0.08) 0%, rgba(20, 20, 28, 0.95) 100%)')
                 : (creator.isRealStreamer ? 'linear-gradient(180deg, rgba(255, 65, 108, 0.08) 0%, rgba(20, 15, 30, 0.95) 100%)' : 'rgba(255, 255, 255, 0.04)'),
-              borderRadius: '20px',
-              border: creator.isCurrentUser 
-                ? (creator.isOnline ? '2px solid #00e676' : '2px solid rgba(158, 158, 158, 0.55)') 
-                : (creator.isRealStreamer ? '2px solid rgba(255, 65, 108, 0.75)' : '1px solid rgba(255, 255, 255, 0.08)'),
+              borderRadius: '16px',
+              border: creator.isCurrentUser
+                ? (creator.isOnline ? '1px solid #00e676' : '1px solid rgba(158, 158, 158, 0.55)')
+                : (creator.isRealStreamer ? '1px solid rgba(255, 65, 108, 0.75)' : '1px solid rgba(255, 255, 255, 0.08)'),
               overflow: 'hidden',
               boxShadow: creator.isCurrentUser 
                 ? (creator.isOnline ? '0 0 30px rgba(0, 230, 118, 0.4), 0 10px 30px rgba(0,0,0,0.6)' : '0 6px 20px rgba(0,0,0,0.6)') 
@@ -733,7 +803,7 @@ export default function Explore({ userId }: ExploreProps) {
             onClick={() => recordProfileView(creator.id)}
           >
             {/* Foto ve Ust Rozetler */}
-            <div style={{ position: 'relative', width: '100%', height: '200px', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 4', overflow: 'hidden' }}>
               <img
                 src={creator.avatar}
                 alt={creator.name}

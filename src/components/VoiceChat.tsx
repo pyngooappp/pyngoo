@@ -1488,19 +1488,26 @@ export default function VoiceChat({
         >
           <div ref={remoteVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: captureShield ? 'blur(40px) brightness(0.4)' : 'none', transition: 'filter 0.15s ease' }} />
 
-          {/* 🛡️ Kimlik filigranı: Ekran görüntüsü alınırsa kimin aldığı görünür */}
+          {/* 🛡️ Kimlik filigranı: Ekran görüntüsü alınırsa kimin aldığı görünür (iz sürülebilirlik
+              KORUNUYOR — tüm kareye yayılmış tekrar, kırpılarak atlatılamaz). Sadece görünüm
+              inceltildi: çok daha düşük opaklık + küçük harf aralıklı tek satır, "debug çıktısı"
+              gibi değil kasıtlı bir doku gibi görünsün diye. */}
           {mode === 'video' && isConnected && (
             <div
               aria-hidden="true"
               style={{
                 position: 'absolute', inset: '-20%', zIndex: 2, pointerEvents: 'none',
                 display: 'flex', flexWrap: 'wrap', alignContent: 'space-around', justifyContent: 'space-around',
-                transform: 'rotate(-24deg)', opacity: 0.14, overflow: 'hidden'
+                transform: 'rotate(-24deg)', opacity: 0.055, overflow: 'hidden'
               }}
             >
-              {Array.from({ length: 18 }).map((_, i) => (
-                <span key={i} style={{ color: '#fff', fontSize: '13px', fontWeight: 800, whiteSpace: 'nowrap', padding: '28px 18px', textShadow: '0 0 2px #000' }}>
-                  {(profile?.display_name || 'Pyngoo')} · {String(userId || '').slice(0, 8)} · {new Date().toLocaleDateString()}
+              {Array.from({ length: 14 }).map((_, i) => (
+                <span key={i} style={{
+                  color: '#fff', fontSize: '9px', fontWeight: 600, letterSpacing: '0.08em',
+                  whiteSpace: 'nowrap', padding: '30px 22px', textShadow: '0 0 2px #000',
+                  fontFamily: 'ui-monospace, monospace'
+                }}>
+                  PYNGOO · {(profile?.display_name || '').toUpperCase()} · {String(userId || '').slice(0, 6)} · {new Date().toLocaleDateString()}
                 </span>
               ))}
             </div>

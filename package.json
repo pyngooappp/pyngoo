@@ -17,6 +17,7 @@
     "@capacitor/core": "^8.5.1",
     "@capawesome/capacitor-apple-sign-in": "^0.1.4",
     "@ccatto/capacitor-inapp-auth": "^1.0.1",
+    "@mediapipe/tasks-vision": "^1.0.1",
     "@revenuecat/purchases-capacitor": "^13.6.1",
     "@supabase/supabase-js": "^2.112.3",
     "agora-rtc-sdk-ng": "^4.24.7",

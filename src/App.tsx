@@ -17,6 +17,7 @@ import Market from './pages/Market';
 import Explore from './pages/Explore';
 import Layout from './components/Layout';
 import HostCenter from './pages/HostCenter';
+import LiveRoom from './pages/LiveRoom';
 import ModeratorPanel from './pages/ModeratorPanel';
 import { updateSeoForLanguage } from './utils/seoService';
 import { detectUserDefaultLanguage } from './utils/i18n';
@@ -1814,6 +1815,8 @@ function App() {
     <>
       <BrowserRouter>
         <Routes>
+          {/* Canlı Oda: bottom nav olmadan tam ekran — Layout sarmalayıcısının DIŞINDA */}
+          <Route path="/room/:roomId" element={<LiveRoom userId={userId} />} />
           <Route path="/" element={<Layout userId={userId} />}>
             <Route index element={<Home userId={userId} />} />
             <Route path="explore" element={<Explore userId={userId} />} />

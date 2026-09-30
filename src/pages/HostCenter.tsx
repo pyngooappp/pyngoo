@@ -44,6 +44,13 @@ export default function HostCenter({ userId }: HostCenterProps) {
         .eq('id', userId)
         .single();
       if (data) {
+        // Host Center (Canlı Oda dahil yayıncı araçları) yalnızca role='streamer' (kadın)
+        // hesaplara açık — App.tsx zaten kayıt sırasında bu rolü kadın kullanıcılara atıyor.
+        // Erkek/diğer roller buraya URL ile bile gelse anında geri yönlendirilir.
+        if (data.role !== 'streamer') {
+          navigate('/explore', { replace: true });
+          return;
+        }
         setProfile(data);
         if (data.avatar) {
           setAvatarUrl(data.avatar);
