@@ -10,13 +10,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
-import { ArrowLeft, Eye, Send, Gift as GiftIcon, X, Flag, UserPlus, UserCheck, Heart } from 'lucide-react';
+import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type ILocalVideoTrack } from 'agora-rtc-sdk-ng';
+import { ArrowLeft, Eye, Send, Gift as GiftIcon, X, Flag, UserPlus, UserCheck, Heart, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { blockUser } from '../utils/blockService';
 import { logTransaction } from '../utils/transactionService';
 import { sendReportToTelegram } from '../utils/telegramAlert';
 import { toggleFollowStreamer, isFollowingStreamer } from '../utils/followService';
+import { beautifyVideoTrack } from '../utils/faceBeautify';
 
 const appId = import.meta.env.VITE_AGORA_APP_ID;
 
@@ -56,6 +57,8 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
   const [reportSent, setReportSent] = useState(false);
   const [hasLiked, setHasLiked] = useState(false);
   const [hostLikes, setHostLikes] = useState<number | null>(null);
+  const [beautifyOn, setBeautifyOn] = useState(false);
+  const [beautifyLoading, setBeautifyLoading] = useState(false);
 
   const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLDivElement>(null);
@@ -63,6 +66,11 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
   const channelRef = useRef<any>(null);
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localTracksRef = useRef<{ audio?: IMicrophoneAudioTrack; video?: ICameraVideoTrack }>({});
+  // Yüz güzelleştirme (faceBeautify.ts) açıldığında yayınlanan video track'i değişir;
+  // orijinal kamera track'i burada ayrı tutulur ki kapatınca ona geri dönebilelim.
+  const cameraTrackRef = useRef<ICameraVideoTrack | null>(null);
+  const activeVideoTrackRef = useRef<ILocalVideoTrack | null>(null);
+  const beautifyStopRef = useRef<(() => void) | null>(null);
 
   const gifts = [
     { emoji: '🌹', name: t('gift_rose', 'Gül'), cost: 10, reward: 3 },
@@ -253,6 +261,8 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
           );
           if (!isMounted) { aTrack.close(); vTrack.close(); return; }
           localTracksRef.current = { audio: aTrack, video: vTrack };
+          cameraTrackRef.current = vTrack;
+          activeVideoTrackRef.current = vTrack;
           mark('video oynatılıyor');
           vTrack.play(localVideoRef.current!);
           mark('yayına başlanıyor (publish)');
@@ -272,12 +282,50 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
 
     return () => {
       isMounted = false;
+      beautifyStopRef.current?.();
       localTracksRef.current.audio?.close();
       localTracksRef.current.video?.close();
+      if (activeVideoTrackRef.current && activeVideoTrackRef.current !== (localTracksRef.current.video as any)) {
+        activeVideoTrackRef.current.close();
+      }
       client.leave().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, isHost]);
+
+  // Yüz güzelleştirme aç/kapa: gerçek kamera track'ini MediaPipe ile işleyip Agora'ya
+  // özel (custom) bir video track olarak yeniden yayınlar. Herhangi bir adım patlarsa
+  // orijinal kameraya geri dönülür — yayın asla kesilmez.
+  const toggleBeautify = async () => {
+    const client = clientRef.current;
+    if (!client || !cameraTrackRef.current || beautifyLoading) return;
+    setBeautifyLoading(true);
+    try {
+      if (!beautifyOn) {
+        const raw = cameraTrackRef.current.getMediaStreamTrack();
+        const result = await beautifyVideoTrack(raw);
+        beautifyStopRef.current = result.stop;
+        const customTrack = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: result.track });
+        if (activeVideoTrackRef.current) await client.unpublish([activeVideoTrackRef.current]);
+        await client.publish([customTrack]);
+        customTrack.play(localVideoRef.current!);
+        activeVideoTrackRef.current = customTrack;
+        setBeautifyOn(true);
+      } else {
+        if (activeVideoTrackRef.current) await client.unpublish([activeVideoTrackRef.current]);
+        beautifyStopRef.current?.();
+        beautifyStopRef.current = null;
+        await client.publish([cameraTrackRef.current]);
+        cameraTrackRef.current.play(localVideoRef.current!);
+        activeVideoTrackRef.current = cameraTrackRef.current;
+        setBeautifyOn(false);
+      }
+    } catch (err) {
+      console.error('Yüz filtresi açma/kapama hatası:', err);
+    } finally {
+      setBeautifyLoading(false);
+    }
+  };
 
   const sendChat = () => {
     if (!input.trim() || !channelRef.current) return;
@@ -352,7 +400,8 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0,
         paddingTop: 'calc(env(safe-area-inset-top, 12px) + 10px)',
-        padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px',
+        paddingLeft: 14, paddingRight: 14, paddingBottom: 12,
+        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
         background: 'linear-gradient(180deg, rgba(0,0,0,0.65) 0%, transparent 100%)'
       }}>
         <button onClick={() => navigate('/explore', { replace: true })} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -457,28 +506,37 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
         </div>
       )}
 
-      {/* Alt bar: izleyici için mesaj + hediye */}
-      {!isHost && (
-        <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0,
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 10px) + 10px)',
-          padding: '10px 14px', display: 'flex', gap: 8, alignItems: 'center',
-          background: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%)'
-        }}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-            placeholder={t('room_chat_placeholder', 'Mesaj yaz...')}
-            style={{ flex: 1, minWidth: 0, background: 'rgba(255,255,255,0.14)', border: 'none', borderRadius: 20, padding: '10px 14px', color: '#fff', fontSize: '0.85rem' }}
-          />
-          <button onClick={sendChat} style={roomIconBtnStyle}><Send size={17} color="#fff" /></button>
-          <button onClick={handleLike} disabled={hasLiked} style={{ ...roomIconBtnStyle, opacity: hasLiked ? 0.5 : 1 }}>
-            <Heart size={17} color="#ff4d6d" fill={hasLiked ? '#ff4d6d' : 'none'} />
+      {/* Alt bar: herkes mesaj yazabilir; kalp/hediye sadece izleyicide (yayıncı kendine
+          hediye/beğeni gönderemez) */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 10px) + 10px)',
+        paddingLeft: 14, paddingRight: 14, paddingTop: 10,
+        display: 'flex', gap: 8, alignItems: 'center',
+        background: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%)'
+      }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && sendChat()}
+          placeholder={t('room_chat_placeholder', 'Mesaj yaz...')}
+          style={{ flex: 1, minWidth: 0, background: 'rgba(255,255,255,0.14)', border: 'none', borderRadius: 20, padding: '10px 14px', color: '#fff', fontSize: '0.85rem' }}
+        />
+        <button onClick={sendChat} style={roomIconBtnStyle}><Send size={17} color="#fff" /></button>
+        {isHost && (
+          <button onClick={toggleBeautify} disabled={beautifyLoading} style={{ ...roomIconBtnStyle, background: beautifyOn ? 'linear-gradient(135deg, #7c4dff, #b388ff)' : roomIconBtnStyle.background, opacity: beautifyLoading ? 0.5 : 1 }}>
+            <Sparkles size={17} color="#fff" />
           </button>
-          <button onClick={() => setShowGiftMenu(true)} style={{ ...roomIconBtnStyle, background: 'linear-gradient(135deg, #ff2d55, #ff758c)' }}><GiftIcon size={17} color="#fff" /></button>
-        </div>
-      )}
+        )}
+        {!isHost && (
+          <>
+            <button onClick={handleLike} disabled={hasLiked} style={{ ...roomIconBtnStyle, opacity: hasLiked ? 0.5 : 1 }}>
+              <Heart size={17} color="#ff4d6d" fill={hasLiked ? '#ff4d6d' : 'none'} />
+            </button>
+            <button onClick={() => setShowGiftMenu(true)} style={{ ...roomIconBtnStyle, background: 'linear-gradient(135deg, #ff2d55, #ff758c)' }}><GiftIcon size={17} color="#fff" /></button>
+          </>
+        )}
+      </div>
 
       {/* Hediye menüsü */}
       {showGiftMenu && (
