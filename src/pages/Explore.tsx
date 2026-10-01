@@ -617,131 +617,6 @@ export default function Explore({ userId }: ExploreProps) {
         </div>
       )}
 
-      {/* Hero Header */}
-      <div style={{
-        padding: '24px 20px 16px 20px',
-        background: 'linear-gradient(180deg, rgba(255, 45, 85, 0.12) 0%, rgba(0,0,0,0) 100%)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)'
-      }}>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: 'rgba(255, 45, 85, 0.18)',
-          border: '1px solid rgba(255, 45, 85, 0.35)',
-          padding: '6px 14px',
-          borderRadius: '20px',
-          fontSize: '0.8rem',
-          fontWeight: '700',
-          color: '#ff4d6d',
-          marginBottom: '10px'
-        }}>
-          <span style={{
-            width: '8px', height: '8px', borderRadius: '50%',
-            background: '#00e676', boxShadow: '0 0 8px #00e676',
-            display: 'inline-block'
-          }}></span>
-          <Radio size={14} />
-          <span>{t('explore_online_active_count', '{{count}} Çevrim İçi & Aktif', { count: filteredList.filter((c) => c.isOnline).length })}</span>
-        </div>
-
-        <h1 style={{
-          fontSize: '1.65rem',
-          fontWeight: '900',
-          background: isFemale ? 'linear-gradient(135deg, #ffd700 0%, #ff8800 50%, #ff416c 100%)' : 'linear-gradient(135deg, #ffffff 0%, #ff758c 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          margin: '0 0 6px 0'
-        }}>
-          {isFemale ? t('explore_female_title', 'Yayıncı Vitrini & Liderler 👑') : t('explore_title')}
-        </h1>
-        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.88rem', margin: 0 }}>
-          {isFemale ? t('explore_female_subtitle', 'Zirvedeki yıldız yayıncıların vitrinlerini incele, ilham al ve kendi vitrinini #1 sıraya taşı!') : t('explore_subtitle')}
-        </p>
-
-        {/* Filtre Butonlari */}
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '8px',
-          marginTop: '16px',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          {/* Dil Filtresi */}
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              onClick={() => setLanguageFilter('same')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '8px 14px', borderRadius: '12px',
-                background: languageFilter === 'same' ? 'linear-gradient(135deg, #ff2d55, #ff758c)' : 'rgba(255,255,255,0.06)',
-                border: languageFilter === 'same' ? '1px solid #ff2d55' : '1px solid rgba(255,255,255,0.1)',
-                color: '#fff', fontSize: '0.82rem', fontWeight: '700', cursor: 'pointer',
-                boxShadow: languageFilter === 'same' ? '0 4px 15px rgba(255,45,85,0.35)' : 'none',
-                transition: '0.2s'
-              }}
-            >
-              <span>{getFlag(currentLang)}</span>
-              <span>{t('home_filter_lang', 'Benim Dilim')}</span>
-            </button>
-            <button
-              onClick={() => setLanguageFilter('all')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '8px 14px', borderRadius: '12px',
-                background: languageFilter === 'all' ? 'linear-gradient(135deg, #00f2fe, #4facfe)' : 'rgba(255,255,255,0.06)',
-                border: languageFilter === 'all' ? '1px solid #00f2fe' : '1px solid rgba(255,255,255,0.1)',
-                color: '#fff', fontSize: '0.82rem', fontWeight: '700', cursor: 'pointer',
-                boxShadow: languageFilter === 'all' ? '0 4px 15px rgba(0,242,254,0.35)' : 'none',
-                transition: '0.2s'
-              }}
-            >
-              <span>{t('home_filter_all', 'Tum Dunya')}</span>
-            </button>
-          </div>
-
-          {/* Durum Filtresi */}
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              onClick={() => setStatusFilter('all')}
-              style={{
-                padding: '6px 12px', borderRadius: '10px',
-                background: statusFilter === 'all' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                border: '1px solid rgba(255,255,255,0.1)', color: '#fff',
-                fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer'
-              }}
-            >
-              {t('explore_filter_all', 'Tumu')}
-            </button>
-            <button
-              onClick={() => setStatusFilter('online')}
-              style={{
-                padding: '6px 12px', borderRadius: '10px',
-                background: statusFilter === 'online' ? 'rgba(0,230,118,0.2)' : 'transparent',
-                border: statusFilter === 'online' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
-                color: statusFilter === 'online' ? '#00e676' : '#fff',
-                fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer'
-              }}
-            >
-              {t('explore_filter_online', 'Cevrimici')}
-            </button>
-            <button
-              onClick={() => setStatusFilter('popular')}
-              style={{
-                padding: '6px 12px', borderRadius: '10px',
-                background: statusFilter === 'popular' ? 'rgba(255,160,0,0.2)' : 'transparent',
-                border: statusFilter === 'popular' ? '1px solid #ffa000' : '1px solid rgba(255,255,255,0.1)',
-                color: statusFilter === 'popular' ? '#ffa000' : '#fff',
-                fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer'
-              }}
-            >
-              {t('explore_filter_popular', 'Populer')}
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Haftalık Top 10 — gerçek bu haftaki elmas kazancına göre (get_weekly_top_streamers RPC).
           Başlığa tıklayınca ilk 3'ün kazanacağı ödülleri gösteren modal açılır. */}
       <div style={{
@@ -923,6 +798,132 @@ export default function Explore({ userId }: ExploreProps) {
           {t('explore_live_rooms_see_all', 'Tüm Canlı Yayıncıları Gör')}
           {liveRooms.length > 0 && ` (${liveRooms.length})`}
         </button>
+      </div>
+
+      {/* Hero Header — küçültülmüş: Haftalık Top 10 / Canlı Odalar artık üstte olduğu için
+          bu başlık ikincil bir bölüm, daha küçük ve sade duracak şekilde boyutlandırıldı. */}
+      <div style={{
+        padding: '14px 20px 10px 20px',
+        background: 'linear-gradient(180deg, rgba(255, 45, 85, 0.08) 0%, rgba(0,0,0,0) 100%)',
+        borderBottom: '1px solid rgba(255,255,255,0.06)'
+      }}>
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          background: 'rgba(255, 45, 85, 0.18)',
+          border: '1px solid rgba(255, 45, 85, 0.35)',
+          padding: '4px 10px',
+          borderRadius: '16px',
+          fontSize: '0.66rem',
+          fontWeight: '700',
+          color: '#ff4d6d',
+          marginBottom: '8px'
+        }}>
+          <span style={{
+            width: '6px', height: '6px', borderRadius: '50%',
+            background: '#00e676', boxShadow: '0 0 8px #00e676',
+            display: 'inline-block'
+          }}></span>
+          <Radio size={11} />
+          <span>{t('explore_online_active_count', '{{count}} Çevrim İçi & Aktif', { count: filteredList.filter((c) => c.isOnline).length })}</span>
+        </div>
+
+        <h1 style={{
+          fontSize: '1.05rem',
+          fontWeight: '800',
+          background: isFemale ? 'linear-gradient(135deg, #ffd700 0%, #ff8800 50%, #ff416c 100%)' : 'linear-gradient(135deg, #ffffff 0%, #ff758c 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          margin: '0 0 3px 0'
+        }}>
+          {isFemale ? t('explore_female_title', 'Yayıncı Vitrini & Liderler 👑') : t('explore_title')}
+        </h1>
+        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.72rem', margin: 0 }}>
+          {isFemale ? t('explore_female_subtitle', 'Zirvedeki yıldız yayıncıların vitrinlerini incele, ilham al ve kendi vitrinini #1 sıraya taşı!') : t('explore_subtitle')}
+        </p>
+
+        {/* Filtre Butonlari */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '6px',
+          marginTop: '10px',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          {/* Dil Filtresi */}
+          <div style={{ display: 'flex', gap: '5px' }}>
+            <button
+              onClick={() => setLanguageFilter('same')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 9px', borderRadius: '9px',
+                background: languageFilter === 'same' ? 'linear-gradient(135deg, #ff2d55, #ff758c)' : 'rgba(255,255,255,0.06)',
+                border: languageFilter === 'same' ? '1px solid #ff2d55' : '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer',
+                boxShadow: languageFilter === 'same' ? '0 4px 15px rgba(255,45,85,0.35)' : 'none',
+                transition: '0.2s'
+              }}
+            >
+              <span>{getFlag(currentLang)}</span>
+              <span>{t('home_filter_lang', 'Benim Dilim')}</span>
+            </button>
+            <button
+              onClick={() => setLanguageFilter('all')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 9px', borderRadius: '9px',
+                background: languageFilter === 'all' ? 'linear-gradient(135deg, #00f2fe, #4facfe)' : 'rgba(255,255,255,0.06)',
+                border: languageFilter === 'all' ? '1px solid #00f2fe' : '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer',
+                boxShadow: languageFilter === 'all' ? '0 4px 15px rgba(0,242,254,0.35)' : 'none',
+                transition: '0.2s'
+              }}
+            >
+              <span>{t('home_filter_all', 'Tum Dunya')}</span>
+            </button>
+          </div>
+
+          {/* Durum Filtresi */}
+          <div style={{ display: 'flex', gap: '5px' }}>
+            <button
+              onClick={() => setStatusFilter('all')}
+              style={{
+                padding: '4px 8px', borderRadius: '8px',
+                background: statusFilter === 'all' ? 'rgba(255,255,255,0.2)' : 'transparent',
+                border: '1px solid rgba(255,255,255,0.1)', color: '#fff',
+                fontSize: '0.64rem', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              {t('explore_filter_all', 'Tumu')}
+            </button>
+            <button
+              onClick={() => setStatusFilter('online')}
+              style={{
+                padding: '4px 8px', borderRadius: '8px',
+                background: statusFilter === 'online' ? 'rgba(0,230,118,0.2)' : 'transparent',
+                border: statusFilter === 'online' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
+                color: statusFilter === 'online' ? '#00e676' : '#fff',
+                fontSize: '0.64rem', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              {t('explore_filter_online', 'Cevrimici')}
+            </button>
+            <button
+              onClick={() => setStatusFilter('popular')}
+              style={{
+                padding: '4px 8px', borderRadius: '8px',
+                background: statusFilter === 'popular' ? 'rgba(255,160,0,0.2)' : 'transparent',
+                border: statusFilter === 'popular' ? '1px solid #ffa000' : '1px solid rgba(255,255,255,0.1)',
+                color: statusFilter === 'popular' ? '#ffa000' : '#fff',
+                fontSize: '0.64rem', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              {t('explore_filter_popular', 'Populer')}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Profil Kartlari Grid */}
