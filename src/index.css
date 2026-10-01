@@ -894,12 +894,14 @@ body.in-call .main-content {
 .nav-item.active {
   color: #fff;
   font-weight: 700;
-  background: rgba(255, 255, 255, 0.18);
+  background: radial-gradient(circle at 50% 30%, rgba(255, 45, 85, 0.35), rgba(255, 255, 255, 0.1) 70%);
+  box-shadow: 0 0 16px 1px rgba(255, 45, 85, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.15);
   animation: navPillPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .nav-item.active svg {
   stroke-width: 2.1;
+  filter: drop-shadow(0 0 4px rgba(255, 45, 85, 0.8));
 }
 
 @keyframes navPillPop {
@@ -907,9 +909,16 @@ body.in-call .main-content {
   100% { transform: scale(1); }
 }
 
+/* Glow-on-hover: Tailwind/shadcn'siz, projenin kendi plain-CSS mimarisiyle aynı "glow menu"
+   hissi — yeni bağımlılık (framer-motion/tailwind) eklemeden. */
 @media (hover: hover) {
   .nav-item:hover {
     color: rgba(255, 255, 255, 0.9);
+    background: radial-gradient(circle at 50% 30%, rgba(255, 45, 85, 0.18), transparent 70%);
+    transform: translateY(-1px);
+  }
+  .nav-item:hover svg {
+    filter: drop-shadow(0 0 5px rgba(255, 45, 85, 0.55));
   }
 }
 

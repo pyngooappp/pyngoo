@@ -519,9 +519,22 @@ export default function Explore({ userId }: ExploreProps) {
       width: '100%',
       paddingTop: 'calc(env(safe-area-inset-top, 8px) + 6px)',
       paddingBottom: 'calc(95px + env(safe-area-inset-bottom, 0px))',
-      background: 'linear-gradient(180deg, #0b0c16 0%, #121324 100%)',
+      background: 'radial-gradient(ellipse 120% 60% at 50% 0%, #181330 0%, #07070f 55%, #050508 100%)',
       color: '#fff'
     }}>
+      {/* Glassmorphism yardımcı stilleri: cam efekti kartlar hover'da hafifçe büyür, canlı
+          rozetler neon yeşil parlamayla yanıp söner. Inline-style mimarisini bozmamak için
+          sadece hover/keyframes gibi inline style'ın yapamadığı kısımlar buraya alındı. */}
+      <style>{`
+        .glass-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .glass-hover:hover { transform: scale(1.035); box-shadow: 0 12px 34px rgba(0,0,0,0.5); }
+        @keyframes liveNeonPulse {
+          0%, 100% { box-shadow: 0 0 6px 1px rgba(0,230,118,0.6), 0 0 0 0 rgba(0,230,118,0.5); }
+          50% { box-shadow: 0 0 14px 4px rgba(0,230,118,0.95), 0 0 0 4px rgba(0,230,118,0.12); }
+        }
+        .live-neon-dot { animation: liveNeonPulse 1.6s ease-in-out infinite; }
+      `}</style>
+
       {/* 🔔 TAKİP EDİLEN YAYINCI CANLIYA GEÇTİ BİLDİRİMİ */}
       {liveAlert && (
         <div style={{
@@ -617,71 +630,61 @@ export default function Explore({ userId }: ExploreProps) {
         </div>
       )}
 
-      {/* Haftalık Top 10 — gerçek bu haftaki elmas kazancına göre (get_weekly_top_streamers RPC).
-          Başlığa tıklayınca ilk 3'ün kazanacağı ödülleri gösteren modal açılır. */}
-      <div style={{
-        margin: '14px 16px 4px 16px',
-        padding: '14px',
-        borderRadius: '18px',
-        border: '1px solid rgba(255, 215, 0, 0.3)',
-        background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.12), rgba(255, 45, 85, 0.08))'
-      }}>
-        <button
-          onClick={() => setShowWeeklyPrizes(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-            background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: '10px'
-          }}
-        >
-          <Trophy size={17} color="#ffd700" />
-          <span style={{ fontSize: '0.95rem', fontWeight: '800', color: '#fff' }}>
-            {t('explore_weekly_top10_heading', 'Haftalık Top 10')}
-          </span>
-          <span style={{
-            marginLeft: 'auto', fontSize: '0.64rem', fontWeight: '800', color: '#ffd700',
-            background: 'rgba(255, 215, 0, 0.18)', border: '1px solid rgba(255, 215, 0, 0.4)',
-            padding: '3px 9px', borderRadius: '12px'
-          }}>
-            {t('explore_weekly_top10_see_prizes', 'İlk 3\'e Hediye 🎁')}
-          </span>
-        </button>
+      {/* Haftalık Top 10 — artık büyük bir kutu değil, ince bir "kurdele" banner. Gerçek
+          bu haftaki elmas kazancına göre (get_weekly_top_streamers RPC). Tıklayınca ödülleri
+          VE tam sıralamayı gösteren modal açılır — cam efekti (backdrop-blur) + hover büyüme. */}
+      <button
+        onClick={() => setShowWeeklyPrizes(true)}
+        className="glass-hover"
+        style={{
+          display: 'flex', alignItems: 'center', gap: '8px', width: 'calc(100% - 32px)',
+          margin: '12px 16px 4px 16px', padding: '8px 12px',
+          borderRadius: '999px', border: '1px solid rgba(255,255,255,0.1)',
+          background: 'linear-gradient(90deg, rgba(255,215,0,0.14), rgba(255,45,85,0.1))',
+          backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+          cursor: 'pointer', textAlign: 'left'
+        }}
+      >
+        <Trophy size={14} color="#ffd700" style={{ flexShrink: 0 }} />
+        <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#fff', flexShrink: 0 }}>
+          {t('explore_weekly_top10_heading', 'Haftalık Top 10')}
+        </span>
 
-        {weeklyTop.length === 0 ? (
-          <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)' }}>
-            {t('explore_weekly_top10_empty', 'Bu hafta henüz kimse elmas kazanmadı — ilk sen ol!')}
-          </p>
-        ) : (
-          <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-            {weeklyTop.map((s, i) => (
-              <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0, width: '58px' }}>
-                <div style={{ position: 'relative' }}>
-                  <div style={{
-                    width: '52px', height: '52px', borderRadius: '50%', padding: '2px',
-                    background: i === 0 ? 'linear-gradient(135deg,#ffd700,#ffab00)' : i === 1 ? 'linear-gradient(135deg,#e0e0e0,#9e9e9e)' : i === 2 ? 'linear-gradient(135deg,#d7a06e,#8d5524)' : 'rgba(255,255,255,0.12)'
-                  }}>
-                    <img src={s.avatar} alt={s.display_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0b0c16' }} />
-                  </div>
-                  <span style={{
-                    position: 'absolute', bottom: -2, right: -2, fontSize: '0.6rem', fontWeight: '900',
-                    background: '#0b0c16', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px',
-                    padding: '1px 5px', color: i < 3 ? '#ffd700' : '#fff'
-                  }}>
-                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '58px' }}>
-                  {s.display_name}
-                </span>
-                <span style={{ fontSize: '0.58rem', color: '#ffd54f', fontWeight: '700' }}>{s.weekly_diamonds} 💎</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        {/* İlk 3'ün mini üst üste binen avatarları — "kurdele" üzerinde canlı önizleme */}
+        <div style={{ display: 'flex', marginLeft: '2px' }}>
+          {weeklyTop.slice(0, 3).map((s, i) => (
+            <img
+              key={s.id}
+              src={s.avatar}
+              alt={s.display_name}
+              style={{
+                width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover',
+                border: '1.5px solid #0b0c16', marginLeft: i === 0 ? 0 : '-7px'
+              }}
+            />
+          ))}
+        </div>
+
+        <span style={{
+          marginLeft: 'auto', fontSize: '0.6rem', fontWeight: '800', color: '#ffd700',
+          background: 'rgba(255, 215, 0, 0.18)', border: '1px solid rgba(255, 215, 0, 0.4)',
+          padding: '2px 8px', borderRadius: '10px', whiteSpace: 'nowrap', flexShrink: 0
+        }}>
+          {t('explore_weekly_top10_see_prizes', 'İlk 3\'e Hediye 🎁')}
+        </span>
+      </button>
 
       {showWeeklyPrizes && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setShowWeeklyPrizes(false)}>
-          <div style={{ background: '#1b0e33', borderRadius: 20, padding: 20, maxWidth: 360, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setShowWeeklyPrizes(false)}>
+          <div
+            style={{
+              background: 'rgba(27, 14, 51, 0.75)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 20, padding: 20, maxWidth: 360, width: '100%',
+              maxHeight: '80vh', overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <span style={{ fontWeight: 800, fontSize: '1rem' }}>{t('explore_weekly_prizes_title', 'Bu Haftanın Ödülleri')}</span>
               <button onClick={() => setShowWeeklyPrizes(false)} style={{ background: 'none', border: 'none' }}><X size={18} color="#fff" /></button>
@@ -697,9 +700,29 @@ export default function Explore({ userId }: ExploreProps) {
                 </div>
               </div>
             ))}
-            <p style={{ marginTop: 14, marginBottom: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>
+            <p style={{ margin: '14px 0 10px 0', fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>
               {t('explore_weekly_prizes_note', 'Sıralama her hafta sıfırlanır ve bu hafta kazanılan gerçek elmasa göre hesaplanır.')}
             </p>
+
+            {/* Kurdele artık avatarları göstermiyor — tam sıralama buraya taşındı */}
+            {weeklyTop.length === 0 ? (
+              <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+                {t('explore_weekly_top10_empty', 'Bu hafta henüz kimse elmas kazanmadı — ilk sen ol!')}
+              </p>
+            ) : (
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {weeklyTop.map((s, i) => (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 18, fontSize: '0.7rem', fontWeight: '800', color: i < 3 ? '#ffd700' : 'rgba(255,255,255,0.6)' }}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                    </span>
+                    <img src={s.avatar} alt={s.display_name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                    <span style={{ flex: 1, fontSize: '0.78rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.display_name}</span>
+                    <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#ffd54f' }}>{s.weekly_diamonds} 💎</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -711,12 +734,14 @@ export default function Explore({ userId }: ExploreProps) {
         margin: '4px 16px 18px 16px',
         padding: '14px 14px 12px 14px',
         borderRadius: '18px',
-        border: '1px solid rgba(255, 45, 85, 0.3)',
-        background: 'linear-gradient(135deg, rgba(255, 45, 85, 0.1), rgba(124, 77, 255, 0.08))'
+        border: '1px solid rgba(255, 215, 0, 0.18)',
+        background: 'linear-gradient(135deg, rgba(24, 24, 38, 0.7), rgba(12, 12, 20, 0.55))',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-          <Radio size={15} color="#ff4d6d" />
-          <span style={{ fontSize: '0.95rem', fontWeight: '800', color: '#fff' }}>
+          <Radio size={15} color="#ffd700" />
+          <span style={{ fontSize: '0.95rem', fontWeight: '800', color: '#f1e9d2', letterSpacing: '0.2px' }}>
             {t('explore_live_rooms_heading', 'Canlı Odalar')}
           </span>
         </div>
@@ -750,12 +775,13 @@ export default function Explore({ userId }: ExploreProps) {
                 <button
                   key={room.id}
                   onClick={() => navigate(`/room/${room.id}`)}
+                  className="glass-hover"
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
                     background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
                   }}
                 >
-                  <div style={{
+                  <div className="live-neon-dot" style={{
                     width: '58px', height: '58px', borderRadius: '50%', padding: '2.5px',
                     background: 'linear-gradient(135deg, #ff2d55, #ff758c)'
                   }}>
@@ -768,7 +794,7 @@ export default function Explore({ userId }: ExploreProps) {
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '3px',
                     fontSize: '0.6rem', fontWeight: '800', color: '#fff',
-                    background: 'rgba(255, 45, 85, 0.85)', padding: '1px 6px', borderRadius: '8px', marginTop: '-14px'
+                    background: 'rgba(0, 230, 118, 0.85)', padding: '1px 6px', borderRadius: '8px', marginTop: '-14px'
                   }}>
                     {/* Keşif şeridinde gerçek izleyici sayısı yok (yeni polling eklememek için
                         kasıtlı) — oda içine girince LiveRoom.tsx'teki gerçek presence sayacı görünür. */}
@@ -783,15 +809,18 @@ export default function Explore({ userId }: ExploreProps) {
           </div>
         )}
 
-        {/* Yayıncı sayısı az olsa da her zaman görünür, küçük ve dikkat çekici bir rozet-buton. */}
+        {/* Yayıncı sayısı az olsa da her zaman görünür, küçük ve dikkat çekici bir rozet-buton —
+            cam (glass) efektli: opak renk yerine yarı saydam + backdrop-blur + ince altın kenarlık. */}
         <button
           onClick={() => navigate('/live-rooms')}
+          className="glass-hover"
           style={{
             display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '10px',
-            background: 'linear-gradient(135deg, #ff2d55, #ff758c)', border: 'none',
-            borderRadius: '20px', padding: '6px 12px', color: '#fff',
-            fontSize: '0.68rem', fontWeight: '800', cursor: 'pointer',
-            boxShadow: '0 3px 12px rgba(255, 45, 85, 0.4)'
+            background: 'rgba(255, 215, 0, 0.1)',
+            border: '1px solid rgba(255, 215, 0, 0.35)',
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            borderRadius: '20px', padding: '6px 12px', color: '#ffd700',
+            fontSize: '0.68rem', fontWeight: '800', cursor: 'pointer'
           }}
         >
           <Eye size={11} />
@@ -807,22 +836,22 @@ export default function Explore({ userId }: ExploreProps) {
         background: 'linear-gradient(180deg, rgba(255, 45, 85, 0.08) 0%, rgba(0,0,0,0) 100%)',
         borderBottom: '1px solid rgba(255,255,255,0.06)'
       }}>
-        <div style={{
+        <div className="live-neon-dot" style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: '6px',
-          background: 'rgba(255, 45, 85, 0.18)',
-          border: '1px solid rgba(255, 45, 85, 0.35)',
+          background: 'rgba(0, 230, 118, 0.14)',
+          border: '1px solid rgba(0, 230, 118, 0.35)',
           padding: '4px 10px',
           borderRadius: '16px',
           fontSize: '0.66rem',
           fontWeight: '700',
-          color: '#ff4d6d',
+          color: '#00e676',
           marginBottom: '8px'
         }}>
           <span style={{
             width: '6px', height: '6px', borderRadius: '50%',
-            background: '#00e676', boxShadow: '0 0 8px #00e676',
+            background: '#00e676',
             display: 'inline-block'
           }}></span>
           <Radio size={11} />
@@ -853,16 +882,16 @@ export default function Explore({ userId }: ExploreProps) {
           alignItems: 'center'
         }}>
           {/* Dil Filtresi */}
-          <div style={{ display: 'flex', gap: '5px' }}>
+          <div style={{ display: 'flex', gap: '4px' }}>
             <button
               onClick={() => setLanguageFilter('same')}
               style={{
-                display: 'flex', alignItems: 'center', gap: '4px',
-                padding: '5px 9px', borderRadius: '9px',
-                background: languageFilter === 'same' ? 'linear-gradient(135deg, #ff2d55, #ff758c)' : 'rgba(255,255,255,0.06)',
-                border: languageFilter === 'same' ? '1px solid #ff2d55' : '1px solid rgba(255,255,255,0.1)',
-                color: '#fff', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer',
-                boxShadow: languageFilter === 'same' ? '0 4px 15px rgba(255,45,85,0.35)' : 'none',
+                display: 'flex', alignItems: 'center', gap: '2px',
+                padding: '3px 6px', borderRadius: '7px',
+                background: languageFilter === 'same' ? 'linear-gradient(135deg, #ffd700, #c9960c)' : 'rgba(255,255,255,0.06)',
+                border: languageFilter === 'same' ? '1px solid #ffd700' : '1px solid rgba(255,255,255,0.1)',
+                color: languageFilter === 'same' ? '#1a1206' : '#fff', fontSize: '0.54rem', fontWeight: '700', cursor: 'pointer',
+                boxShadow: languageFilter === 'same' ? '0 4px 15px rgba(255,215,0,0.3)' : 'none',
                 transition: '0.2s'
               }}
             >
@@ -872,11 +901,11 @@ export default function Explore({ userId }: ExploreProps) {
             <button
               onClick={() => setLanguageFilter('all')}
               style={{
-                display: 'flex', alignItems: 'center', gap: '4px',
-                padding: '5px 9px', borderRadius: '9px',
+                display: 'flex', alignItems: 'center', gap: '2px',
+                padding: '3px 6px', borderRadius: '7px',
                 background: languageFilter === 'all' ? 'linear-gradient(135deg, #00f2fe, #4facfe)' : 'rgba(255,255,255,0.06)',
                 border: languageFilter === 'all' ? '1px solid #00f2fe' : '1px solid rgba(255,255,255,0.1)',
-                color: '#fff', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer',
+                color: '#fff', fontSize: '0.54rem', fontWeight: '700', cursor: 'pointer',
                 boxShadow: languageFilter === 'all' ? '0 4px 15px rgba(0,242,254,0.35)' : 'none',
                 transition: '0.2s'
               }}
@@ -886,14 +915,14 @@ export default function Explore({ userId }: ExploreProps) {
           </div>
 
           {/* Durum Filtresi */}
-          <div style={{ display: 'flex', gap: '5px' }}>
+          <div style={{ display: 'flex', gap: '4px' }}>
             <button
               onClick={() => setStatusFilter('all')}
               style={{
-                padding: '4px 8px', borderRadius: '8px',
+                padding: '3px 7px', borderRadius: '7px',
                 background: statusFilter === 'all' ? 'rgba(255,255,255,0.2)' : 'transparent',
                 border: '1px solid rgba(255,255,255,0.1)', color: '#fff',
-                fontSize: '0.64rem', fontWeight: '600', cursor: 'pointer'
+                fontSize: '0.58rem', fontWeight: '600', cursor: 'pointer'
               }}
             >
               {t('explore_filter_all', 'Tumu')}
@@ -901,11 +930,11 @@ export default function Explore({ userId }: ExploreProps) {
             <button
               onClick={() => setStatusFilter('online')}
               style={{
-                padding: '4px 8px', borderRadius: '8px',
+                padding: '3px 7px', borderRadius: '7px',
                 background: statusFilter === 'online' ? 'rgba(0,230,118,0.2)' : 'transparent',
                 border: statusFilter === 'online' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
                 color: statusFilter === 'online' ? '#00e676' : '#fff',
-                fontSize: '0.64rem', fontWeight: '600', cursor: 'pointer'
+                fontSize: '0.58rem', fontWeight: '600', cursor: 'pointer'
               }}
             >
               {t('explore_filter_online', 'Cevrimici')}
@@ -913,11 +942,11 @@ export default function Explore({ userId }: ExploreProps) {
             <button
               onClick={() => setStatusFilter('popular')}
               style={{
-                padding: '4px 8px', borderRadius: '8px',
+                padding: '3px 7px', borderRadius: '7px',
                 background: statusFilter === 'popular' ? 'rgba(255,160,0,0.2)' : 'transparent',
                 border: statusFilter === 'popular' ? '1px solid #ffa000' : '1px solid rgba(255,255,255,0.1)',
                 color: statusFilter === 'popular' ? '#ffa000' : '#fff',
-                fontSize: '0.64rem', fontWeight: '600', cursor: 'pointer'
+                fontSize: '0.58rem', fontWeight: '600', cursor: 'pointer'
               }}
             >
               {t('explore_filter_popular', 'Populer')}
@@ -938,8 +967,9 @@ export default function Explore({ userId }: ExploreProps) {
         {filteredList.map((creator, index) => (
           <div
             key={creator.id}
+            className="glass-hover"
             style={{
-              background: creator.isCurrentUser 
+              background: creator.isCurrentUser
                 ? (creator.isOnline 
                     ? 'linear-gradient(180deg, rgba(0, 230, 118, 0.1) 0%, rgba(15, 25, 20, 0.95) 100%)' 
                     : 'linear-gradient(180deg, rgba(120, 120, 130, 0.08) 0%, rgba(20, 20, 28, 0.95) 100%)')
@@ -1007,13 +1037,15 @@ export default function Explore({ userId }: ExploreProps) {
                   ? (creator.isOnline ? '0 2px 12px rgba(0, 230, 118, 0.5)' : '0 2px 10px rgba(0,0,0,0.5)')
                   : (creator.isOnline ? '0 2px 12px rgba(0, 230, 118, 0.5)' : '0 2px 10px rgba(0,0,0,0.5)')
               }}>
-                <span style={{
-                  width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-                  background: creator.isCurrentUser 
-                    ? (creator.isOnline ? '#fff' : '#bdbdbd') 
-                    : ((creator.isOnline || creator.isBusy) ? '#fff' : '#bdbdbd'),
-                  boxShadow: creator.isOnline ? '0 0 8px #fff' : 'none'
-                }}></span>
+                <span
+                  className={creator.isOnline ? 'live-neon-dot' : undefined}
+                  style={{
+                    width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+                    background: creator.isCurrentUser
+                      ? (creator.isOnline ? '#fff' : '#bdbdbd')
+                      : ((creator.isOnline || creator.isBusy) ? '#fff' : '#bdbdbd')
+                  }}
+                ></span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {creator.isCurrentUser
                     ? (creator.isOnline ? t('streamer_badge_live_active', '🟢 Çevrim İçi') : t('streamer_badge_offline_break', '⚪ Çevrim Dışı'))
