@@ -248,6 +248,24 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
     let isMounted = true;
     const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
     clientRef.current = client;
+    // İnternet koparsa Agora sessizce yeniden bağlanmayı dener; ekranda donmuş görüntüyle
+    // kullanıcıyı belirsizlikte bırakmamak için 15sn içinde düzelmezse yayından/odadan çıkar.
+    let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    client.on('connection-state-change', (curState) => {
+      if (!isMounted) return;
+      if (curState === 'RECONNECTING') {
+        if (reconnectTimeoutId) return;
+        reconnectTimeoutId = setTimeout(() => {
+          reconnectTimeoutId = null;
+          if (!isMounted) return;
+          setKickedMessage(t('room_connection_lost', 'Bağlantın koptu, odadan çıkılıyor...'));
+          setTimeout(() => navigate('/explore', { replace: true }), 1500);
+        }, 15000);
+      } else if (curState === 'CONNECTED' && reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+      }
+    });
 
     client.on('user-published', async (user, mediaType) => {
       await client.subscribe(user, mediaType);
@@ -334,6 +352,10 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
 
     return () => {
       isMounted = false;
+      if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+      }
       beautifyStopRef.current?.();
       localTracksRef.current.audio?.close();
       localTracksRef.current.video?.close();

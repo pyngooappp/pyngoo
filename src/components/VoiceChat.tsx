@@ -667,6 +667,10 @@ export default function VoiceChat({
     let isMounted = true;
     // Agora dakika takibi: Agora her KATILIMCI için bağlantı süresini ayrı faturalar; süreyi çıkışta call_usage'a yazarız.
     let joinedAt: number | null = null;
+    // İnternet görüşme sırasında koparsa: Agora kendi içinde sessizce yeniden bağlanmayı dener ama
+    // bizim dakika-başı altın sayacımız (yerel setInterval) bundan habersiz tıklamaya devam eder.
+    // RECONNECTING durumu 15sn içinde düzelmezse görüşmeyi düzgünce sonlandırıp haksız ücretlendirmeyi durdur.
+    let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const initAgora = async () => {
 
@@ -744,6 +748,24 @@ export default function VoiceChat({
         }, 2000);
       });
 
+      agoraClient.on('connection-state-change', (curState) => {
+        if (!isMounted) return;
+        if (curState === 'RECONNECTING') {
+          if (reconnectTimeoutId) return; // zaten bekleniyor
+          reconnectTimeoutId = setTimeout(() => {
+            reconnectTimeoutId = null;
+            if (!isMounted) return;
+            setErrorMessage(t('voice_connection_lost', 'Bağlantın koptu, görüşme sonlandırılıyor...'));
+            setTimeout(() => onEndCallRef.current(), 1500);
+          }, 15000);
+        } else if (curState === 'CONNECTED') {
+          if (reconnectTimeoutId) {
+            clearTimeout(reconnectTimeoutId);
+            reconnectTimeoutId = null;
+          }
+        }
+      });
+
       try {
         const uid = Math.floor(Math.random() * 10000);
         let token: string | null = null;
@@ -819,6 +841,10 @@ export default function VoiceChat({
 
     return () => {
       isMounted = false;
+      if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+      }
       if (audioTrack) {
         audioTrack.stop();
         audioTrack.close();
