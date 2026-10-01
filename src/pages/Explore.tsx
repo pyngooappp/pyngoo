@@ -1,21 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { 
-  PhoneCall, Sparkles, 
+import {
+  PhoneCall, Sparkles,
   MapPin, Radio, CheckCircle2,
-  Coins, X, AlertTriangle, UserPlus, UserCheck, Eye, Crown
+  Coins, X, AlertTriangle, UserPlus, UserCheck, Eye, Crown, Trophy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { generateUUID } from '../utils/uuid';
 import { soundManager } from '../utils/SoundManager';
-import { 
-  toggleFollowStreamer, 
+import { diamondsToMoney, isTurkishLang, useEconomyConfig } from '../utils/economy';
+import {
+  toggleFollowStreamer,
   syncMyFollows,
-  recordProfileView, 
-  subscribeToStreamerGoLive, 
-  broadcastStreamerGoLive 
+  recordProfileView,
+  subscribeToStreamerGoLive,
+  broadcastStreamerGoLive
 } from '../utils/followService';
+
+const WEEKLY_PRIZES = [5000, 2500, 1000]; // 1./2./3. sıraya elmas ödülü
 
 interface ExploreProps {
   userId: string;
@@ -75,6 +78,21 @@ export default function Explore({ userId }: ExploreProps) {
     dir.subscribe();
     return () => { supabase.removeChannel(dir); };
   }, [userId]);
+
+  // Haftalık Top 10: gerçek elmas kazancına göre sunucu tarafında hesaplanır (get_weekly_top_streamers
+  // RPC'si, transactions tablosundaki bu haftaki gift_received/call_earning kayıtlarını toplar).
+  // Sayfa açılışında bir kere çekilir — periyodik polling YOK (Nano kuralı); tur bitiminde/yeni
+  // kazanımda anlık güncellenmesi istenirse ileride bir realtime abonelik eklenebilir.
+  const [weeklyTop, setWeeklyTop] = useState<{ id: string; display_name: string; avatar: string; weekly_diamonds: number }[]>([]);
+  const [showWeeklyPrizes, setShowWeeklyPrizes] = useState(false);
+  const eco = useEconomyConfig();
+  const payoutIsTr = isTurkishLang(i18n.language);
+
+  useEffect(() => {
+    supabase.rpc('get_weekly_top_streamers', { p_limit: 10 }).then(({ data }) => {
+      if (data) setWeeklyTop(data);
+    });
+  }, []);
 
   // Takip listesini sunucudan yükle (başka cihazdan yapılan takipler de görünsün)
   useEffect(() => {
@@ -724,6 +742,93 @@ export default function Explore({ userId }: ExploreProps) {
         </div>
       </div>
 
+      {/* Haftalık Top 10 — gerçek bu haftaki elmas kazancına göre (get_weekly_top_streamers RPC).
+          Başlığa tıklayınca ilk 3'ün kazanacağı ödülleri gösteren modal açılır. */}
+      <div style={{
+        margin: '14px 16px 4px 16px',
+        padding: '14px',
+        borderRadius: '18px',
+        border: '1px solid rgba(255, 215, 0, 0.3)',
+        background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.12), rgba(255, 45, 85, 0.08))'
+      }}>
+        <button
+          onClick={() => setShowWeeklyPrizes(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: '10px'
+          }}
+        >
+          <Trophy size={17} color="#ffd700" />
+          <span style={{ fontSize: '0.95rem', fontWeight: '800', color: '#fff' }}>
+            {t('explore_weekly_top10_heading', 'Haftalık Top 10')}
+          </span>
+          <span style={{
+            marginLeft: 'auto', fontSize: '0.64rem', fontWeight: '800', color: '#ffd700',
+            background: 'rgba(255, 215, 0, 0.18)', border: '1px solid rgba(255, 215, 0, 0.4)',
+            padding: '3px 9px', borderRadius: '12px'
+          }}>
+            {t('explore_weekly_top10_see_prizes', 'İlk 3\'e Hediye 🎁')}
+          </span>
+        </button>
+
+        {weeklyTop.length === 0 ? (
+          <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)' }}>
+            {t('explore_weekly_top10_empty', 'Bu hafta henüz kimse elmas kazanmadı — ilk sen ol!')}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {weeklyTop.map((s, i) => (
+              <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0, width: '58px' }}>
+                <div style={{ position: 'relative' }}>
+                  <div style={{
+                    width: '52px', height: '52px', borderRadius: '50%', padding: '2px',
+                    background: i === 0 ? 'linear-gradient(135deg,#ffd700,#ffab00)' : i === 1 ? 'linear-gradient(135deg,#e0e0e0,#9e9e9e)' : i === 2 ? 'linear-gradient(135deg,#d7a06e,#8d5524)' : 'rgba(255,255,255,0.12)'
+                  }}>
+                    <img src={s.avatar} alt={s.display_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0b0c16' }} />
+                  </div>
+                  <span style={{
+                    position: 'absolute', bottom: -2, right: -2, fontSize: '0.6rem', fontWeight: '900',
+                    background: '#0b0c16', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px',
+                    padding: '1px 5px', color: i < 3 ? '#ffd700' : '#fff'
+                  }}>
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '58px' }}>
+                  {s.display_name}
+                </span>
+                <span style={{ fontSize: '0.58rem', color: '#ffd54f', fontWeight: '700' }}>{s.weekly_diamonds} 💎</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showWeeklyPrizes && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setShowWeeklyPrizes(false)}>
+          <div style={{ background: '#1b0e33', borderRadius: 20, padding: 20, maxWidth: 360, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>{t('explore_weekly_prizes_title', 'Bu Haftanın Ödülleri')}</span>
+              <button onClick={() => setShowWeeklyPrizes(false)} style={{ background: 'none', border: 'none' }}><X size={18} color="#fff" /></button>
+            </div>
+            {['🥇', '🥈', '🥉'].map((medal, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                <span style={{ fontSize: '1.4rem' }}>{medal}</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontWeight: 800, color: '#ffd54f' }}>{WEEKLY_PRIZES[i].toLocaleString()} 💎</span>
+                  <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)' }}>
+                    ≈ {diamondsToMoney(WEEKLY_PRIZES[i], payoutIsTr, eco).toFixed(0)} {payoutIsTr ? '₺' : '$'}
+                  </span>
+                </div>
+              </div>
+            ))}
+            <p style={{ marginTop: 14, marginBottom: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>
+              {t('explore_weekly_prizes_note', 'Sıralama her hafta sıfırlanır ve bu hafta kazanılan gerçek elmasa göre hesaplanır.')}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Canlı Odalar — Hero Header'ın ALTINDA (madde 8). Erkek kullanıcıya da her zaman
           görünür: oda varsa şerit, yoksa dikkat çekici bir davet çerçevesi (madde 7).
           Oda açma daveti ("+") sadece kadın (streamer) kullanıcıya özel kalır. */}
@@ -1102,8 +1207,8 @@ export default function Explore({ userId }: ExploreProps) {
                     aria-label={followedSet.has(creator.id) ? t('explore_following_btn', '✓ Takip Ediliyor') : t('explore_follow_btn', '+ Takip Et')}
                     style={{
                       flexShrink: 0,
-                      width: '46px',
-                      height: '46px',
+                      width: '34px',
+                      height: '34px',
                       padding: 0,
                       justifyContent: 'center',
                       borderRadius: '50%',
@@ -1125,10 +1230,11 @@ export default function Explore({ userId }: ExploreProps) {
                     }}
                     title={followedSet.has(creator.id) ? t('explore_following_btn', '✓ Takip Ediliyor') : t('explore_follow_btn', '+ Takip Et')}
                   >
-                    {followedSet.has(creator.id) ? <UserCheck size={19} /> : <UserPlus size={19} />}
+                    {followedSet.has(creator.id) ? <UserCheck size={15} /> : <UserPlus size={15} />}
                   </button>
 
-                  {/* Hemen Ara Butonu */}
+                  {/* Hemen Ara Butonu — dar 3 sütunlu kartta sığması için kompakt: ikon+metin
+                      tek satırda, maliyet rozeti ayrı satıra taşmasın diye kaldırıldı. */}
                   <button
                     onClick={() => {
                       recordProfileView(creator.id);
@@ -1139,46 +1245,31 @@ export default function Explore({ userId }: ExploreProps) {
                       flex: 1,
                       minWidth: 0,
                       display: 'flex',
-                      flexWrap: 'wrap',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      columnGap: '6px',
-                      rowGap: '2px',
-                      minHeight: '46px',
-                      padding: '8px 10px',
-                      borderRadius: '23px',
-                      background: creator.isOnline 
-                        ? 'linear-gradient(135deg, #00c853 0%, #00e676 100%)' 
+                      gap: '4px',
+                      minHeight: '34px',
+                      padding: '7px 6px',
+                      borderRadius: '18px',
+                      background: creator.isOnline
+                        ? 'linear-gradient(135deg, #00c853 0%, #00e676 100%)'
                         : (creator.isBusy ? 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)' : 'rgba(255,255,255,0.08)'),
                       border: 'none',
                       color: '#fff',
                       fontWeight: '800',
-                      fontSize: '0.94rem',
+                      fontSize: '0.68rem',
                       cursor: (!creator.isOnline && !creator.isBusy) ? 'not-allowed' : 'pointer',
                       boxShadow: creator.isOnline ? '0 6px 20px rgba(0, 230, 118, 0.45)' : 'none',
                       transition: '0.2s',
                       opacity: (!creator.isOnline && !creator.isBusy) ? 0.6 : 1
                     }}
                   >
-                    <PhoneCall size={18} />
-                    <span style={{ whiteSpace: 'nowrap' }}>
-                      {callingBotId === creator.id 
-                        ? t('voice_calling', 'Aranıyor...') 
+                    <PhoneCall size={13} style={{ flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {callingBotId === creator.id
+                        ? t('voice_calling', 'Aranıyor...')
                         : (creator.isOnline ? t('explore_call_btn', 'Hemen Ara') : (creator.isBusy ? t('explore_busy_badge', 'Görüşmede') : (creator.isRealStreamer ? t('explore_status_break', '☕ Molada') : t('explore_status_offline', 'Çevrim dışı'))))}
                     </span>
-                    {creator.isOnline && (
-                      <span style={{
-                        background: 'rgba(0,0,0,0.28)',
-                        padding: '1px 7px',
-                        borderRadius: '8px',
-                        fontSize: '0.68rem',
-                        fontWeight: '700',
-                        color: '#fff59d',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {t('explore_call_cost_desc', '120 Altin/dk')}
-                      </span>
-                    )}
                   </button>
                 </div>
               )}

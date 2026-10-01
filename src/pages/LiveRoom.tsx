@@ -74,12 +74,21 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
   const activeVideoTrackRef = useRef<ILocalVideoTrack | null>(null);
   const beautifyStopRef = useRef<(() => void) | null>(null);
 
+  // Tam hediye kataloğu — Wallet.tsx/VoiceChat.tsx ile AYNI (eskiden burada eksik/kısaltılmış
+  // 5 hediyelik bir liste vardı, gerçek 12'lik katalogla senkron değildi).
   const gifts = [
     { emoji: '🌹', name: t('gift_rose', 'Gül'), cost: 10, reward: 3 },
     { emoji: '☕', name: t('gift_coffee', 'Kahve'), cost: 20, reward: 6 },
+    { emoji: '🍦', name: t('gift_icecream', 'Dondurma'), cost: 35, reward: 10 },
     { emoji: '🍫', name: t('gift_chocolate', 'Çikolata'), cost: 50, reward: 15 },
     { emoji: '🧸', name: t('gift_bear', 'Ayıcık'), cost: 100, reward: 30 },
+    { emoji: '💐', name: t('gift_bouquet', 'Buket'), cost: 200, reward: 60 },
+    { emoji: '💍', name: t('gift_diamond_ring', 'Yüzük'), cost: 350, reward: 105 },
     { emoji: '👑', name: t('gift_crown', 'Taç'), cost: 500, reward: 150 },
+    { emoji: '🏎️', name: t('gift_sportscar', 'Spor Araba'), cost: 1000, reward: 300 },
+    { emoji: '🛥️', name: t('gift_yacht', 'Yat'), cost: 2000, reward: 600 },
+    { emoji: '🚀', name: t('gift_rocket', 'Roket'), cost: 3000, reward: 900 },
+    { emoji: '🏰', name: t('gift_castle', 'Saray'), cost: 5000, reward: 1500 },
   ];
 
   // Profiller
@@ -457,6 +466,8 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       {/* Üst bar */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0,
+        // +24px ekstra pay: bazı iPhone'larda (Dynamic Island/WKWebView) salt env(safe-area-inset-top)
+        // yetmiyor, bar saat/simgelerin altında kalıyordu — elle test edilerek ayarlandı.
         paddingTop: 'calc(env(safe-area-inset-top, 12px) + 24px)',
         paddingLeft: 14, paddingRight: 14, paddingBottom: 12,
         display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
@@ -510,7 +521,7 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       </div>
 
       {reportSent && (
-        <div style={{ position: 'absolute', top: 70, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.75)', padding: '8px 16px', borderRadius: 20, fontSize: '0.8rem', zIndex: 30 }}>
+        <div style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 12px) + 78px)', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.75)', padding: '8px 16px', borderRadius: 20, fontSize: '0.8rem', zIndex: 30 }}>
           {t('voice_report_success')}
         </div>
       )}
@@ -627,12 +638,12 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       {/* Hediye menüsü */}
       {showGiftMenu && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', zIndex: 20 }} onClick={() => setShowGiftMenu(false)}>
-          <div style={{ width: '100%', background: '#1b0e33', borderRadius: '20px 20px 0 0', padding: 16 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ width: '100%', maxHeight: '70vh', display: 'flex', flexDirection: 'column', background: '#1b0e33', borderRadius: '20px 20px 0 0', padding: 16, paddingBottom: 'calc(env(safe-area-inset-bottom, 10px) + 16px)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
               <span style={{ fontWeight: 800 }}>{t('room_send_gift', 'Hediye Gönder')}</span>
               <button onClick={() => setShowGiftMenu(false)} style={{ background: 'none', border: 'none' }}><X size={18} color="#fff" /></button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, overflowY: 'auto' }}>
               {gifts.map((g) => (
                 <button key={g.emoji} onClick={() => sendGift(g.cost, g.reward, g.emoji)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '10px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                   <span style={{ fontSize: '1.4rem' }}>{g.emoji}</span>

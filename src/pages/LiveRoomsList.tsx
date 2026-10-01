@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Radio } from 'lucide-react';
@@ -16,6 +16,8 @@ export default function LiveRoomsList({ userId }: LiveRoomsListProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [rooms, setRooms] = useState<{ id: string; name: string; avatar: string }[]>([]);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   useEffect(() => {
     const dir = supabase.channel('pyngoo_live_rooms_directory');
@@ -35,10 +37,28 @@ export default function LiveRoomsList({ userId }: LiveRoomsListProps) {
   }, [userId]);
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0b0c16', color: '#fff' }}>
+    <div
+      style={{ minHeight: '100dvh', background: '#0b0c16', color: '#fff' }}
+      onTouchStart={(e) => {
+        touchStartX.current = e.touches[0].clientX;
+        touchStartY.current = e.touches[0].clientY;
+      }}
+      onTouchEnd={(e) => {
+        if (touchStartX.current === null || touchStartY.current === null) return;
+        const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+        const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+        // iOS'ta kenardan kaydırarak geri dönme hareketi (Chats.tsx ile aynı kalıp)
+        if (Math.abs(deltaX) > 75 && Math.abs(deltaY) < 65) {
+          navigate(-1);
+        }
+        touchStartX.current = null;
+        touchStartY.current = null;
+      }}
+    >
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+        padding: 'calc(env(safe-area-inset-top, 12px) + 14px) 16px 14px 16px',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
         position: 'sticky', top: 0, background: '#0b0c16', zIndex: 2
       }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
