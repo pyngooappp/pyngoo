@@ -168,3 +168,12 @@
 - **GADApplicationIdentifier:** `ca-app-pub-6163702675031285~1338244734` ([Info.plist](file:///c:/Users/PC/.gemini/antigravity/scratch/anonymous-voice-chat/ios/App/App/Info.plist))
 - App Store incelemesindeyken akıllı test reklamı fallback'i devrededir; canlı reklam açılana kadar test reklamı üzerinden ödül (+20 altın) akışı korunur.
 
+## 16. 📊 Sürüm & Hata Takip Excel'i Güncelleme Zorunluluğu
+- Proje dışında, masaüstünde tutulan tek takip dosyası: `C:\Users\PC\Desktop\Pyngoo_Instagram\Pyngoo_Surum_ve_Hata_Takip_Sistemi_Filtreli.xlsx` (3 sayfa: "Hata ve Çözüm Takibi", "Sürüm Geçmişi (Releases)", "Yol Haritası (Roadmap)").
+- **KULLANICI "PUSHLA" DEDİĞİNDE VE PUSH GERÇEKTEN YAPILDIĞINDA**, o turda yapılan iş(ler) MUTLAKA bu dosyaya işlenir — kullanıcı ayrıca hatırlatmasa bile:
+  1. "Hata ve Çözüm Takibi" sayfasına yeni satır(lar): No, Modül/Ekran, Bildirilen Sorun/Talep, Uygulanan Çözüm & Teknik Detay (tarih dahil), Platform, Öncelik, Durum, Sürüm (SemVer), TestFlight Build.
+  2. "Sürüm Geçmişi (Releases)" sayfasına yeni bir sürüm satırı (SemVer bir önceki sürümden artırılarak, gerçek commit hash'i ve gerçek `gh run list` ile doğrulanmış build numarasıyla).
+  3. Sadece veritabanına uygulanan (git push gerektirmeyen) güvenlik/SQL düzeltmeleri de aynı şekilde kaydedilir; "Git Commit"/"TestFlight Build" sütunlarına "— (DB-only, build yok)" gibi dürüst bir not düşülür — build numarası UYDURULMAZ.
+- openpyxl ile yazarken: yeni satırın stilini (`_style`) bir önceki gerçek veri satırından `copy()` ile kopyala, Türkçe karakterler ve 🚀/✅ gibi emojiler için dosyayı/konsolu UTF-8 bağlamında işle (Windows konsolunun varsayılan `cp1254` kodlaması emoji/bazı Unicode karakterlerde `UnicodeEncodeError` verir — bu sadece `print()` çıktısını etkiler, dosya yazımını etkilemez, ama hata görürsen konsola yazdırmayı atla).
+- Bu kural atlanırsa (özellikle güvenlik/veritabanı düzeltmeleri gibi git geçmişinde görünmeyen işler) proje geçmişinin gerçek kaydı kaybolur — sadece "kod" değişiklikleri değil, DB/SQL düzeltmeleri de buraya girer.
+
