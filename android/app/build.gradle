@@ -10,7 +10,7 @@ android {
     namespace = "app.pyngoo.chat"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "app.pyngoo.chat"
+        applicationId "com.pyngoo"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

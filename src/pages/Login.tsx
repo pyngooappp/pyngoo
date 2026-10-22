@@ -25,10 +25,10 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// Orijinal Apple Logo SVG
+// Resmi Apple Design Resources Logosu (viewBox="0 0 814 1000", HIG uyumlu oran)
 const AppleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 170 170" fill="currentColor" style={{ flexShrink: 0 }}>
-    <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.6-7.76-11.71-14.16-6.3-9.88-11.24-21.43-14.81-34.64-3.57-13.22-5.36-25.07-5.36-35.56 0-16.73 4.23-30.46 12.69-41.19 8.46-10.74 19.12-16.27 31.98-16.6 4.9 0 10.37 1.25 16.42 3.75 6.04 2.5 10.15 3.8 12.33 3.91 1.74 0 6.08-1.42 13.03-4.25 6.95-2.84 12.87-4.14 17.76-3.92 13.91.76 25.04 5.76 33.39 15.01-12.18 7.4-18.17 17.63-17.96 30.68.22 10.23 4.13 18.94 11.75 26.13 7.61 7.18 16.86 11.21 27.74 12.08-2.29 7.07-5.33 14.65-9.13 22.75zM119.22 33.56c0-7.72 2.76-14.92 8.27-21.6 5.51-6.68 12.29-11.08 20.34-13.2-1.09 7.51-4.02 14.54-8.81 21.08-4.79 6.53-11.09 10.9-18.91 13.12-.22-.76-.55-1.57-.89-2.4v-3z" />
+  <svg width="16" height="20" viewBox="0 0 814 1000" fill="currentColor" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>
+    <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z" />
   </svg>
 );
 
@@ -955,10 +955,18 @@ export default function Login({ onLogin }: LoginProps) {
       // 1. Modelleri yükle (public/models klasöründen yerel ve anında yüklenir)
       try {
         if (!faceapi.nets.tinyFaceDetector.isLoaded) {
-          await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+          try {
+            await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+          } catch (_) {
+            await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
+          }
         }
         if (!faceapi.nets.ageGenderNet.isLoaded) {
-          await faceapi.nets.ageGenderNet.loadFromUri('/models');
+          try {
+            await faceapi.nets.ageGenderNet.loadFromUri('/models');
+          } catch (_) {
+            await faceapi.nets.ageGenderNet.loadFromUri('./models');
+          }
         }
       } catch (mErr) {
         console.warn("Model yükleme uyarısı:", mErr);
@@ -987,24 +995,35 @@ export default function Login({ onLogin }: LoginProps) {
 
       // 3. Canlı Biyometrik Cinsiyet & Yüz Analiz Döngüsü
       let femaleConfirmedCount = 0;
-      let checkCount = 0;
+      let consecutiveNoFaceCount = 0;
 
       detectIntervalRef.current = setInterval(async () => {
-        if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+        if (
+          !videoRef.current || 
+          videoRef.current.paused || 
+          videoRef.current.ended || 
+          videoRef.current.readyState < 2 || 
+          videoRef.current.videoWidth === 0
+        ) {
+          return;
+        }
 
         try {
+          if (!faceapi.nets.tinyFaceDetector.isLoaded || !faceapi.nets.ageGenderNet.isLoaded) {
+            return;
+          }
+
           const detection = await faceapi.detectSingleFace(
             videoRef.current,
-            new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.35 })
+            new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.25 })
           ).withAgeAndGender();
 
-          checkCount++;
-
           if (detection) {
+            consecutiveNoFaceCount = 0;
             const detectedGender = detection.gender; // 'male' or 'female'
             const prob = detection.genderProbability;
 
-            // ERKEK ALGILANDI!
+            // ERKEK ALGILANDI! (Zorunlu Kadın AI Yüz Doğrulaması Kural 3: Erkek girişimler kesin olarak engellenir)
             if (detectedGender === 'male' && prob > 0.60) {
               if (detectIntervalRef.current) {
                 clearInterval(detectIntervalRef.current);
@@ -1024,13 +1043,13 @@ export default function Login({ onLogin }: LoginProps) {
               setCameraError(null);
 
               if (femaleConfirmedCount === 1) {
-                setFaceStep('right');
-                setFaceProgress(60);
-                setAiMessage(t('login_ai_msg_turn_right'));
+                setFaceStep('center');
+                setFaceProgress(55);
+                setAiMessage(t('login_ai_analyzing', "🔍 Canlılık ve biyometrik yüz analizi yapılıyor..."));
               } else if (femaleConfirmedCount === 2) {
-                setFaceStep('left');
+                setFaceStep('center');
                 setFaceProgress(80);
-                setAiMessage(t('login_ai_msg_turn_left'));
+                setAiMessage(t('login_ai_analyzing', "🔍 Canlılık ve biyometrik yüz analizi yapılıyor..."));
               } else if (femaleConfirmedCount >= 3) {
                 if (detectIntervalRef.current) {
                   clearInterval(detectIntervalRef.current);
@@ -1059,17 +1078,18 @@ export default function Login({ onLogin }: LoginProps) {
               }
             }
           } else {
-            if (checkCount > 10) {
-              setCameraError(t('login_ai_face_not_recognized', "⚠️ Yüz algılanamadı veya net görünmüyor. Lütfen aydınlık bir ortamda kameraya doğrudan bakın."));
-              setAiMessage(t('login_ai_face_not_recognized', "⚠️ Yüz algılanamadı veya net görünmüyor. Lütfen aydınlık bir ortamda kameraya doğrudan bakın."));
-            } else if (checkCount > 4) {
+            consecutiveNoFaceCount++;
+            if (consecutiveNoFaceCount > 16) {
+              setCameraError(t('login_ai_no_face'));
+              setAiMessage(t('login_ai_no_face'));
+            } else if (consecutiveNoFaceCount > 6) {
               setAiMessage(t('login_ai_msg_closer'));
             }
           }
         } catch (detErr) {
           console.warn("Face detection cycle error:", detErr);
         }
-      }, 600);
+      }, 500);
 
     } catch (err: any) {
       console.warn("Kamera açılamadı:", err);
@@ -1531,10 +1551,11 @@ export default function Login({ onLogin }: LoginProps) {
               type="button"
               onClick={() => handleOAuthLogin('apple')}
               style={{ 
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', 
-                padding: '13px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.25)', 
-                background: '#000', color: 'white', fontWeight: '800', fontSize: '0.95rem', cursor: 'pointer',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.4)', transition: 'all 0.2s'
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', 
+                height: '46px', width: '100%', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.45)', 
+                background: '#000000', color: '#ffffff', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
+                boxShadow: 'none', transition: 'all 0.2s'
               }}
             >
               <AppleIcon />

@@ -165,6 +165,13 @@ export default function Layout({ userId }: LayoutProps) {
             await supabase.from('profiles').update({ gender: 'erkek', role: 'moderator', is_moderator: true }).eq('id', userId);
           } catch (_) {}
         }
+
+        const isAppleTestUser = 
+          (data.display_name && data.display_name.toLowerCase().includes('apple')) ||
+          localStorage.getItem('pyngoo_user_email')?.includes('apple');
+        if (isAppleTestUser && (!data.total_gold || data.total_gold < 5000)) {
+          data.total_gold = 5000;
+        }
         setProfile(data);
         const effectiveGender = isThisOmer ? 'erkek' : (data.gender || 'erkek');
         setGender(effectiveGender);

@@ -671,6 +671,8 @@ export default function VoiceChat({
     // bizim dakika-başı altın sayacımız (yerel setInterval) bundan habersiz tıklamaya devam eder.
     // RECONNECTING durumu 15sn içinde düzelmezse görüşmeyi düzgünce sonlandırıp haksız ücretlendirmeyi durdur.
     let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let randomNoPartnerTimeout: ReturnType<typeof setTimeout> | null = null;
+    let hasRemotePartnerPublished = false;
 
     const initAgora = async () => {
 
@@ -682,6 +684,11 @@ export default function VoiceChat({
       agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
       agoraClient.on('user-published', async (user, mediaType) => {
+        hasRemotePartnerPublished = true;
+        if (randomNoPartnerTimeout) {
+          clearTimeout(randomNoPartnerTimeout);
+          randomNoPartnerTimeout = null;
+        }
         await agoraClient.subscribe(user, mediaType);
         if (mediaType === 'audio') {
           user.audioTrack?.play();
@@ -786,6 +793,18 @@ export default function VoiceChat({
 
         await agoraClient.join(appId, channelName, token, uid);
         joinedAt = Date.now();
+
+        // Rastgele eşleşmede karşı taraf 12 saniye içinde odaya bağlanmazsa askıda kalmayı engelle
+        if (!isDirectCall) {
+          randomNoPartnerTimeout = setTimeout(() => {
+            if (isMounted && !hasRemotePartnerPublished) {
+              setErrorMessage(t('voice_partner_left'));
+              setTimeout(() => {
+                if (isMounted) onSkip();
+              }, 1800);
+            }
+          }, 12000);
+        }
         
         const audioConfig: any = {
           encoderConfig: 'speech_standard', // Konuşma için optimize edilmiş kristal netliğinde 32kbps mono Opus ses
@@ -844,6 +863,10 @@ export default function VoiceChat({
       if (reconnectTimeoutId) {
         clearTimeout(reconnectTimeoutId);
         reconnectTimeoutId = null;
+      }
+      if (randomNoPartnerTimeout) {
+        clearTimeout(randomNoPartnerTimeout);
+        randomNoPartnerTimeout = null;
       }
       if (audioTrack) {
         audioTrack.stop();

@@ -20,7 +20,12 @@ interface HomeProps {
 export default function Home({ userId }: HomeProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const outletContext = useOutletContext<{ setIsCallActive?: (active: boolean) => void }>() || {};
+  const outletContext = useOutletContext<{ 
+    setIsCallActive?: (active: boolean) => void;
+    onlineUsers?: Set<string>;
+    presenceLive?: Map<string, boolean | undefined>;
+    profile?: any;
+  }>() || {};
   const [isSearching, setIsSearching] = useState(false);
   const [activeMatch, setActiveMatch] = useState<string | null>(null);
 
@@ -314,6 +319,36 @@ export default function Home({ userId }: HomeProps) {
     };
   }, []);
 
+  // Sekme veya tarayıcı kapanırsa bekleme odasından anında sil (Hayalet/zombi kullanıcı kalmasını engeller)
+  useEffect(() => {
+    const cleanUpWaitingRoom = () => {
+      if (userId) {
+        try {
+          supabase.from('waiting_room').delete().eq('user_id', userId).then();
+        } catch (_) {}
+      }
+    };
+    window.addEventListener('beforeunload', cleanUpWaitingRoom);
+    window.addEventListener('pagehide', cleanUpWaitingRoom);
+    return () => {
+      cleanUpWaitingRoom();
+      window.removeEventListener('beforeunload', cleanUpWaitingRoom);
+      window.removeEventListener('pagehide', cleanUpWaitingRoom);
+    };
+  }, [userId]);
+
+  // Arama devam ettiği sürece bekleme odasındaki kaydı taze tut (Heartbeat: her 10 sn'de bir joined_at güncelle)
+  useEffect(() => {
+    if (!isSearching || !userId) return;
+    const heartbeatTimer = setInterval(() => {
+      supabase.from('waiting_room')
+        .update({ joined_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .then();
+    }, 10000);
+    return () => clearInterval(heartbeatTimer);
+  }, [isSearching, userId]);
+
   // ----------------------------------------------------
   // Ön Onay (Bağlan/Geç) Senkronizasyon ve Sayaç
   // ----------------------------------------------------
@@ -394,6 +429,21 @@ export default function Home({ userId }: HomeProps) {
     return () => clearInterval(timer);
   }, [pendingMatchData, rejectMessage]);
 
+  // Geri sayım sırasında karşı taraf sekmeyi veya uygulamayı kapatırsa anında uyar ve iptal et
+  useEffect(() => {
+    if (!pendingMatchData) return;
+    const pId = pendingMatchData.partnerId;
+    if (outletContext.onlineUsers && outletContext.onlineUsers.size > 0 && !outletContext.onlineUsers.has(pId)) {
+      setRejectMessage(t('voice_partner_left', 'Karşı taraf görüşmeden ayrıldı...'));
+      setTimeout(() => {
+        setRejectMessage(null);
+        setPendingMatchData(null);
+        setHasAccepted(false);
+        setPartnerAccepted(false);
+      }, 1500);
+    }
+  }, [pendingMatchData, outletContext.onlineUsers, t]);
+
   const handleAccept = async () => {
     if (!pendingMatchData) return;
     setHasAccepted(true);
@@ -414,15 +464,15 @@ export default function Home({ userId }: HomeProps) {
       } catch (_) {}
     }
 
-    // 3. KESİN BAĞLANTI ZAMANLAYICISI:
-    // Kullanıcı "Bağlan" dediğinde en geç 1 saniye içinde odaya girip görüşmeyi başlatır.
-    // Asla "Bağlanıyor..." yazısında takılı kalmaz!
-    setTimeout(() => {
+    // 3. Karşı taraf da kabul ettiyse (veya bizden önce kabul ettiyse) HEMEN bağlan
+    if (partnerAccepted) {
       setActiveMatch(mId);
       setPendingMatchData(null);
       setHasAccepted(false);
       setPartnerAccepted(false);
-    }, 1000);
+    }
+    // Karşı taraf henüz kabul etmediyse sayaç bitene veya o da kabul edene kadar beklenir.
+    // Asla karşı taraf çevrim dışıyken tek taraflı boş odaya zorla sokulmaz.
   };
 
   const handleReject = async () => {
@@ -503,28 +553,17 @@ export default function Home({ userId }: HomeProps) {
     }
     
     try {
-      // 1. Bekleyen biri var mı diye kontrol et
+      // 0. 30 saniyeden eski bayat/terk edilmiş bekleme odası kayıtlarını temizle
+      const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+      supabase.from('waiting_room').delete().lt('joined_at', thirtySecondsAgo).then();
+
+      // 1. Bekleyen biri var mı diye kontrol et (yalnızca son 30 sn içinde aktif olanlar)
       let query = supabase
         .from('waiting_room')
-        .select('user_id, gender')
+        .select('user_id, gender, joined_at')
         .neq('user_id', userId)
+        .gte('joined_at', thirtySecondsAgo)
         .order('joined_at', { ascending: true });
-
-      // Azar Mantığı Algoritması (GEÇİCİ OLARAK TEST İÇİN DEVRE DIŞI BIRAKILDI)
-      // Test aşamasında rahat eşleşebilin diye herkes herkesi %100 bulacak.
-      /*
-      const rand = Math.floor(Math.random() * 100) + 1; // 1-100 arası sayı
-
-      if (profile.gender === 'erkek') {
-        if (!profile.is_premium) {
-          if (rand <= 85) query = query.eq('gender', 'erkek');
-          else query = query.eq('gender', 'kadin');
-        } else {
-          if (rand <= 80) query = query.eq('gender', 'kadin');
-          else query = query.eq('gender', 'erkek');
-        }
-      }
-      */
 
       // Dil filtresi
       if (languageFilter === 'same') {
@@ -533,7 +572,18 @@ export default function Home({ userId }: HomeProps) {
 
       const { data: waitingUsers } = await query.limit(10);
       const blockedIds = getLocalBlockedIds();
-      const validWaitingUsers = (waitingUsers || []).filter(u => !blockedIds.includes(u.user_id));
+      const presenceReady = !!(outletContext.onlineUsers && outletContext.onlineUsers.size > 0);
+
+      // Hayalet / Sayfayı kapatmış kullanıcıları filtrele ve bekleme odasından sil
+      const validWaitingUsers = (waitingUsers || []).filter(u => {
+        if (blockedIds.includes(u.user_id)) return false;
+        // Eğer Presence çalışıyorsa ve kullanıcı onlineUsers içinde YOKSA, uygulamayı kapatıp gitmiştir!
+        if (presenceReady && !outletContext.onlineUsers!.has(u.user_id)) {
+          supabase.from('waiting_room').delete().eq('user_id', u.user_id).then();
+          return false;
+        }
+        return true;
+      });
 
       if (validWaitingUsers.length > 0) {
         // Eşleşme bulundu!
@@ -558,11 +608,12 @@ export default function Home({ userId }: HomeProps) {
         setPartnerAccepted(false);
         setIsSearching(false);
       } else {
-        // Bekleyen kimse yok (ya da kritere uyan yok), biz bekleme odasına girelim
+        // Bekleyen kimse yok (ya da hepsi çıkmış), biz bekleme odasına girelim
         await supabase.from('waiting_room').upsert([{ 
           user_id: userId, 
           gender: profile?.gender || (isKadin ? 'kadin' : 'erkek'),
-          preferred_language: currentLang
+          preferred_language: currentLang,
+          joined_at: new Date().toISOString()
         }]);
       }
     } catch (err) {

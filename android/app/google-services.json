@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:673577776513:android:18f854164fc5e336bb2480",
         "android_client_info": {
-          "package_name": "app.pyngoo.chat"
+          "package_name": "com.pyngoo"
         }
       },
       "oauth_client": [],
