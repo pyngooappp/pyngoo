@@ -1113,7 +1113,7 @@ export default function VoiceChat({
 
     const payload = {
       reporterId: userId,
-      reporterName: profile?.display_name || 'Anonim',
+      reporterName: profile?.display_name || 'Kullanıcı',
       reportedId: targetPartnerId,
       reportedName: partnerProfile?.display_name || 'Kullanıcı',
       category: reportCategory,
@@ -1151,7 +1151,7 @@ export default function VoiceChat({
         status: 'pending',
         snapshot_data: evidenceSnapshot,
         created_at: new Date().toISOString(),
-        reporter_name: profile?.display_name || 'Anonim',
+        reporter_name: profile?.display_name || 'Kullanıcı',
         reported_name: partnerProfile?.display_name || 'Kullanıcı'
       });
       localStorage.setItem('pyngoo_local_reports', JSON.stringify(localReports));

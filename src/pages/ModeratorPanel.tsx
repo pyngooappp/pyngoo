@@ -1378,7 +1378,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
         localReports.forEach(r => {
           combinedMap.set(r.id, {
             ...r,
-            reporter_name: nameMap.get(r.reporter_id) || r.reporter_name || 'Anonim',
+            reporter_name: nameMap.get(r.reporter_id) || r.reporter_name || 'Kullanıcı',
             reported_name: nameMap.get(r.reported_user_id) || r.reported_name || 'Kullanıcı'
           });
         });
@@ -1387,7 +1387,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
         supabaseReports.forEach((r: any) => {
           combinedMap.set(r.id, {
             ...r,
-            reporter_name: nameMap.get(r.reporter_id) || r.reporter_name || 'Anonim',
+            reporter_name: nameMap.get(r.reporter_id) || r.reporter_name || 'Kullanıcı',
             reported_name: nameMap.get(r.reported_user_id) || r.reported_name || 'Kullanıcı'
           });
         });
@@ -2350,7 +2350,7 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
                   </div>
 
                   <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
-                    👤 Şikayet Eden: {report.reporter_name || 'Anonim'} (ID: {report.reporter_id.slice(0, 8)})
+                    👤 Şikayet Eden: {report.reporter_name || 'Kullanıcı'} (ID: {report.reporter_id.slice(0, 8)})
                   </div>
 
                   {report.reason && (

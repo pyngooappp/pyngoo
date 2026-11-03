@@ -183,7 +183,7 @@ export const sendReportToTelegram = async (payload: ReportPayload) => {
   const message = `
 🚨 <b>YENİ KULLANICI ŞİKAYETİ (PYNGOO)</b>
 ━━━━━━━━━━━━━━━━━━━━━━
-👤 <b>Şikayet Eden:</b> ${payload.reporterName || 'Anonim'} (<code>${payload.reporterId.slice(0, 8)}</code>)
+👤 <b>Şikayet Eden:</b> ${payload.reporterName || 'Kullanıcı'} (<code>${payload.reporterId.slice(0, 8)}</code>)
 🎯 <b>Şikayet Edilen:</b> ${payload.reportedName || 'Kullanıcı'} (<code>${payload.reportedId.slice(0, 8)}</code>)
 ⚠️ <b>Kategori:</b> <b>${payload.category}</b>
 📝 <b>Açıklama:</b> ${payload.reason && payload.reason.trim() !== '' ? payload.reason : '<i>Açıklama girilmedi</i>'}

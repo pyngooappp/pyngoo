@@ -159,7 +159,7 @@ export default function LiveRoom({ userId }: LiveRoomProps) {
       }]);
       sendReportToTelegram({
         reporterId: userId,
-        reporterName: profile?.display_name || 'Anonim',
+        reporterName: profile?.display_name || 'Kullanıcı',
         reportedId: roomId,
         reportedName: hostProfile?.display_name || 'Yayıncı',
         category,
