@@ -1168,13 +1168,47 @@ export default function ModeratorPanel() {
     setBroadcastHistory(updatedHistory);
     try { localStorage.setItem('pyngoo_broadcast_history', JSON.stringify(updatedHistory)); } catch (_) {}
 
-    // Telegram'a ilet
+    // 1. Canlı Realtime Kanala Fırlat (Açık olan tüm sekmelere/uygulamalara anında düşer)
+    try {
+      const bcChannel = supabase.channel('pyngoo_system_broadcast');
+      await bcChannel.subscribe();
+      await bcChannel.send({
+        type: 'broadcast',
+        event: 'new_system_broadcast',
+        payload: newMsg
+      });
+      setTimeout(() => { supabase.removeChannel(bcChannel); }, 2000);
+    } catch (bcErr) {
+      console.warn('Realtime broadcast error:', bcErr);
+    }
+
+    // 2. Mobil Cihazlara Kilit Ekranı Push Bildirimi Gönder (FCM Edge Function)
+    let pushResultText = '';
+    try {
+      const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('send-broadcast', {
+        body: {
+          title: newMsg.title,
+          content: newMsg.content,
+          target: newMsg.target,
+          sent_by: newMsg.sent_by
+        }
+      });
+      if (!edgeErr && edgeRes?.sent !== undefined) {
+        pushResultText = ` • 📱 ${edgeRes.sent} telefona kilit ekranı bildirimi iletildi`;
+      } else if (edgeRes?.total_tokens) {
+        pushResultText = ` • 📱 ${edgeRes.total_tokens} kayıtlı cihaz hedeflendi`;
+      }
+    } catch (pushErr) {
+      console.warn('Push notification dispatch error:', pushErr);
+    }
+
+    // 3. Telegram'a ilet
     sendTelegramAlert(`📢 <b>SİSTEM DUYURUSU YAYINLANDI!</b>\n🎯 <b>Hedef Kitle:</b> ${broadcastTarget.toUpperCase()}\n📌 <b>Başlık:</b> ${newMsg.title}\n💬 <b>İçerik:</b> ${newMsg.content}\n👑 <b>Yayınlayan:</b> ${newMsg.sent_by}`);
 
     setBroadcastTitle('');
     setBroadcastContent('');
-    setActionMessage('📢 Sistem duyurusu başarıyla yayınlandı!');
-    setTimeout(() => setActionMessage(null), 3500);
+    setActionMessage(`📢 Sistem duyurusu başarıyla fırlatıldı!${pushResultText}`);
+    setTimeout(() => setActionMessage(null), 4500);
   };
 
   // ==========================================

@@ -83,6 +83,7 @@ export default function Layout({ userId }: LayoutProps) {
   }, [profile?.is_streamer, profile?.role]);
   const [goldReward, setGoldReward] = useState<number | null>(null);
   const closeGoldReward = useCallback(() => setGoldReward(null), []);
+  const [liveBroadcastAlert, setLiveBroadcastAlert] = useState<{ title: string; content: string } | null>(null);
 
   const isCallActiveRef = useRef(false);
   isCallActiveRef.current = isCallActive || !!activeCallChannel;
@@ -660,6 +661,19 @@ export default function Layout({ userId }: LayoutProps) {
       })
       .subscribe();
 
+    // Sistem Duyurusu Realtime Dinleyicisi
+    const broadcastSub = supabase.channel('pyngoo_system_broadcast')
+      .on('broadcast', { event: 'new_system_broadcast' }, ({ payload }: any) => {
+        if (!payload) return;
+        const currentGender = profileForPresenceRef.current?.gender;
+        if (payload.target === 'female' && currentGender !== 'kadin') return;
+        if (payload.target === 'male' && currentGender !== 'erkek') return;
+
+        setLiveBroadcastAlert({ title: payload.title, content: payload.content });
+        try { new Audio('/pingoo.mp3').play().catch(() => {}); } catch (_) {}
+      })
+      .subscribe();
+
     return () => {
       clearInterval(livenessInterval);
       window.removeEventListener('focus', checkLiveness);
@@ -676,6 +690,7 @@ export default function Layout({ userId }: LayoutProps) {
       window.removeEventListener('pyngoo_presence_retrack', retrackPresence);
       presenceSync.stop();
       supabase.removeChannel(paymentChannel);
+      supabase.removeChannel(broadcastSub);
     };
   }, [userId, fetchCounts, forceLogoutUser]);
 
@@ -935,6 +950,62 @@ export default function Layout({ userId }: LayoutProps) {
               <div style={{ color: '#fff', fontSize: '0.92rem', fontWeight: '700', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {t('user_called_you', { name: callWaitingNotification.callerName })}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Canlı Sistem Duyurusu Modalı (Yöneticiden Anlık Bildirim) */}
+        {liveBroadcastAlert && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 100005,
+            background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+          }}>
+            <div style={{
+              width: '100%', maxWidth: '420px', background: 'rgba(20, 23, 38, 0.98)',
+              borderRadius: '24px', border: '1.5px solid rgba(139, 92, 246, 0.4)',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(139, 92, 246, 0.25)',
+              padding: '26px 22px', textAlign: 'center',
+              display: 'flex', flexDirection: 'column', gap: '14px'
+            }}>
+              <div style={{
+                width: '54px', height: '54px', borderRadius: '16px', margin: '0 auto',
+                background: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 20px rgba(139, 92, 246, 0.5)'
+              }}>
+                <span style={{ fontSize: '1.6rem' }}>📢</span>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.74rem', color: '#a78bfa', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  SİSTEM DUYURUSU
+                </div>
+                <h3 style={{ margin: '6px 0 0 0', fontSize: '1.15rem', fontWeight: '800', color: '#fff' }}>
+                  {liveBroadcastAlert.title}
+                </h3>
+              </div>
+
+              <div style={{
+                padding: '14px 16px', borderRadius: '12px',
+                background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)',
+                fontSize: '0.88rem', color: '#cbd5e1', lineHeight: '1.6',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left', maxHeight: '200px', overflowY: 'auto'
+              }}>
+                {liveBroadcastAlert.content}
+              </div>
+
+              <button
+                onClick={() => setLiveBroadcastAlert(null)}
+                style={{
+                  marginTop: '6px', padding: '12px', borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                  border: 'none', color: '#fff', fontWeight: '800', fontSize: '0.92rem',
+                  cursor: 'pointer', boxShadow: '0 0 20px rgba(139, 92, 246, 0.4)'
+                }}
+              >
+                Anladım
+              </button>
             </div>
           </div>
         )}
