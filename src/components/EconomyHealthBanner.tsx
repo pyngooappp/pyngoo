@@ -21,22 +21,23 @@ interface EconomyHealth {
 
 interface EconomyHealthBannerProps {
   isAdmin: boolean;
+  isLight?: boolean;
 }
 
-const chipStyle: React.CSSProperties = {
+const getChipStyle = (isLight?: boolean): React.CSSProperties => ({
   display: 'inline-flex',
   alignItems: 'center',
   gap: '6px',
-  padding: '5px 12px',
-  borderRadius: '999px',
-  background: 'rgba(255, 255, 255, 0.07)',
-  border: '1px solid rgba(255, 255, 255, 0.12)',
-  fontSize: '0.78rem',
-  color: 'rgba(255, 255, 255, 0.85)',
+  padding: '4px 10px',
+  borderRadius: '6px',
+  background: isLight ? '#f1f5f9' : '#141724',
+  border: isLight ? '1px solid #cbd5e1' : '1px solid rgba(255, 255, 255, 0.08)',
+  fontSize: '0.74rem',
+  color: isLight ? '#334155' : '#cbd5e1',
   whiteSpace: 'nowrap',
-};
+});
 
-export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmin }) => {
+export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmin, isLight }) => {
   const [data, setData] = useState<EconomyHealth | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -79,18 +80,24 @@ export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmi
   const color = alert ? '#ff6b6b' : '#2ecc71';
   const dayText = data.day ? String(data.day).split('-').reverse().join('.') : '-';
 
+  const chip = getChipStyle(isLight);
+
   return (
     <div
       style={{
-        // Yandaki "Gerçek Çevrimiçi" kartıyla aynı sütun: 1200px, ortalı, taşmaz
         width: '100%',
         maxWidth: '1200px',
         boxSizing: 'border-box',
-        margin: '0 auto 16px auto',
+        margin: '0 auto 14px auto',
         padding: '14px 18px',
-        borderRadius: '16px',
-        background: alert ? 'rgba(255, 107, 107, 0.09)' : 'rgba(46, 204, 113, 0.08)',
-        border: `1.5px solid ${alert ? 'rgba(255, 107, 107, 0.45)' : 'rgba(46, 204, 113, 0.4)'}`,
+        borderRadius: '12px',
+        background: isLight ? '#ffffff' : '#0f111c',
+        border: alert
+          ? '1px solid rgba(239, 68, 68, 0.45)'
+          : isLight
+          ? '1px solid #e2e8f0'
+          : '1px solid rgba(255, 255, 255, 0.07)',
+        boxShadow: isLight ? '0 1px 3px rgba(0,0,0,0.05)' : 'none',
         display: 'flex',
         flexDirection: 'column',
         gap: '10px',
@@ -98,8 +105,8 @@ export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmi
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', minWidth: 0 }}>
-        <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#fff', minWidth: 0, overflowWrap: 'anywhere' }}>
-          💱 Kur ve fiyat sağlığı {alert ? '⚠️' : '✅'}
+        <div style={{ fontSize: '0.88rem', fontWeight: '700', color: isLight ? '#0f172a' : '#fff', minWidth: 0, overflowWrap: 'anywhere' }}>
+          💱 Kur ve Fiyat Sağlığı {alert ? '⚠️' : '✅'}
         </div>
         <button
           type="button"
@@ -108,32 +115,32 @@ export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmi
           title="Yenile"
           style={{
             flexShrink: 0,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: '10px',
-            color: '#fff',
-            padding: '7px 9px',
+            background: isLight ? '#f1f5f9' : '#141724',
+            border: isLight ? '1px solid #cbd5e1' : '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '8px',
+            color: isLight ? '#334155' : '#cbd5e1',
+            padding: '6px 10px',
             cursor: loading ? 'wait' : 'pointer',
             display: 'flex',
             alignItems: 'center',
           }}
         >
-          <RefreshCw size={15} />
+          <RefreshCw size={13} />
         </button>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        <span style={chipStyle}>
-          Güncel kur: <b style={{ color: '#fff' }}>1 $ = {fmt(data.usd_try)} ₺</b> <span style={{ opacity: 0.6 }}>({dayText})</span>
+        <span style={chip}>
+          Güncel kur: <b style={{ color: isLight ? '#0f172a' : '#fff' }}>1 $ = {fmt(data.usd_try)} ₺</b> <span style={{ opacity: 0.6 }}>({dayText})</span>
         </span>
-        <span style={chipStyle}>
-          Referans kur: <b style={{ color: '#fff' }}>{fmt(data.reference)}</b>
+        <span style={chip}>
+          Referans kur: <b style={{ color: isLight ? '#0f172a' : '#fff' }}>{fmt(data.reference)}</b>
         </span>
-        <span style={{ ...chipStyle, borderColor: color, color }}>
+        <span style={{ ...chip, borderColor: color, color }}>
           Fark: <b>{drift >= 0 ? '+' : ''}{(drift * 100).toFixed(1)}%</b> <span style={{ opacity: 0.7 }}>(eşik %{fmt((data.threshold ?? 0) * 100, 0)})</span>
         </span>
-        <span style={chipStyle}>
-          Elmas: <b style={{ color: '#fff' }}>{fmt(data.diamond_value_try, 3)} ₺</b> / <b style={{ color: '#fff' }}>{fmt(data.diamond_value_usd, 4)} $</b>
+        <span style={chip}>
+          Elmas: <b style={{ color: isLight ? '#0f172a' : '#fff' }}>{fmt(data.diamond_value_try, 3)} ₺</b> / <b style={{ color: isLight ? '#0f172a' : '#fff' }}>{fmt(data.diamond_value_usd, 4)} $</b>
         </span>
       </div>
 
@@ -141,7 +148,7 @@ export const EconomyHealthBanner: React.FC<EconomyHealthBannerProps> = ({ isAdmi
         style={{
           fontSize: '0.8rem',
           lineHeight: '1.55',
-          color: alert ? '#ffc9c9' : 'rgba(255,255,255,0.6)',
+          color: alert ? '#ef4444' : isLight ? '#64748b' : 'rgba(255,255,255,0.6)',
           overflowWrap: 'anywhere',
           minWidth: 0,
         }}

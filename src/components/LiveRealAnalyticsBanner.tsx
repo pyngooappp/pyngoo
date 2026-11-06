@@ -12,9 +12,10 @@ interface RealAnalyticsData {
 
 interface LiveRealAnalyticsBannerProps {
   isAdmin: boolean;
+  isLight?: boolean;
 }
 
-export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = ({ isAdmin }) => {
+export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = ({ isAdmin, isLight = false }) => {
   const [data, setData] = useState<RealAnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
   // GERÇEK çevrimiçi sayısı: uygulamanın kullandığı 'pyngoo_presence' kanalı yalnızca DİNLENİR (track edilmez,
@@ -101,119 +102,118 @@ export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = (
     <div
       style={{
         maxWidth: '1200px',
-        margin: '0 auto 16px auto',
-        padding: '16px 20px',
-        borderRadius: '16px',
-        background: 'linear-gradient(135deg, rgba(14, 28, 48, 0.85) 0%, rgba(9, 15, 29, 0.95) 100%)',
-        border: '1.5px solid rgba(0, 242, 254, 0.4)',
-        boxShadow: '0 8px 30px rgba(0, 242, 254, 0.15)',
+        margin: '0 auto 14px auto',
+        padding: '14px 18px',
+        borderRadius: '12px',
+        background: isLight ? '#ffffff' : '#0f111c',
+        border: isLight ? '1px solid rgba(0, 0, 0, 0.08)' : '1px solid rgba(255, 255, 255, 0.07)',
+        boxShadow: isLight ? '0 1px 3px rgba(0,0,0,0.04)' : 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: '16px',
+        gap: '14px',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div
           style={{
-            width: '12px',
-            height: '12px',
+            width: '8px',
+            height: '8px',
             borderRadius: '50%',
-            background: '#00e676',
-            boxShadow: '0 0 12px #00e676',
-            animation: 'pulse 1.6s infinite',
+            background: '#10b981',
+            boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
           }}
         />
         <div>
           <div
             style={{
-              fontSize: '0.92rem',
-              fontWeight: '800',
-              color: '#fff',
+              fontSize: '0.86rem',
+              fontWeight: '700',
+              color: isLight ? '#0f172a' : '#fff',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: '6px',
             }}
           >
-            <span>👑 Sadece Size Özel Gerçek Çevrimiçi & Üye Takibi</span>
+            <span>Gerçek Zamanlı Çevrimiçi & Üye Takibi</span>
             {data && (
-              <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', fontWeight: 'normal' }}>
-                (Son Güncelleme: {data.lastChecked})
+              <span style={{ fontSize: '0.7rem', color: isLight ? '#94a3b8' : '#64748b', fontWeight: 'normal' }}>
+                ({data.lastChecked})
               </span>
             )}
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'rgba(0, 242, 254, 0.85)', marginTop: '2px' }}>
-            Normal ziyaretçiler ana sayfada organik nabız sayacını görürken, siz burada %100 gerçek veriyi görürsünüz.
+          <div style={{ fontSize: '0.74rem', color: isLight ? '#64748b' : '#64748b', marginTop: '1px' }}>
+            Yalnızca yöneticilere açık organik ve gerçek veritabanı akışı.
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         <div
           style={{
-            background: 'rgba(0, 230, 118, 0.12)',
-            border: '1px solid rgba(0, 230, 118, 0.35)',
-            borderRadius: '12px',
-            padding: '8px 14px',
+            background: isLight ? '#f8fafc' : '#141724',
+            border: isLight ? '1px solid rgba(0, 0, 0, 0.06)' : '1px solid rgba(255, 255, 255, 0.06)',
+            borderRadius: '8px',
+            padding: '6px 12px',
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#00e676' }}>
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: isLight ? '#059669' : '#34d399' }}>
             {onlineNow === null ? '...' : onlineNow}
           </div>
-          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
-            🟢 Şu An Çevrimiçi{liveStreamers > 0 ? ` • 🎥 ${liveStreamers} canlı` : ''}
+          <div style={{ fontSize: '0.68rem', color: isLight ? '#64748b' : '#94a3b8', fontWeight: '600' }}>
+            Şu An Çevrimiçi{liveStreamers > 0 ? ` • ${liveStreamers} canlı` : ''}
           </div>
         </div>
 
         <div
           style={{
-            background: 'rgba(0, 242, 254, 0.12)',
-            border: '1px solid rgba(0, 242, 254, 0.35)',
-            borderRadius: '12px',
-            padding: '8px 14px',
+            background: isLight ? '#f8fafc' : '#141724',
+            border: isLight ? '1px solid rgba(0, 0, 0, 0.06)' : '1px solid rgba(255, 255, 255, 0.06)',
+            borderRadius: '8px',
+            padding: '6px 12px',
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#00f2fe' }}>
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: isLight ? '#0f172a' : '#fff' }}>
             {data ? `+${data.newUsers24h}` : '...'}
           </div>
-          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
-            📅 Bugün Yeni Üye
+          <div style={{ fontSize: '0.68rem', color: isLight ? '#64748b' : '#94a3b8', fontWeight: '600' }}>
+            Bugün Yeni Üye
           </div>
         </div>
 
         <div
           style={{
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '12px',
-            padding: '8px 14px',
+            background: isLight ? '#f8fafc' : '#141724',
+            border: isLight ? '1px solid rgba(0, 0, 0, 0.06)' : '1px solid rgba(255, 255, 255, 0.06)',
+            borderRadius: '8px',
+            padding: '6px 12px',
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff' }}>
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: isLight ? '#0f172a' : '#fff' }}>
             {data ? data.totalUsers : '...'}
           </div>
-          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
-            👥 Toplam Gerçek Üye
+          <div style={{ fontSize: '0.68rem', color: isLight ? '#64748b' : '#94a3b8', fontWeight: '600' }}>
+            Toplam Üye
           </div>
         </div>
 
         <div
           style={{
-            background: 'rgba(255, 65, 108, 0.1)',
-            border: '1px solid rgba(255, 65, 108, 0.3)',
-            borderRadius: '12px',
-            padding: '8px 14px',
+            background: isLight ? '#f8fafc' : '#141724',
+            border: isLight ? '1px solid rgba(0, 0, 0, 0.06)' : '1px solid rgba(255, 255, 255, 0.06)',
+            borderRadius: '8px',
+            padding: '6px 12px',
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#ff758c' }}>
-            {data ? `♀️ ${data.femaleCount} • ♂️ ${data.maleCount}` : '...'}
+          <div style={{ fontSize: '0.86rem', fontWeight: '700', color: isLight ? '#334155' : '#cbd5e1' }}>
+            {data ? `♀ ${data.femaleCount} • ♂ ${data.maleCount}` : '...'}
           </div>
-          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
+          <div style={{ fontSize: '0.68rem', color: isLight ? '#64748b' : '#94a3b8', fontWeight: '600' }}>
             Cinsiyet Dağılımı
           </div>
         </div>
@@ -222,22 +222,21 @@ export const LiveRealAnalyticsBanner: React.FC<LiveRealAnalyticsBannerProps> = (
           onClick={fetchAnalytics}
           disabled={loading}
           style={{
-            background: 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.25)',
-            color: '#fff',
-            borderRadius: '10px',
-            padding: '8px 14px',
-            fontSize: '0.78rem',
-            fontWeight: '700',
+            background: isLight ? '#f1f5f9' : '#141724',
+            border: isLight ? '1px solid rgba(0, 0, 0, 0.08)' : '1px solid rgba(255, 255, 255, 0.08)',
+            color: isLight ? '#334155' : '#cbd5e1',
+            borderRadius: '8px',
+            padding: '7px 12px',
+            fontSize: '0.76rem',
+            fontWeight: '600',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            transition: 'all 0.2s',
           }}
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Yenileniyor...' : 'Verileri Yenile'}
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          {loading ? '...' : 'Yenile'}
         </button>
       </div>
     </div>

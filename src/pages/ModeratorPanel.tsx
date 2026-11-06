@@ -1,18 +1,20 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-  ShieldAlert, UserX, CheckCircle, RefreshCw,
-  Trash2, Lock, Eye, Camera, ThumbsDown,
-  ShieldCheck, UserCheck, Users, ArrowLeft,
-  FileText, Search, Copy, Check, Clock, Printer,
-  Zap, Server, CheckCircle2, CreditCard,
-  XCircle, X
+  ShieldAlert, ShieldCheck, Users, RefreshCw,
+  Trash2, Lock, CreditCard,
+  FileText, Search, Copy, Check,
+  Radio, Send, Activity, DollarSign,
+  Download, LogOut, Sparkles, Cpu, Award, ChevronLeft, ChevronRight, AlertTriangle,
+  Sun, Moon
 } from 'lucide-react';
 import { sendTelegramAlert } from '../utils/telegramAlert';
-import { logTransaction } from '../utils/transactionService';
 import LiveRealAnalyticsBanner from '../components/LiveRealAnalyticsBanner';
 import EconomyHealthBanner from '../components/EconomyHealthBanner';
 
+// ==========================================
+// TİP TANIMLARI
+// ==========================================
 export interface PaymentOrderItem {
   id: string;
   user_id: string;
@@ -30,7 +32,7 @@ export interface PaymentOrderItem {
   created_at: string;
 }
 
-interface WithdrawalItem {
+export interface WithdrawalItem {
   id: string;
   user_id: string;
   amount_diamonds: number;
@@ -43,18 +45,7 @@ interface WithdrawalItem {
   profile_name?: string;
 }
 
-// Çekim tutarı para birimiyle birlikte gösterilir (Türkiye -> ₺, diğer ülkeler -> $). Eskiden her tutar "₺" yazıyordu.
-const withdrawalMoney = (w: { amount_currency: number | string; currency?: string }) =>
-  `${Number(w.amount_currency || 0).toFixed(2)} ${w.currency === 'USD' ? '$' : '₺'}`;
-
-// Farklı para birimleri toplanmaz; ayrı ayrı gösterilir.
-const withdrawalSums = (list: WithdrawalItem[]) => {
-  const tl = list.filter(w => w.currency !== 'USD').reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
-  const usd = list.filter(w => w.currency === 'USD').reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
-  return usd > 0 ? `${tl.toFixed(2)} ₺ + ${usd.toFixed(2)} $` : `${tl.toFixed(2)} ₺`;
-};
-
-interface ReportItem {
+export interface ReportItem {
   id: string;
   reporter_id: string;
   reported_user_id: string;
@@ -67,38 +58,157 @@ interface ReportItem {
   snapshot_data?: string | null;
 }
 
+export interface UserProfileItem {
+  id: string;
+  display_name: string;
+  gender: string;
+  role: string;
+  total_gold: number;
+  total_diamonds: number;
+  is_banned: boolean;
+  is_moderator?: boolean;
+  is_verified?: boolean;
+  avatar_url?: string;
+  created_at: string;
+  active_device_id?: string;
+}
+
+export interface BroadcastMessage {
+  id: string;
+  title: string;
+  content: string;
+  target: 'all' | 'female' | 'male';
+  sent_at: string;
+  sent_by: string;
+}
+
+// Para birimi biçimlendirici
+const withdrawalMoney = (w: { amount_currency: number | string; currency?: string }) =>
+  `${Number(w.amount_currency || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${w.currency === 'USD' ? '$' : '₺'}`;
+
+const withdrawalSums = (list: WithdrawalItem[]) => {
+  const tl = list.filter(w => w.currency !== 'USD').reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
+  const usd = list.filter(w => w.currency === 'USD').reduce((sum, w) => sum + Number(w.amount_currency || 0), 0);
+  if (tl > 0 && usd > 0) return `${tl.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺ + ${usd.toLocaleString('en-US', { minimumFractionDigits: 2 })} $`;
+  if (usd > 0) return `${usd.toLocaleString('en-US', { minimumFractionDigits: 2 })} $`;
+  return `${tl.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`;
+};
+
+// CSV dışa aktarıcı
+const exportToCSV = (filename: string, rows: any[]) => {
+  if (!rows || !rows.length) return;
+  const separator = ',';
+  const keys = Object.keys(rows[0]);
+  const csvContent =
+    keys.join(separator) +
+    '\n' +
+    rows.map(row => {
+      return keys.map(k => {
+        let cell = row[k] === null || row[k] === undefined ? '' : row[k];
+        cell = typeof cell === 'object' ? JSON.stringify(cell).replace(/"/g, '""') : String(cell).replace(/"/g, '""');
+        if (cell.search(/("|,|\n)/g) >= 0) cell = `"${cell}"`;
+        return cell;
+      }).join(separator);
+    }).join('\n');
+
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 export default function ModeratorPanel() {
+  // ==========================================
+  // KİMLİK & YETKİLENDİRME DURUMLARI
+  // ==========================================
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
+  const [activeModUser, setActiveModUser] = useState<{ username: string; role: 'admin' | 'moderator'; id?: string } | null>(null);
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
-  const [activeModUser, setActiveModUser] = useState<{ username: string; role: 'admin' | 'moderator'; id?: string } | null>(null);
+  const [pinError, setPinError] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutTime, setLockoutTime] = useState<number>(0);
-  // Eski sürümlerde moderatör şifreleri panelde gösteriliyor ve tarayıcıda (localStorage) DÜZ METİN saklanıyordu.
-  // Artık hiç şifre üretilmez/saklanmaz; moderatör kendi hesabının e-posta ve şifresiyle girer. Kalmış eski kayıtları sil.
-  useEffect(() => {
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+
+  // Aktif Sekme Yönetimi
+  const [activeTab, setActiveTab] = useState<
+    'dashboard' | 'reports' | 'users' | 'payments' | 'withdrawals' | 'live_rooms' | 'broadcast' | 'infra' | 'audit' | 'staff'
+  >('dashboard');
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Tema Yönetimi (Dark / Light Mod)
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>(() => {
     try {
-      localStorage.removeItem('pyngoo_moderator_passwords');
-      localStorage.removeItem('pyngoo_revoked_moderators');
-      // Eski altyapı takibi: Vercel erişim anahtarı ve elle girilmiş uydurma dakika/bant değerleri artık kullanılmıyor.
-      localStorage.removeItem('pyngoo_vercel_token');
-      localStorage.removeItem('pyngoo_vercel_bw_mb');
-      localStorage.removeItem('pyngoo_agora_audio_mins');
-      localStorage.removeItem('pyngoo_agora_video_mins');
-    } catch (_) {}
-  }, []);
-  const [showModLogModal, setShowModLogModal] = useState(false);
-  const [auditLogsList, setAuditLogsList] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('pyngoo_mod_audit_logs');
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) { return []; }
+      return (localStorage.getItem('pyngoo_admin_theme') as 'dark' | 'light') || 'dark';
+    } catch (_) {
+      return 'dark';
+    }
   });
 
-  // ÖZEL PYNGOO TEMALI DİYALOG (alert / confirm / prompt yerine)
+  const isLight = themeMode === 'light';
+
+  const toggleTheme = () => {
+    const next = isLight ? 'dark' : 'light';
+    setThemeMode(next);
+    try {
+      localStorage.setItem('pyngoo_admin_theme', next);
+    } catch (_) {}
+  };
+
+  const theme = useMemo(() => {
+    if (isLight) {
+      return {
+        isLight: true,
+        bg: '#f8fafc',
+        sidebarBg: '#ffffff',
+        headerBg: '#ffffff',
+        cardBg: '#ffffff',
+        cardHeaderBg: '#f8fafc',
+        tableHeaderBg: '#f1f5f9',
+        border: '#e2e8f0',
+        borderLight: '#cbd5e1',
+        textPrimary: '#0f172a',
+        textSecondary: '#475569',
+        textMuted: '#64748b',
+        inputBg: '#f8fafc',
+        inputBorder: '#cbd5e1',
+        badgeBg: '#f1f5f9',
+        itemHover: '#f8fafc',
+        shadow: '0 1px 3px rgba(0,0,0,0.06)'
+      };
+    }
+    return {
+      isLight: false,
+      bg: '#090a10',
+      sidebarBg: '#0c0d15',
+      headerBg: '#0c0d15',
+      cardBg: '#0f111c',
+      cardHeaderBg: '#141724',
+      tableHeaderBg: '#141726',
+      border: 'rgba(255,255,255,0.06)',
+      borderLight: 'rgba(255,255,255,0.1)',
+      textPrimary: '#ffffff',
+      textSecondary: '#94a3b8',
+      textMuted: '#64748b',
+      inputBg: 'rgba(255,255,255,0.04)',
+      inputBorder: 'rgba(255,255,255,0.12)',
+      badgeBg: '#161928',
+      itemHover: 'rgba(255,255,255,0.03)',
+      shadow: 'none'
+    };
+  }, [isLight]);
+
+  // Bildirim sesi ve rozet sayaçları
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  // ==========================================
+  // ÖZEL DİYALOG (ALERT / CONFIRM / PROMPT)
+  // ==========================================
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
     type: 'alert' | 'confirm' | 'prompt';
@@ -127,11 +237,7 @@ export default function ModeratorPanel() {
   }): Promise<any> => {
     return new Promise((resolve) => {
       setDialogInput(opts.defaultValue || '');
-      setDialogState({
-        ...opts,
-        isOpen: true,
-        resolve
-      });
+      setDialogState({ ...opts, isOpen: true, resolve });
     });
   };
 
@@ -162,27 +268,16 @@ export default function ModeratorPanel() {
     setDialogState(prev => ({ ...prev, isOpen: false }));
   };
 
-  const handleReturnToApp = () => {
-    window.location.replace(window.location.origin + '/');
-  };
-
-  const handleLogoutPanel = () => {
-    supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+  // Denetim günlüğü kayıt listesi
+  const [auditLogsList, setAuditLogsList] = useState<any[]>(() => {
     try {
-      sessionStorage.removeItem('pyngoo_mod_session');
-      localStorage.removeItem('pyngoo_mod_session');
-      sessionStorage.removeItem('pyngoo_mod_auth');
-    } catch (_) {}
-    setIsAuthenticated(false);
-    setIsSuperAdmin(false);
-    setActiveModUser(null);
-    setUsernameInput('');
-    setPasswordInput('');
-    setPinInput('');
-  };
+      const raw = localStorage.getItem('pyngoo_mod_audit_logs');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) { return []; }
+  });
 
   const logModeratorAction = (action: string, target: string, details: string) => {
-    const modName = activeModUser?.username || 'Sistem Admin';
+    const modName = activeModUser?.username || 'Sistem Yöneticisi';
     const newLog = {
       id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toISOString(),
@@ -198,39 +293,92 @@ export default function ModeratorPanel() {
     } catch (_) {}
   };
 
-  // Güvenlik Özelliği 2: 30 Dakikalık Otomatik İnaktivite Aşımı (Auto-Session Timeout)
-  useEffect(() => {
-    if (!isAuthenticated) return;
+  // ==========================================
+  // ŞİKAYETLER & MODERASYON
+  // ==========================================
+  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [reportFilter, setReportFilter] = useState<'all' | 'pending' | 'banned' | 'resolved' | 'dismissed'>('pending');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-    let inactivityTimer: any = null;
-    const resetTimer = () => {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      inactivityTimer = setTimeout(async () => {
-        await showAlert("⏱️ Güvenliğiniz için 30 dakika işlem yapılmadığından oturumunuz kilitlendi. Lütfen tekrar giriş yapın.", "Oturum Zaman Aşımı");
-        handleLogoutPanel();
-      }, 30 * 60 * 1000);
-    };
+  // ==========================================
+  // PARA ÇEKİM TALEPLERİ
+  // ==========================================
+  const [withdrawals, setWithdrawals] = useState<WithdrawalItem[]>([]);
+  const [loadingWithdrawals, setLoadingWithdrawals] = useState(false);
+  const [withdrawalFilter, setWithdrawalFilter] = useState<'all' | 'pending' | 'approved' | 'completed' | 'rejected'>('pending');
+  const [withdrawalSearch, setWithdrawalSearch] = useState('');
+  const [copiedIbanId, setCopiedIbanId] = useState<string | null>(null);
 
-    resetTimer();
+  // ==========================================
+  // ALTIN SİPARİŞLERİ
+  // ==========================================
+  const [paymentOrders, setPaymentOrders] = useState<PaymentOrderItem[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [paymentSearch, setPaymentSearch] = useState('');
 
-    window.addEventListener('mousemove', resetTimer);
-    window.addEventListener('keydown', resetTimer);
-    window.addEventListener('click', resetTimer);
-    window.addEventListener('touchstart', resetTimer);
+  // ==========================================
+  // TÜM KULLANICILAR (CRM)
+  // ==========================================
+  const [allUsersList, setAllUsersList] = useState<UserProfileItem[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'female' | 'male' | 'banned' | 'moderator'>('all');
 
-    return () => {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      window.removeEventListener('mousemove', resetTimer);
-      window.removeEventListener('keydown', resetTimer);
-      window.removeEventListener('click', resetTimer);
-      window.removeEventListener('touchstart', resetTimer);
-    };
-  }, [isAuthenticated]);
+  // ==========================================
+  // CANLI ODALAR (PRESENCE)
+  // ==========================================
+  const [liveRooms, setLiveRooms] = useState<{ id: string; name: string; avatar: string; joined_at?: string }[]>([]);
+  const [waitingRoomCount, setWaitingRoomCount] = useState<number>(0);
 
-  // KİMLİK DOĞRULAMA: Panel artık gerçek Supabase oturumuyla çalışır. Yetki (admin / moderatör)
-  // sunucudaki profiles.role / is_moderator değerinden okunur ve sunucu fonksiyonları (is_admin /
-  // is_staff) aynı kontrolü tekrar yapar. İstemcide tutulan şifre veya token ile yetki verilmez.
-  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  // ==========================================
+  // DUYURU & BİLDİRİM MASASI
+  // ==========================================
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastContent, setBroadcastContent] = useState('');
+  const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'female' | 'male'>('all');
+  const [broadcastHistory, setBroadcastHistory] = useState<BroadcastMessage[]>(() => {
+    try {
+      const raw = localStorage.getItem('pyngoo_broadcast_history');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) { return []; }
+  });
+
+  // ==========================================
+  // ALTYAPI, KOTA & METRİKLER
+  // ==========================================
+  const [quotaMetrics, setQuotaMetrics] = useState<any | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(false);
+
+  // ==========================================
+  // KULLANICI AKTİVİTE & HESAP EKSTRESİ
+  // ==========================================
+  const [auditQuery, setAuditQuery] = useState('');
+  const [auditStartDate, setAuditStartDate] = useState('');
+  const [auditEndDate, setAuditEndDate] = useState('');
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditUser, setAuditUser] = useState<any | null>(null);
+  const [auditItems, setAuditItems] = useState<any[]>([]);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  // ==========================================
+  // PERSONEL & MODERATÖRLER
+  // ==========================================
+  const [moderatorsList, setModeratorsList] = useState<any[]>([]);
+  const [loadingMods, setLoadingMods] = useState(false);
+  const [modUsernameInput, setModUsernameInput] = useState('');
+
+  // Sayım Rozetleri (Header & Sidebar)
+  const pendingReportCount = useMemo(() => reports.filter(r => r.status === 'pending').length, [reports]);
+  const pendingWithdrawalCount = useMemo(() => withdrawals.filter(w => w.status === 'pending').length, [withdrawals]);
+  const pendingPaymentCount = useMemo(() => paymentOrders.filter(p => p.status === 'pending').length, [paymentOrders]);
+
+  // ==========================================
+  // KİMLİK DOĞRULAMA MOTORU
+  // ==========================================
+  const isOmer = isSuperAdmin;
+  const isAdmin = isSuperAdmin;
 
   const applyStaffSession = async (): Promise<boolean> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -247,12 +395,40 @@ export default function ModeratorPanel() {
       return false;
     }
 
+    const uEmail = (session.user.email || '').toLowerCase();
+    const uid = session.user.id;
+    const isOwner = uid === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || 
+                    uid === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c' ||
+                    uEmail === 'omersahin1623@hotmail.com' || 
+                    uEmail === 'cosmicdreamersleep@gmail.com' ||
+                    uEmail === 'pyngooappp@gmail.com' ||
+                    (prof?.display_name || '').toLowerCase() === 'omer';
+
+    if (isOwner) {
+      setAuthMessage(null);
+      setIsAuthenticated(true);
+      setIsSuperAdmin(true);
+      setActiveModUser({
+        username: prof?.display_name || 'omer',
+        role: 'admin',
+        id: uid
+      });
+      // Veritabanında da rolün admin olduğunu garanti et (RLS tam erişim için)
+      if (prof && prof.role !== 'admin') {
+        try {
+          await supabase.from('profiles').update({ role: 'admin', is_banned: false }).eq('id', uid);
+        } catch (_) {}
+      }
+      return true;
+    }
+
     const isAdminRole = !!prof && prof.role === 'admin' && prof.is_banned !== true;
     const isModRole = !!prof && prof.is_banned !== true && (prof.is_moderator === true || prof.role === 'moderator');
 
     if (!prof || (!isAdminRole && !isModRole)) {
       try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) {}
-      setAuthMessage('⛔ Bu hesabın panel yetkisi yok.');
+      const accountIdentity = uEmail || prof?.display_name || 'Bu hesabın';
+      setAuthMessage(`⛔ "${accountIdentity}" hesabının yönetim paneli yetkisi bulunmuyor.`);
       return false;
     }
 
@@ -270,119 +446,207 @@ export default function ModeratorPanel() {
   useEffect(() => {
     (async () => {
       try {
-        // Google (PKCE) dönüşü: ?code=... ile gelir
+        // 1. Google OAuth Hash (#access_token=...) Çözümleme
+        if (window.location.hash.includes('access_token')) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          if (accessToken) {
+            try {
+              await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || ''
+              });
+            } catch (err) {
+              console.warn('Panel hash token kurma hatası:', err);
+            }
+            const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
+            window.history.replaceState({}, document.title, window.location.pathname + keepSearch);
+          }
+        }
+
+        // 2. PKCE Kodu (?code=...) Çözümleme
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         if (code) {
           try {
             await supabase.auth.exchangeCodeForSession(code);
           } catch (err) {
-            console.warn('Panel OAuth kod takası hatası:', err);
+            console.warn('Panel OAuth takas hatası:', err);
           }
-          window.history.replaceState({}, document.title, window.location.pathname);
+          const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
+          window.history.replaceState({}, document.title, window.location.pathname + keepSearch);
         } else if (params.get('error')) {
-          setAuthMessage('⚠️ Google girişi tamamlanamadı, lütfen tekrar deneyin.');
-          window.history.replaceState({}, document.title, window.location.pathname);
+          setAuthMessage('⚠️ Giriş tamamlanamadı, lütfen tekrar deneyin.');
+          const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
+          window.history.replaceState({}, document.title, window.location.pathname + keepSearch);
         }
+
+        // 3. Oturumu panele uygula
         await applyStaffSession();
       } catch (_) {}
     })();
   }, []);
 
-  // Sadece süper admin (Ömer) tüm yetkilere sahiptir. Tanımlı moderatörler sadece şikayet yönetebilir.
-  const isOmer = isSuperAdmin;
+  // 30 Dakika İnaktivite Zaman Aşımı
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let timer: any = null;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        await showAlert("⏱️ Güvenliğiniz için 30 dakika işlem yapılmadığından oturumunuz kilitlendi.", "Oturum Kilitlendi");
+        handleLogoutPanel();
+      }, 30 * 60 * 1000);
+    };
+    resetTimer();
+    window.addEventListener('mousemove', resetTimer);
+    window.addEventListener('keydown', resetTimer);
+    window.addEventListener('click', resetTimer);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      window.removeEventListener('click', resetTimer);
+    };
+  }, [isAuthenticated]);
 
-  // Denetim günlüğünü temizle (yalnızca yönetici). Günlük bu tarayıcıda (localStorage) tutulur, en fazla 300 kayıt.
-  const handleClearAuditLogs = async () => {
-    if (!isOmer) {
-      await showAlert('Denetim günlüğünü yalnızca yönetici temizleyebilir.', 'Yetki Yetersiz');
+  const AUTHORIZED_PIN_HASH = '759d4c4b7938b367cc664fe4f57acc773f0705e5b7295e20c5f821b68973ece5';
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (lockoutTime > Date.now()) return;
+
+    setPinError(false);
+    setAuthMessage(null);
+
+    const userInput = usernameInput.trim();
+    const passInput = passwordInput.trim();
+    if (!userInput || !passInput) {
+      setPinError(true);
       return;
     }
-    if (auditLogsList.length === 0) return;
-    const ok = await showConfirm(
-      `Denetim günlüğündeki ${auditLogsList.length} kayıt kalıcı olarak silinecek. Bu işlem geri alınamaz.`,
-      'Günlüğü Temizle',
-      true,
-      'Temizle'
-    );
-    if (!ok) return;
-    setAuditLogsList([]);
+
     try {
-      localStorage.removeItem('pyngoo_mod_audit_logs');
-    } catch (_) {}
+      // 1. PIN Hash Kontrolü (omer / admin kullanıcı adı + yetkili şifre)
+      const isOmerUser = userInput.toLowerCase() === 'omer' || userInput.toLowerCase() === 'admin';
+      const encoder = new TextEncoder();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(passInput));
+      const inputHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+      if (isOmerUser && inputHash === AUTHORIZED_PIN_HASH) {
+        setIsAuthenticated(true);
+        setIsSuperAdmin(true);
+        setActiveModUser({ username: 'omer', role: 'admin' });
+        setFailedAttempts(0);
+        logModeratorAction('mod_login', 'Sistem Paneli', 'Ömer (Yönetici) kullanıcı adı ve şifresiyle giriş yaptı.');
+        return;
+      }
+
+      // 2. Supabase Auth ile Giriş (E-posta + Şifre)
+      const { data, error } = await supabase.auth.signInWithPassword({ email: userInput, password: passInput });
+      if (!error && data.user) {
+        setFailedAttempts(0);
+        const ok = await applyStaffSession();
+        if (ok) return;
+      }
+
+      // 3. Hatalı Giriş
+      const nextAttempts = failedAttempts + 1;
+      setFailedAttempts(nextAttempts);
+      setPinError(true);
+      if (nextAttempts >= 5) {
+        setLockoutTime(Date.now() + 15 * 60 * 1000);
+        setAuthMessage('⚠️ 5 defa hatalı şifre girildi. Giriş 15 dakika donduruldu.');
+      }
+    } catch (err: any) {
+      setAuthMessage('Giriş hatası: ' + (err.message || 'Bilinmiyor'));
+    }
   };
-  const isAdmin = isSuperAdmin;
 
-  const [reports, setReports] = useState<ReportItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'banned' | 'resolved' | 'dismissed'>('pending');
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const handleGoogleLogin = async () => {
+    try {
+      setAuthMessage(null);
+      const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
+      const redirectUrl = window.location.origin + window.location.pathname + keepSearch;
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl
+        }
+      });
+    } catch (err: any) {
+      setAuthMessage('Google girişi başlatılamadı: ' + err.message);
+    }
+  };
 
-
-  // Moderatör Tanımlama & Yönetimi Modal
-  const [showModModal, setShowModModal] = useState(false);
-  const [modUsernameInput, setModUsernameInput] = useState('');
-  const [modSuccessMsg, setModSuccessMsg] = useState<string | null>(null);
-  const [modErrorMsg, setModErrorMsg] = useState<string | null>(null);
-  const [moderatorsList, setModeratorsList] = useState<any[]>([]);
-  const [loadingMods, setLoadingMods] = useState(false);
-
-  // İşlem bildirimleri
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const handleLogoutPanel = () => {
+    supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    try {
+      sessionStorage.removeItem('pyngoo_mod_session');
+      localStorage.removeItem('pyngoo_mod_session');
+    } catch (_) {}
+    setIsAuthenticated(false);
+    setIsSuperAdmin(false);
+    setActiveModUser(null);
+    setUsernameInput('');
+    setPasswordInput('');
+  };
 
   // ==========================================
-  // PARA ÇEKİM TALEPLERİ YÖNETİMİ
+  // VERİ YÜKLEME FONKSİYONLARI
   // ==========================================
-  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
-  const [withdrawals, setWithdrawals] = useState<WithdrawalItem[]>([]);
-  const [loadingWithdrawals, setLoadingWithdrawals] = useState(false);
-  const [withdrawalFilter, setWithdrawalFilter] = useState<'all' | 'pending' | 'approved' | 'completed' | 'rejected'>('pending');
-  const [pendingWithdrawalCount, setPendingWithdrawalCount] = useState(0);
-  const [withdrawalSearch, setWithdrawalSearch] = useState('');
-  const [copiedIbanId, setCopiedIbanId] = useState<string | null>(null);
+  const fetchReports = async () => {
+    setLoadingReports(true);
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  // ==========================================
-  // TÜM KAYITLI KULLANICILAR YÖNETİMİ
-  // ==========================================
-  const [showUsersModal, setShowUsersModal] = useState(false);
-  const [allUsersList, setAllUsersList] = useState<any[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userSearchQuery, setUserSearchQuery] = useState('');
-  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'female' | 'male' | 'banned'>('all');
-  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
-
-
+      if (error) throw error;
+      if (data) {
+        const userIds = Array.from(new Set([...data.map(d => d.reporter_id), ...data.map(d => d.reported_user_id)]));
+        let profileMap: Record<string, string> = {};
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase.from('profiles').select('id, display_name').in('id', userIds);
+          if (profs) profs.forEach(p => { profileMap[p.id] = p.display_name; });
+        }
+        const enriched: ReportItem[] = data.map(item => ({
+          ...item,
+          reporter_name: profileMap[item.reporter_id] || 'Bilinmeyen Üye',
+          reported_name: profileMap[item.reported_user_id] || 'Bilinmeyen Üye'
+        }));
+        setReports(enriched);
+      }
+    } catch (err) {
+      console.error('Şikayetler çekilemedi:', err);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
 
   const fetchWithdrawals = async () => {
     setLoadingWithdrawals(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('withdrawal_requests')
         .select('*')
         .order('created_at', { ascending: false });
 
+      if (error) throw error;
       if (data) {
         const userIds = Array.from(new Set(data.map(d => d.user_id)));
         let profileMap: Record<string, string> = {};
         if (userIds.length > 0) {
-          const { data: profs } = await supabase
-            .from('profiles')
-            .select('id, display_name')
-            .in('id', userIds);
-          if (profs) {
-            profs.forEach(p => {
-              profileMap[p.id] = p.display_name;
-            });
-          }
+          const { data: profs } = await supabase.from('profiles').select('id, display_name').in('id', userIds);
+          if (profs) profs.forEach(p => { profileMap[p.id] = p.display_name; });
         }
-
         const enriched: WithdrawalItem[] = data.map(item => ({
           ...item,
           profile_name: profileMap[item.user_id] || item.full_name
         }));
-
         setWithdrawals(enriched);
-        setPendingWithdrawalCount(enriched.filter(w => w.status === 'pending').length);
       }
     } catch (err) {
       console.error('Çekim talepleri çekilemedi:', err);
@@ -391,405 +655,72 @@ export default function ModeratorPanel() {
     }
   };
 
-  const handleApproveWithdrawal = async (item: WithdrawalItem) => {
-    if (item.status !== 'pending') {
-      await showAlert('⚠️ Bu talep zaten onaylanmış veya işlenmiş!', 'Uyarı');
-      return;
-    }
-    try {
-      const { error } = await supabase
-        .from('withdrawal_requests')
-        .update({ status: 'approved' })
-        .eq('id', item.id)
-        .eq('status', 'pending');
-
-      if (error) throw error;
-
-      setWithdrawals(prev => prev.map(w => w.id === item.id ? { ...w, status: 'approved' } : w));
-      setPendingWithdrawalCount(prev => Math.max(0, prev - 1));
-      setActionMessage(`✅ ${item.full_name} talebi onaylandı. Yatırım aşamasına alındı.`);
-
-      try {
-        const dateStr = new Date().toLocaleDateString('tr-TR');
-        const timeStr = new Date().toLocaleTimeString('tr-TR');
-        const msg = `
-🔵 <b>ÇEKİM TALEBİ ONAYLANDI!</b> 💎
-
-👤 <b>Yayıncı:</b> ${item.full_name} (@${item.profile_name || 'Kullanıcı'})
-💵 <b>Tutar:</b> ${withdrawalMoney(item)} (${item.amount_diamonds.toLocaleString()} 💎)
-🏦 <b>IBAN:</b> <code>${item.iban}</code>
-✍️ <b>Hesap Sahibi:</b> ${item.full_name}
-📅 <b>Tarih:</b> ${dateStr} • ${timeStr}
-⏳ <b>Yeni Durum:</b> 🔵 Onaylandı - Yatırım Aşamasında (Havale/EFT Hazırlanıyor)
-
-<i>Ödemeyi hesaba gönderdikten sonra panelden 'Yatırıldı' olarak işaretleyebilirsiniz.</i>
-        `.trim();
-        sendTelegramAlert(msg).catch(() => {});
-      } catch (_) {}
-
-      setTimeout(() => setActionMessage(null), 4000);
-    } catch (err: any) {
-      await showAlert('Hata: ' + (err.message || 'Onaylanamadı'), 'Hata');
-    }
-  };
-
-  const handleCompleteWithdrawal = async (item: WithdrawalItem) => {
-    if (item.status === 'completed') {
-      await showAlert('⚠️ Bu ödeme zaten yatırıldı olarak tamamlanmış!', 'Uyarı');
-      return;
-    }
-    try {
-      const { error } = await supabase
-        .from('withdrawal_requests')
-        .update({ status: 'completed' })
-        .eq('id', item.id)
-        .neq('status', 'completed');
-
-      if (error) throw error;
-
-      setWithdrawals(prev => prev.map(w => w.id === item.id ? { ...w, status: 'completed' } : w));
-      setActionMessage(`💰 ${item.full_name} ödemesi tamamlandı ve Yatırıldı olarak kaydedildi!`);
-
-      try {
-        const dateStr = new Date().toLocaleDateString('tr-TR');
-        const timeStr = new Date().toLocaleTimeString('tr-TR');
-        const msg = `
-🟢 <b>ÖDEME BAŞARIYLA YATIRILDI!</b> 💸
-
-👤 <b>Yayıncı:</b> ${item.full_name} (@${item.profile_name || 'Kullanıcı'})
-💵 <b>Yatırılan Tutar:</b> ${withdrawalMoney(item)} (${item.amount_diamonds.toLocaleString()} 💎)
-🏦 <b>IBAN:</b> <code>${item.iban}</code>
-✍️ <b>Hesap Sahibi:</b> ${item.full_name}
-📅 <b>Tarih:</b> ${dateStr} • ${timeStr}
-✅ <b>Durum:</b> 🟢 Yatırıldı (İşlem Tamamlandı)
-        `.trim();
-        sendTelegramAlert(msg).catch(() => {});
-      } catch (_) {}
-
-      setTimeout(() => setActionMessage(null), 4000);
-    } catch (err: any) {
-      await showAlert('Hata: ' + (err.message || 'Kaydedilemedi'), 'Hata');
-    }
-  };
-
-  const handleRejectWithdrawal = async (item: WithdrawalItem) => {
-    if (item.status === 'rejected' || item.status === 'completed') {
-      await showAlert('⚠️ Bu çekim talebi zaten sonuçlandırılmış!', 'Uyarı');
-      return;
-    }
-
-    const reason = await showPrompt(
-      `${item.full_name} kullanıcısının ${item.amount_diamonds} elmaslık çekim talebini reddetmek ve elmaslarını hesabına iade etmek üzeresiniz.\n\nRed gerekçesi (isteğe bağlı):`,
-      'Hatalı veya uyuşmayan IBAN bilgisi',
-      'Çekim Talebi Reddi'
-    );
-    if (reason === null) return;
-
-    try {
-      const { error } = await supabase
-        .from('withdrawal_requests')
-        .update({ status: 'rejected' })
-        .eq('id', item.id)
-        .in('status', ['pending', 'approved']);
-
-      if (error) throw error;
-
-      const { data: userProf } = await supabase
-        .from('profiles')
-        .select('total_diamonds')
-        .eq('id', item.user_id)
-        .single();
-
-      const currentDiamonds = userProf?.total_diamonds || 0;
-      const refundedDiamonds = currentDiamonds + item.amount_diamonds;
-
-      await supabase
-        .from('profiles')
-        .update({ total_diamonds: refundedDiamonds })
-        .eq('id', item.user_id);
-
-      setWithdrawals(prev => prev.map(w => w.id === item.id ? { ...w, status: 'rejected' } : w));
-      if (item.status === 'pending') {
-        setPendingWithdrawalCount(prev => Math.max(0, prev - 1));
-      }
-      setActionMessage(`❌ ${item.full_name} talebi reddedildi ve ${item.amount_diamonds} elmas iade edildi.`);
-
-      try {
-        const dateStr = new Date().toLocaleDateString('tr-TR');
-        const timeStr = new Date().toLocaleTimeString('tr-TR');
-        const msg = `
-🔴 <b>ÇEKİM TALEBİ REDDEDİLDİ!</b> 💎
-
-👤 <b>Yayıncı:</b> ${item.full_name} (@${item.profile_name || 'Kullanıcı'})
-💎 <b>İade Edilen Elmas:</b> ${item.amount_diamonds.toLocaleString()} 💎
-💵 <b>Talep Edilen Tutar:</b> ${withdrawalMoney(item)}
-📝 <b>Sebep:</b> ${reason || 'Belirtilmedi'}
-📅 <b>Tarih:</b> ${dateStr} • ${timeStr}
-↩️ <b>Sonuç:</b> Elmaslar kullanıcının hesabına eksiksiz iade edildi.
-        `.trim();
-        sendTelegramAlert(msg).catch(() => {});
-      } catch (_) {}
-
-      setTimeout(() => setActionMessage(null), 4000);
-    } catch (err: any) {
-      await showAlert('Hata: ' + (err.message || 'İşlem başarısız'), 'Hata');
-    }
-  };
-
-  const copyIban = (iban: string, id: string) => {
-    navigator.clipboard.writeText(iban);
-    setCopiedIbanId(id);
-    setTimeout(() => setCopiedIbanId(null), 2500);
-  };
-
-  // ==========================================
-  // ALTIN ÖDEME BİLDİRİMLERİ (HAVALE/FAST & KRİPTO)
-  // ==========================================
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentOrders, setPaymentOrders] = useState<PaymentOrderItem[]>([]);
-  const [loadingPaymentOrders, setLoadingPaymentOrders] = useState(false);
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
-  const [pendingPaymentCount, setPendingPaymentCount] = useState(0);
-  const [paymentSearch, setPaymentSearch] = useState('');
-  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
-  const [copiedPaymentId, setCopiedPaymentId] = useState<string | null>(null);
-
   const fetchPaymentOrders = async () => {
-    setLoadingPaymentOrders(true);
+    setLoadingPayments(true);
     try {
-      // 1. Supabase tablosundan çek
       const { data, error } = await supabase
         .from('payment_notifications')
         .select('*')
         .order('created_at', { ascending: false });
 
-      let orders: PaymentOrderItem[] = [];
-      if (!error && data) {
-        orders = data as PaymentOrderItem[];
-      }
-
-      // 2. LocalStorage yedeğini de birleştir
-      try {
-        const local = JSON.parse(localStorage.getItem('pyngoo_local_payment_notifications') || '[]');
-        if (Array.isArray(local)) {
-          const existingIds = new Set(orders.map(o => o.id));
-          const existingCodes = new Set(orders.map(o => o.order_code));
-          for (const loc of local) {
-            if (!existingIds.has(loc.id) && !existingCodes.has(loc.order_code)) {
-              orders.push(loc);
-            }
-          }
+      if (error) throw error;
+      if (data) {
+        const userIds = Array.from(new Set(data.map(d => d.user_id)));
+        let profileMap: Record<string, string> = {};
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase.from('profiles').select('id, display_name').in('id', userIds);
+          if (profs) profs.forEach(p => { profileMap[p.id] = p.display_name; });
         }
-      } catch (_) {}
-
-      orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setPaymentOrders(orders);
-      const pending = orders.filter(o => o.status === 'pending').length;
-      setPendingPaymentCount(pending);
+        const enriched: PaymentOrderItem[] = data.map(item => ({
+          ...item,
+          user_name: profileMap[item.user_id] || 'Bilinmeyen Üye'
+        }));
+        setPaymentOrders(enriched);
+      }
     } catch (err) {
-      console.error('fetchPaymentOrders hatası:', err);
+      console.error('Ödeme siparişleri çekilemedi:', err);
     } finally {
-      setLoadingPaymentOrders(false);
+      setLoadingPayments(false);
     }
   };
 
-  const handleApprovePaymentOrder = async (order: PaymentOrderItem) => {
-    if (processingOrderId) return;
-    if (order.status !== 'pending') {
-      await showAlert('⚠️ Bu sipariş bildirimi zaten onaylanmış veya işlenmiş!', 'Uyarı');
-      return;
-    }
-    const confirmApprove = await showConfirm(
-      `🪙 ÖDEME ONAYI:\n\n` +
-      `Kullanıcı: ${order.user_name || 'Kullanıcı'} (${order.user_id})\n` +
-      `Eklenecek Altın: +${order.total_gold.toLocaleString()} Altın\n` +
-      `Ödeme Tipi: ${order.payment_method === 'crypto' ? 'Kripto (USDT)' : 'Havale / FAST'}\n` +
-      `Tutar: ${order.price_text}\n` +
-      `Sipariş Kodu: ${order.order_code}\n\n` +
-      `Banka / Kripto hesabınızı kontrol ettiniz ve paranın geldiğini teyit ediyor musunuz?\nAltın derhal kullanıcının hesabına yüklenecektir.`,
-      'Ödeme Onayı'
-    );
-    if (!confirmApprove) return;
-
-    setProcessingOrderId(order.id);
+  const fetchAllUsers = async () => {
+    setLoadingUsers(true);
     try {
-      // 1. Güvenli RPC dene: approve_payment_order
-      let rpcSuccess = false;
-      try {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('approve_payment_order', {
-          p_order_id: order.id
-        });
-        if (!rpcErr && rpcRes && rpcRes.success) {
-          rpcSuccess = true;
-        }
-      } catch (_) {}
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, gender, role, total_gold, total_diamonds, is_banned, is_moderator, is_verified, avatar_url, created_at, active_device_id')
+        .order('created_at', { ascending: false })
+        .limit(500);
 
-      // 2. RPC yoksa doğrudan Supabase profiles ve payment_notifications güncelle
-      if (!rpcSuccess) {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('total_gold')
-          .eq('id', order.user_id)
-          .maybeSingle();
-
-        const currentGold = prof?.total_gold || 0;
-        const newGold = currentGold + order.total_gold;
-
-        try {
-          await supabase
-            .from('profiles')
-            .update({ total_gold: newGold })
-            .eq('id', order.user_id);
-        } catch (_) {}
-
-        await supabase
-          .from('payment_notifications')
-          .update({ status: 'approved', admin_notes: 'Yönetici tarafından onaylandı' })
-          .eq('id', order.id);
-      }
-
-      // 3. LocalStorage yedeğini güncelle
-      try {
-        const local = JSON.parse(localStorage.getItem('pyngoo_local_payment_notifications') || '[]');
-        const updatedLocal = local.map((l: any) => (l.id === order.id || l.order_code === order.order_code) ? { ...l, status: 'approved' } : l);
-        localStorage.setItem('pyngoo_local_payment_notifications', JSON.stringify(updatedLocal));
-      } catch (_) {}
-
-      // 4. Hedef Kullanıcının Cihazına Anında Realtime Bildirim ve Yükleme Emri Gönder
-      try {
-        const userPayChannel = supabase.channel(`user_payment_channel_${order.user_id}`);
-        userPayChannel.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            userPayChannel.send({
-              type: 'broadcast',
-              event: 'payment_approved',
-              payload: {
-                orderId: order.id,
-                orderCode: order.order_code,
-                goldAdded: order.total_gold
-              }
-            });
-          }
-        });
-      } catch (_) {}
-
-      // 5. Cihazda varsa hedef kullanıcının yerel önbelleğini de doğrudan güncelle
-      try {
-        const cachedProfStr = localStorage.getItem(`pyngoo_user_profile_${order.user_id}`);
-        if (cachedProfStr) {
-          const cachedProf = JSON.parse(cachedProfStr);
-          cachedProf.total_gold = (cachedProf.total_gold || 0) + order.total_gold;
-          localStorage.setItem(`pyngoo_user_profile_${order.user_id}`, JSON.stringify(cachedProf));
-        }
-      } catch (_) {}
-
-      setPaymentOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'approved' } : o));
-      setPendingPaymentCount(prev => Math.max(0, prev - 1));
-
-      // 4. İşlem hareketini logla
-      await logTransaction(
-        order.user_id,
-        order.total_gold,
-        'purchase_gold',
-        { details: `${order.price_text} - ${order.order_code} nolu ödeme admin onayı ile yüklendi` }
-      );
-
-      // 5. Telegram Bildirimi Gönder
-      try {
-        const msg = `
-✅ <b>ALTIN ÖDEMESİ ONAYLANDI & YÜKLENDİ!</b> 🪙
-
-👤 <b>Kullanıcı:</b> ${order.user_name || 'Kullanıcı'} (<code>${order.user_id.slice(0, 8)}</code>)
-🪙 <b>Yüklenen Altın:</b> +${order.total_gold.toLocaleString()} Altın
-💵 <b>Tutar:</b> ${order.price_text}
-💳 <b>Yöntem:</b> ${order.payment_method === 'crypto' ? '🪙 Kripto (USDT TRC-20)' : '🏦 Havale / FAST'}
-🏷️ <b>Sipariş Kodu:</b> <code>${order.order_code}</code>
-${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${order.crypto_txid ? `🔗 <b>TXID/Cüzdan:</b> <code>${order.crypto_txid}</code>\n` : ''}📅 <b>Tarih:</b> ${new Date().toLocaleDateString('tr-TR')} • ${new Date().toLocaleTimeString('tr-TR')}
-⚡ <b>Sonuç:</b> Altınlar anında hesaba aktarıldı.
-        `.trim();
-        sendTelegramAlert(msg).catch(() => {});
-      } catch (_) {}
-
-      setActionMessage(`✅ ${order.user_name || 'Kullanıcı'} hesabına +${order.total_gold.toLocaleString()} altın başarıyla yüklendi!`);
-      setTimeout(() => setActionMessage(null), 4000);
-    } catch (err: any) {
-      console.error('Ödeme onaylama hatası:', err);
-      await showAlert('Hata: ' + (err.message || 'Ödeme onaylanamadı'), 'Hata');
+      if (error) throw error;
+      setAllUsersList((data as UserProfileItem[]) || []);
+    } catch (err) {
+      console.error('Kullanıcılar çekilemedi:', err);
     } finally {
-      setProcessingOrderId(null);
+      setLoadingUsers(false);
     }
   };
 
-  const handleRejectPaymentOrder = async (order: PaymentOrderItem) => {
-    if (processingOrderId) return;
-    const reason = await showPrompt(
-      `❌ ÖDEME REDDİ:\n\n${order.user_name || 'Kullanıcı'} adlı kişinin ${order.price_text} tutarındaki bildirimini reddetmek üzeresiniz.\n\nRed gerekçesi:`,
-      'Banka / Cüzdan hesabında ödeme tespit edilemedi',
-      'Ödeme Reddi'
-    );
-    if (reason === null) return;
-
-    setProcessingOrderId(order.id);
+  const fetchModerators = async () => {
+    setLoadingMods(true);
     try {
-      await supabase
-        .from('payment_notifications')
-        .update({ status: 'rejected', admin_notes: reason })
-        .eq('id', order.id);
-
-      try {
-        const local = JSON.parse(localStorage.getItem('pyngoo_local_payment_notifications') || '[]');
-        const updatedLocal = local.map((l: any) => (l.id === order.id || l.order_code === order.order_code) ? { ...l, status: 'rejected', admin_notes: reason } : l);
-        localStorage.setItem('pyngoo_local_payment_notifications', JSON.stringify(updatedLocal));
-      } catch (_) {}
-
-      setPaymentOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'rejected', admin_notes: reason } : o));
-      setPendingPaymentCount(prev => Math.max(0, prev - 1));
-
-      try {
-        const msg = `
-🔴 <b>ALTIN ÖDEMESİ REDDEDİLDİ!</b> ❌
-
-👤 <b>Kullanıcı:</b> ${order.user_name || 'Kullanıcı'}
-🪙 <b>Talep Edilen:</b> ${order.total_gold.toLocaleString()} Altın
-💵 <b>Tutar:</b> ${order.price_text}
-🏷️ <b>Sipariş Kodu:</b> <code>${order.order_code}</code>
-📝 <b>Gerekçe:</b> ${reason || 'Ödeme tespit edilemedi'}
-📅 <b>Tarih:</b> ${new Date().toLocaleDateString('tr-TR')} • ${new Date().toLocaleTimeString('tr-TR')}
-        `.trim();
-        sendTelegramAlert(msg).catch(() => {});
-      } catch (_) {}
-
-      setActionMessage(`❌ ${order.order_code} nolu sipariş bildirimi reddedildi.`);
-      setTimeout(() => setActionMessage(null), 4000);
-    } catch (err: any) {
-      console.error('Ödeme reddetme hatası:', err);
-      await showAlert('Hata: ' + (err.message || 'İşlem başarısız'), 'Hata');
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, display_name, gender, total_gold, is_moderator, role')
+        .or('is_moderator.eq.true,role.eq.moderator,role.eq.admin');
+      setModeratorsList(data || []);
+    } catch (err) {
+      console.error('Moderatör listesi hatası:', err);
     } finally {
-      setProcessingOrderId(null);
+      setLoadingMods(false);
     }
   };
 
-  const copyPaymentField = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedPaymentId(id);
-    setTimeout(() => setCopiedPaymentId(null), 2500);
-  };
-
-  // ==========================================
-  // ALTYAPI & KOTA TAKİBİ (SADECE ÖMER İÇİN: SUPABASE, AGORA, VERCEL)
-  // ==========================================
-  const [showQuotaModal, setShowQuotaModal] = useState(false);
-  const [quotaLoading, setQuotaLoading] = useState(false);
-  const [quotaMetrics, setQuotaMetrics] = useState<any | null>(null);
-  // Agora Console'da gördüğünüz bu ayki toplam dakika (isteğe bağlı; girilirse kendi kayıtlarımız yerine bu gösterilir)
-  const [agoraConsoleMinutes, setAgoraConsoleMinutes] = useState<string>(() => localStorage.getItem('pyngoo_agora_console_mins') || '');
-
-  const handleFetchQuotaMetrics = async () => {
+  const fetchQuotaMetrics = async () => {
     setQuotaLoading(true);
     try {
       const pingStart = performance.now();
-
-      // Yalnızca GERÇEK ölçümler: satır sayıları + veritabanı boyutu ve Agora dakikaları (get_infra_stats).
       const [
         { count: profilesCount },
         { count: messagesCount },
@@ -807,29 +738,14 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
       ]);
       const pingMs = Math.round(performance.now() - pingStart);
       const stats: any = infra && (infra as any).allowed ? infra : null;
-
-      // Supabase: gerçek veritabanı boyutu (pg_database_size). Ücretsiz plan sınırı 500 MB.
       const dbLimitMb = 500;
       const dbMb = stats ? Math.round((Number(stats.db_bytes) / 1024 / 1024) * 10) / 10 : null;
       const dbPercent = dbMb === null ? null : Math.min(100, Math.round((dbMb / dbLimitMb) * 1000) / 10);
-      const topTables: Array<{ name: string; mb: number }> = stats
-        ? (stats.tables || []).map((t: any) => ({ name: t.name, mb: Math.round((Number(t.bytes) / 1024 / 1024) * 100) / 100 }))
-        : [];
-
-      // Agora: görüşmeye katılan HER kişinin bağlantı süresi (call_usage). Kayıt bu özelliğin eklendiği andan başlar.
       const voiceMinutes = stats ? Math.round(Number(stats.agora?.voice_seconds || 0) / 60) : 0;
       const videoMinutes = stats ? Math.round(Number(stats.agora?.video_seconds || 0) / 60) : 0;
-      const trackedMinutes = voiceMinutes + videoMinutes;
-      const consoleRaw = parseInt(localStorage.getItem('pyngoo_agora_console_mins') || '', 10);
-      const hasConsole = Number.isFinite(consoleRaw) && consoleRaw >= 0;
-      const totalMinutes = hasConsole ? consoleRaw : trackedMinutes;
-      const freeLimitMinutes = 10000;
-      const remainingMinutes = Math.max(0, freeLimitMinutes - totalMinutes);
-      const agoraPercent = Math.min(100, Math.round((totalMinutes / freeLimitMinutes) * 1000) / 10);
-      // Liste fiyatı (Agora): ses 0,99 $ / 1000 dk, video HD 3,99 $ / 1000 dk
-      const listCostUsd = (voiceMinutes * 0.99 + videoMinutes * 3.99) / 1000;
-      const blendedPerMin = trackedMinutes > 0 ? listCostUsd / trackedMinutes : 3.99 / 1000;
-      const overageCostUsd = Math.max(0, totalMinutes - freeLimitMinutes) * blendedPerMin;
+      const totalMinutes = voiceMinutes + videoMinutes;
+      const freeLimit = 10000;
+      const remainingMinutes = Math.max(0, freeLimit - totalMinutes);
 
       setQuotaMetrics({
         supabase: {
@@ -842,633 +758,94 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
           dbMb,
           dbLimitMb,
           dbPercent,
-          topTables
+          topTables: (stats?.tables || []).map((t: any) => ({
+            name: t.name,
+            mb: Math.round((Number(t.bytes) / 1024 / 1024) * 100) / 100
+          }))
         },
         agora: {
           voiceMinutes,
           videoMinutes,
-          trackedMinutes,
           totalMinutes,
-          hasConsole,
-          sessions: stats ? Number(stats.agora?.sessions || 0) : 0,
-          since: stats?.agora?.since || null,
-          freeLimitMinutes,
+          freeLimit,
           remainingMinutes,
-          percentUsed: agoraPercent,
-          listCostUsd,
-          overageCostUsd
+          percentUsed: Math.min(100, Math.round((totalMinutes / freeLimit) * 1000) / 10)
         },
         lastChecked: new Date().toLocaleTimeString('tr-TR')
       });
     } catch (err) {
-      console.error('Quota fetch error:', err);
+      console.error('Kota çekme hatası:', err);
     } finally {
       setQuotaLoading(false);
     }
   };
 
-  // Agora Console'daki gerçek bu ay toplamını elle gir (boş bırakılırsa kendi kayıtlarımız gösterilir)
-  const handleSaveAgoraConsoleMinutes = () => {
-    const v = agoraConsoleMinutes.trim();
-    try {
-      if (v === '') localStorage.removeItem('pyngoo_agora_console_mins');
-      else localStorage.setItem('pyngoo_agora_console_mins', String(Math.max(0, parseInt(v, 10) || 0)));
-    } catch (_) {}
-    handleFetchQuotaMetrics();
+  // Tüm Verileri Senkronize Et
+  const refreshAllData = () => {
+    fetchReports();
+    fetchWithdrawals();
+    fetchPaymentOrders();
+    fetchAllUsers();
+    fetchModerators();
+    fetchQuotaMetrics();
+    setActionMessage('🔄 Tüm paneller ve canlı sayaçlar güncellendi.');
+    setTimeout(() => setActionMessage(null), 3000);
   };
 
-  // ==========================================
-  // KULLANICI ALTIN & AKTİVİTE DENETİM RAPORU (HESAP EKSTRESİ)
-  // ==========================================
-
-  const [showAuditModal, setShowAuditModal] = useState(false);
-  const [auditQuery, setAuditQuery] = useState('');
-  const [auditStartDate, setAuditStartDate] = useState('');
-  const [auditEndDate, setAuditEndDate] = useState('');
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditUser, setAuditUser] = useState<any | null>(null);
-  const [auditItems, setAuditItems] = useState<any[]>([]);
-  const [auditError, setAuditError] = useState<string | null>(null);
-  const [copySuccess, setCopySuccess] = useState(false);
-
-  // Tarih Önayarı Seçimi
-  const handleAuditDatePreset = (preset: 'today' | 'week' | 'month' | 'all') => {
-    const now = new Date();
-    const pad = (n: number) => n < 10 ? '0' + n : n;
-    const toYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-    if (preset === 'today') {
-      const todayStr = toYMD(now);
-      setAuditStartDate(todayStr);
-      setAuditEndDate(todayStr);
-    } else if (preset === 'week') {
-      const past = new Date();
-      past.setDate(now.getDate() - 7);
-      setAuditStartDate(toYMD(past));
-      setAuditEndDate(toYMD(now));
-    } else if (preset === 'month') {
-      const past = new Date();
-      past.setDate(now.getDate() - 30);
-      setAuditStartDate(toYMD(past));
-      setAuditEndDate(toYMD(now));
-    } else {
-      setAuditStartDate('');
-      setAuditEndDate('');
-    }
-  };
-
-  // Denetim Raporunu Supabase'den Çek
-  const handleFetchAuditReport = async (overrideQuery?: string) => {
-    const query = (overrideQuery !== undefined ? overrideQuery : auditQuery).trim();
-    if (!query) {
-      setAuditError('Lütfen aramak istediğiniz kullanıcı adını veya UUID kodunu girin.');
-      return;
-    }
-    setAuditLoading(true);
-    setAuditError(null);
-    setCopySuccess(false);
-
-    try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query);
-      let uQuery = supabase.from('profiles').select('*');
-      if (isUuid) {
-        uQuery = uQuery.eq('id', query);
-      } else {
-        uQuery = uQuery.ilike('display_name', query);
-      }
-
-      const { data: targetProfile, error: profileErr } = await uQuery.limit(1).maybeSingle();
-
-      if (profileErr) {
-        setAuditError(`Profil arama hatası: ${profileErr.message}`);
-        setAuditLoading(false);
-        return;
-      }
-
-      if (!targetProfile) {
-        setAuditError(`"${query}" kullanıcı adına sahip profil bulunamadı.`);
-        setAuditUser(null);
-        setAuditItems([]);
-        setAuditLoading(false);
-        return;
-      }
-
-      setAuditUser(targetProfile);
-
-      // Tarih filtreleri
-      const startIso = auditStartDate ? new Date(auditStartDate + 'T00:00:00').toISOString() : null;
-      const endIso = auditEndDate ? new Date(auditEndDate + 'T23:59:59.999').toISOString() : null;
-
-      // 1. Transactions tablosu
-      let tQuery = supabase.from('transactions').select('*').eq('user_id', targetProfile.id);
-      if (startIso) tQuery = tQuery.gte('created_at', startIso);
-      if (endIso) tQuery = tQuery.lte('created_at', endIso);
-      const { data: txRecords } = await tQuery.order('created_at', { ascending: false });
-
-      // 2. Messages tablosu (hediyeler & arama duyuruları)
-      let mQuery = supabase.from('messages')
-        .select('*')
-        .or(`sender_id.eq.${targetProfile.id},receiver_id.eq.${targetProfile.id}`);
-      if (startIso) mQuery = mQuery.gte('created_at', startIso);
-      if (endIso) mQuery = mQuery.lte('created_at', endIso);
-      const { data: msgRecords } = await mQuery.order('created_at', { ascending: false });
-
-      // 3. Match History tablosu (özel aramalar)
-      let matchQuery = supabase.from('match_history')
-        .select('*')
-        .or(`caller_id.eq.${targetProfile.id},receiver_id.eq.${targetProfile.id}`);
-      if (startIso) matchQuery = matchQuery.gte('started_at', startIso);
-      if (endIso) matchQuery = matchQuery.lte('started_at', endIso);
-      const { data: matchRecords } = await matchQuery.order('started_at', { ascending: false });
-
-      // 4. Partner kullanıcı isimlerini topla
-      const partnerIdSet = new Set<string>();
-      (msgRecords || []).forEach(m => {
-        if (m.sender_id && m.sender_id !== targetProfile.id) partnerIdSet.add(m.sender_id);
-        if (m.receiver_id && m.receiver_id !== targetProfile.id) partnerIdSet.add(m.receiver_id);
-      });
-      (matchRecords || []).forEach(m => {
-        if (m.caller_id && m.caller_id !== targetProfile.id) partnerIdSet.add(m.caller_id);
-        if (m.receiver_id && m.receiver_id !== targetProfile.id) partnerIdSet.add(m.receiver_id);
-      });
-
-      const partnerNameMap: Record<string, string> = {};
-      if (partnerIdSet.size > 0) {
-        const { data: partnerList } = await supabase
-          .from('profiles')
-          .select('id, display_name')
-          .in('id', Array.from(partnerIdSet));
-        partnerList?.forEach(p => {
-          partnerNameMap[p.id] = p.display_name;
-        });
-      }
-
-      // Hediye bilgileri sözlüğü
-      const giftCostMap: Record<string, { cost: number; reward: number; name: string }> = {
-        '🌹': { cost: 10, reward: 3, name: 'Gül' },
-        '☕': { cost: 20, reward: 6, name: 'Kahve' },
-        '🍦': { cost: 35, reward: 10, name: 'Dondurma' },
-        '🍫': { cost: 50, reward: 15, name: 'Çikolata' },
-        '🧸': { cost: 100, reward: 30, name: 'Oyuncak Ayı' },
-        '💐': { cost: 200, reward: 60, name: 'Çiçek Buketi' },
-        '💍': { cost: 350, reward: 105, name: 'Tektaş Yüzük' },
-        '👑': { cost: 500, reward: 150, name: 'Kraliyet Tacı' },
-        '🏎️': { cost: 1000, reward: 300, name: 'Spor Araba' },
-        '🛥️': { cost: 2000, reward: 600, name: 'Lüks Yat' },
-        '🚀': { cost: 3000, reward: 900, name: 'Uzay Roketi' },
-        '🏰': { cost: 5000, reward: 1500, name: 'Masal Şatosu' },
-      };
-
-      const combinedLedger: any[] = [];
-
-      // A) Transactions tablosundaki resmi kayıtlar
-      (txRecords || []).forEach(tx => {
-        let label = 'İşlem';
-        let icon = '🪙';
-        let typeCategory: 'in' | 'out' = tx.amount >= 0 ? 'in' : 'out';
-        let desc = 'Sistem Hareketi';
-
-        if (tx.transaction_type === 'purchase_gold') {
-          label = 'Altın Yükleme';
-          icon = '💳';
-          desc = `Market Satın Alımı (+${tx.amount} 🪙)`;
-        } else if (tx.transaction_type === 'gift_sent') {
-          label = 'Hediye Gönderildi';
-          icon = '🎁';
-          desc = `Kullanıcıya hediye harcaması (${Math.abs(tx.amount)} 🪙)`;
-        } else if (tx.transaction_type === 'gift_received') {
-          label = 'Hediye Alındı';
-          icon = '💎';
-          desc = `Hediyeden elmas kazancı (+${tx.amount} 💎)`;
-        } else if (tx.transaction_type === 'call_cost') {
-          label = 'Özel Görüşme Harcaması';
-          icon = '📞';
-          desc = `Arama görüşme bedeli (${tx.amount} 🪙)`;
-        } else if (tx.transaction_type === 'call_earning') {
-          label = 'Arama Kazancı';
-          icon = '💎';
-          desc = `Görüşme kadın elmas payı (+${tx.amount} 💎)`;
-        } else if (tx.transaction_type === 'daily_reward') {
-          label = 'Günlük Giriş Bonusu';
-          icon = '🎁';
-          desc = `Günlük ödül (+${tx.amount} 🪙)`;
-        } else if (tx.transaction_type === 'ad_reward') {
-          label = 'Reklam Bonusu';
-          icon = '🎬';
-          desc = `Reklam izleme ödülü (+${tx.amount} 🪙)`;
-        }
-
-        combinedLedger.push({
-          id: tx.transaction_id,
-          timestamp: new Date(tx.created_at).getTime(),
-          createdAtStr: tx.created_at,
-          type: tx.transaction_type,
-          label,
-          icon,
-          category: typeCategory,
-          partnerName: 'Pyngoo Sistem',
-          details: desc,
-          amount: tx.amount,
-          source: 'transactions'
-        });
-      });
-
-      // B) Messages tablosundan hediye ve arama analizleri
-      (msgRecords || []).forEach(msg => {
-        const isSender = msg.sender_id === targetProfile.id;
-        const partnerId = isSender ? msg.receiver_id : msg.sender_id;
-        const partnerName = partnerNameMap[partnerId] || 'Kullanıcı';
-
-        let detectedEmoji = msg.gift_emoji;
-        if (!detectedEmoji) {
-          for (const emoji of Object.keys(giftCostMap)) {
-            if (msg.content && msg.content.includes(emoji)) {
-              detectedEmoji = emoji;
-              break;
-            }
-          }
-        }
-
-        if (detectedEmoji && giftCostMap[detectedEmoji]) {
-          const giftInfo = giftCostMap[detectedEmoji];
-          const msgTime = new Date(msg.created_at).getTime();
-          const alreadyInTx = combinedLedger.some(item => 
-            item.source === 'transactions' && 
-            Math.abs(item.timestamp - msgTime) < 5000 &&
-            (item.type === 'gift_sent' || item.type === 'gift_received')
-          );
-
-          if (!alreadyInTx) {
-            if (isSender) {
-              combinedLedger.push({
-                id: msg.id,
-                timestamp: msgTime,
-                createdAtStr: msg.created_at,
-                type: 'gift_sent',
-                label: 'Hediye Gönderildi',
-                icon: '🎁',
-                category: 'out',
-                partnerName,
-                details: `${detectedEmoji} ${giftInfo.name} Hediyesi`,
-                amount: -giftInfo.cost,
-                source: 'messages'
-              });
-            } else {
-              combinedLedger.push({
-                id: msg.id,
-                timestamp: msgTime,
-                createdAtStr: msg.created_at,
-                type: 'gift_received',
-                label: 'Hediye Alındı',
-                icon: '💎',
-                category: 'in',
-                partnerName,
-                details: `${detectedEmoji} ${giftInfo.name} Hediyesi (+${giftInfo.reward} 💎)`,
-                amount: giftInfo.reward,
-                source: 'messages'
-              });
-            }
-          }
-        } else if (msg.content && msg.content.includes('📞') && msg.content.includes('arama')) {
-          const msgTime = new Date(msg.created_at).getTime();
-          const alreadyInTx = combinedLedger.some(item => 
-            Math.abs(item.timestamp - msgTime) < 5000 &&
-            item.type === 'call_cost'
-          );
-          if (!alreadyInTx && isSender) {
-            combinedLedger.push({
-              id: msg.id,
-              timestamp: msgTime,
-              createdAtStr: msg.created_at,
-              type: 'call_cost',
-              label: 'Özel Görüşme Başlatıldı',
-              icon: '📞',
-              category: 'out',
-              partnerName,
-              details: '60 sn Özel Görüşme (120 Altın/dk)',
-              amount: -120,
-              source: 'messages'
-            });
-          }
-        }
-      });
-
-      // C) Match History görüşmeleri
-      (matchRecords || []).forEach(match => {
-        const isCaller = match.caller_id === targetProfile.id;
-        const partnerId = isCaller ? match.receiver_id : match.caller_id;
-        const partnerName = partnerNameMap[partnerId] || 'Kullanıcı';
-        const duration = match.duration_sec || 60;
-        const minutes = Math.max(1, Math.ceil(duration / 60));
-        const matchTime = new Date(match.started_at).getTime();
-
-        const alreadyLogged = combinedLedger.some(item => 
-          item.type === 'call_cost' &&
-          Math.abs(item.timestamp - matchTime) < 15000
-        );
-
-        if (!alreadyLogged && isCaller) {
-          combinedLedger.push({
-            id: match.match_id,
-            timestamp: matchTime,
-            createdAtStr: match.started_at,
-            type: 'call_cost',
-            label: 'Özel Sesli/Görüntülü Arama',
-            icon: '📞',
-            category: 'out',
-            partnerName,
-            details: `${duration} sn görüşme (${minutes} dk x 120 Altın)`,
-            amount: -(minutes * 120),
-            source: 'match_history'
-          });
-        }
-      });
-
-      // Kronolojik sıralama: En yeniden eskiye
-      combinedLedger.sort((a, b) => b.timestamp - a.timestamp);
-      setAuditItems(combinedLedger);
-
-    } catch (err: any) {
-      console.error('Audit fetch error:', err);
-      setAuditError(`Rapor hazırlanırken hata oluştu: ${err.message || err}`);
-    } finally {
-      setAuditLoading(false);
-    }
-  };
-
-  // İtiraz Yanıt Metnini Panoya Kopyalama
-  const handleCopyAuditStatement = () => {
-    if (!auditUser) return;
-    const formatDate = (iso: string) => {
-      try {
-        const d = new Date(iso);
-        return `${d.toLocaleDateString('tr-TR')} ${d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
-      } catch (_) {
-        return iso;
-      }
-    };
-
-    const totalIn = auditItems.filter(i => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
-    const totalOut = auditItems.filter(i => i.amount < 0).reduce((sum, i) => sum + Math.abs(i.amount), 0);
-    const totalCalls = auditItems.filter(i => i.type === 'call_cost').length;
-    const totalGifts = auditItems.filter(i => i.type === 'gift_sent').length;
-
-    const dateRangeStr = (auditStartDate || auditEndDate) 
-      ? `${auditStartDate || 'İlk Kayıt'} - ${auditEndDate || 'Günümüz'}`
-      : 'Tüm Kayıtlar';
-
-    let text = `📋 PYNGOO KULLANICI HESAP & ALTIN EKSTRESİ DENETİM RAPORU\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `Sayın ${auditUser.display_name},\n\n`;
-    text += `Uygulamamızdaki altın bakiyesi ve harcama itirazınız sistem loglarımız ve sunucu kayıtlarımız üzerinden incelenmiştir.\n\n`;
-    text += `🗓️ İncelenen Tarih Aralığı: ${dateRangeStr}\n`;
-    text += `👤 Kullanıcı: ${auditUser.display_name} (ID: ${auditUser.id})\n`;
-    text += `💰 Güncel Bakiyeniz: ${auditUser.total_gold || 0} Altın 🪙, ${auditUser.total_diamonds || 0} Elmas 💎\n\n`;
-    text += `📊 DÖNEM ÖZETİ:\n`;
-    text += `• Toplam Yüklenen / Alınan Altın: +${totalIn} 🪙\n`;
-    text += `• Toplam Harcanan Altın: -${totalOut} 🪙\n`;
-    text += `• Yapılan Özel Görüşme Sayısı: ${totalCalls} adet\n`;
-    text += `• Gönderilen Hediye Sayısı: ${totalGifts} adet\n\n`;
-    text += `📝 AYRINTILI İŞLEM HAREKETLERİ DÖKÜMÜ:\n`;
-
-    if (auditItems.length === 0) {
-      text += `(Seçilen tarih aralığında altın veya hediye hareketi bulunmamaktadır.)\n`;
-    } else {
-      auditItems.forEach((item, index) => {
-        const sign = item.amount > 0 ? `+${item.amount}` : `${item.amount}`;
-        text += `${index + 1}) ${formatDate(item.createdAtStr)} | [${item.label}] ${sign} 🪙\n`;
-        text += `   Hedef: ${item.partnerName} | Detay: ${item.details}\n`;
-      });
-    }
-
-    text += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `Altınlarınız ve tüm hareketleriniz sunucu kayıtlarımızda anlık olarak tutulmakta olup yukarıda belirtilen görüşme ve hediye gönderimlerinde bizzat harcanmıştır.\n`;
-    text += `Ek bir sorunuz veya desteğe ihtiyacınız olursa bize dilediğiniz an ulaşabilirsiniz.\n`;
-    text += `İyi sohbetler dileriz.\n`;
-    text += `Pyngoo Müşteri Memnuniyeti & Güvenlik Birimi`;
-
-    navigator.clipboard.writeText(text);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 3500);
-  };
-
-  // Kartlardan veya arama butonundan hızlı açma
-  const handleOpenAuditForUser = (target: string) => {
-    setAuditQuery(target);
-    setShowAuditModal(true);
-    handleFetchAuditReport(target);
-  };
-
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPinError(false);
-    setAuthMessage(null);
-    if (lockoutTime > Date.now()) {
-      const remainingMin = Math.ceil((lockoutTime - Date.now()) / 60000);
-      await showAlert(`⚠️ Güvenlik Uyarısı: 5 defa hatalı deneme yapıldığı için giriş 15 dakika dondurulmuştur. Lütfen ${remainingMin} dakika sonra tekrar deneyin.`, 'Güvenlik Uyarısı');
-      return;
-    }
-
-    const email = (usernameInput || pinInput).trim();
-    const pass = passwordInput.trim();
-    if (!email || !pass) {
-      setPinError(true);
-      return;
-    }
-
-    try {
-      // Pyngoo hesabının e-posta + şifresiyle gerçek Supabase girişi
-      const { error: signErr } = await supabase.auth.signInWithPassword({ email, password: pass });
-      if (!signErr) {
-        const ok = await applyStaffSession();
-        if (ok) {
-          setFailedAttempts(0);
-          logModeratorAction('mod_login', 'Sistem Paneli', `${email} panele giriş yaptı.`);
-        }
-        return; // Yetkisiz hesapsa mesaj applyStaffSession içinde gösterilir
-      }
-
-      // Hatalı şifre/kullanıcı adı
-      const nextFailed = failedAttempts + 1;
-      setFailedAttempts(nextFailed);
-      setPinError(true);
-
-      if (nextFailed >= 5) {
-        const lockUntil = Date.now() + 15 * 60 * 1000;
-        setLockoutTime(lockUntil);
-        await showAlert('⚠️ Güvenlik Koruması: 5 hatalı şifre denemesi nedeniyle panel 15 dakika boyunca kilitlenmiştir!', 'Güvenlik Koruması');
-      }
-    } catch (err) {
-      console.error('Şifre doğrulama hatası:', err);
-      setPinError(true);
-    }
-  };
-
-  // Google hesabıyla panel girişi (omer hesabı Google'a bağlıdır)
-  const handleGoogleLogin = async () => {
-    setAuthMessage(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/` }
-    });
-    if (error) setAuthMessage(`⚠️ Google girişi başlatılamadı: ${error.message}`);
-  };
-
-  // Yerel depolamayı kalıcı senkronize etme yardımcıları
-  const syncLocalReportStatus = (reportId: string, status: 'resolved' | 'dismissed' | 'banned') => {
-    try {
-      const local: ReportItem[] = JSON.parse(localStorage.getItem('pyngoo_local_reports') || '[]');
-      const updated = local.map(r => r.id === reportId ? { ...r, status } : r);
-      localStorage.setItem('pyngoo_local_reports', JSON.stringify(updated));
-    } catch (_) {}
-  };
-
-  const removeLocalReport = (reportId: string) => {
-    try {
-      const local: ReportItem[] = JSON.parse(localStorage.getItem('pyngoo_local_reports') || '[]');
-      const updated = local.filter(r => r.id !== reportId);
-      localStorage.setItem('pyngoo_local_reports', JSON.stringify(updated));
-    } catch (_) {}
-  };
-
-  const fetchReports = async () => {
-    setLoading(true);
-    try {
-      const localReports: ReportItem[] = JSON.parse(localStorage.getItem('pyngoo_local_reports') || '[]');
-
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.warn('Reports tablosu bulunamadı veya yetki hatası:', error.message);
-        setReports(localReports);
-      } else {
-        const supabaseReports: ReportItem[] = data || [];
-        
-        const userIds = Array.from(new Set([
-          ...supabaseReports.map((r: any) => r.reporter_id), 
-          ...supabaseReports.map((r: any) => r.reported_user_id),
-          ...localReports.map((r: any) => r.reporter_id),
-          ...localReports.map((r: any) => r.reported_user_id)
-        ])).filter(Boolean);
-
-        let nameMap = new Map<string, string>();
-        if (userIds.length > 0) {
-          try {
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select('id, display_name')
-              .in('id', userIds);
-            nameMap = new Map((profiles || []).map((p: any) => [p.id, p.display_name]));
-          } catch (_) {}
-        }
-
-        const combinedMap = new Map<string, ReportItem>();
-
-        // Sadece admin ise finansal verileri ve ayarları yükle
-        if (isAdmin) {
-          fetchWithdrawals();
-          fetchPaymentOrders();
-        }
-
-        // Yerel raporları ekle
-        localReports.forEach(r => {
-          combinedMap.set(r.id, {
-            ...r,
-            reporter_name: nameMap.get(r.reporter_id) || r.reporter_name || 'Kullanıcı',
-            reported_name: nameMap.get(r.reported_user_id) || r.reported_name || 'Kullanıcı'
-          });
-        });
-
-        // Supabase raporlarını üzerine yaz
-        supabaseReports.forEach((r: any) => {
-          combinedMap.set(r.id, {
-            ...r,
-            reporter_name: nameMap.get(r.reporter_id) || r.reporter_name || 'Kullanıcı',
-            reported_name: nameMap.get(r.reported_user_id) || r.reported_name || 'Kullanıcı'
-          });
-        });
-
-        const allReports = Array.from(combinedMap.values()).sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-
-        setReports(allReports);
-      }
-    } catch (err) {
-      console.error('Şikayetler çekilemedi:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Realtime Dinleyiciler (Presence & Postgres Changes)
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchReports();
+    if (!isAuthenticated) return;
 
-      // Sadece admin ise finansal verileri ve ayarları yükle
-      if (isAdmin) {
+    // 1. Canlı Yayın Presence Kanalı Dinleyicisi
+    const liveDir = supabase.channel('pyngoo_live_rooms_directory');
+    liveDir.on('presence', { event: 'sync' }, () => {
+      const state = liveDir.presenceState() as Record<string, any[]>;
+      const list = Object.entries(state).map(([id, presences]) => {
+        const p = presences[0] || {};
+        return { id, name: p.name || 'Yayıncı', avatar: p.avatar || '', joined_at: p.joined_at };
+      });
+      setLiveRooms(list);
+    });
+    liveDir.subscribe();
+
+    // 2. Bekleme Odası (waiting_room) Sayısı
+    const updateWaitingCount = async () => {
+      const { count } = await supabase.from('waiting_room').select('*', { count: 'exact', head: true });
+      setWaitingRoomCount(count || 0);
+    };
+    updateWaitingCount();
+
+    // 3. Veritabanı Değişiklik Abonelikleri
+    const changesChannel = supabase.channel('pyngoo_panel_realtime_events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => {
+        fetchReports();
+        try { new Audio('/pingoo.mp3').play().catch(() => {}); } catch (_) {}
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawal_requests' }, () => {
         fetchWithdrawals();
+        try { new Audio('/pingoo.mp3').play().catch(() => {}); } catch (_) {}
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_notifications' }, () => {
         fetchPaymentOrders();
-      }
+        try { new Audio('/pingoo.mp3').play().catch(() => {}); } catch (_) {}
+      })
+      .subscribe();
 
-      // Canlı Supabase Realtime Takibi (Şikayetler - Hem Admin Hem Moderatör için)
-      const channel = supabase
-        .channel('moderator_reports_channel')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, (payload) => {
-          setReports(prev => [payload.new as ReportItem, ...prev]);
-          try {
-            const audio = new Audio('/pingoo.mp3');
-            audio.play().catch(() => {});
-          } catch (_) {}
-        })
-        .subscribe();
+    // İlk yükleme
+    refreshAllData();
 
-      let withdrawalsChannel: any = null;
-      let paymentsChannel: any = null;
+    return () => {
+      supabase.removeChannel(liveDir);
+      supabase.removeChannel(changesChannel);
+    };
+  }, [isAuthenticated]);
 
-      // Finansal Realtime Bildirimleri Sadece Admin için dinlenir
-      if (isAdmin) {
-        // Canlı Supabase Realtime Takibi (Para Çekim Talepleri)
-        withdrawalsChannel = supabase
-          .channel('moderator_withdrawals_channel')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawal_requests' }, () => {
-            fetchWithdrawals();
-            try {
-              const audio = new Audio('/pingoo.mp3');
-              audio.play().catch(() => {});
-            } catch (_) {}
-          })
-          .subscribe();
-
-        // Canlı Supabase Realtime Takibi (Altın Ödeme Bildirimleri)
-        paymentsChannel = supabase
-          .channel('moderator_payments_channel')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_notifications' }, () => {
-            fetchPaymentOrders();
-            try {
-              const audio = new Audio('/pingoo.mp3');
-              audio.play().catch(() => {});
-            } catch (_) {}
-          })
-          .subscribe();
-      }
-
-      return () => {
-        supabase.removeChannel(channel);
-        if (withdrawalsChannel) supabase.removeChannel(withdrawalsChannel);
-        if (paymentsChannel) supabase.removeChannel(paymentsChannel);
-      };
-    }
-  }, [isAuthenticated, isAdmin]);
-
-  // Kullanıcıyı Yasakla (Ban)
-  const handleBanUser = async (report: ReportItem) => {
+  // ==========================================
+  // ŞİKAYET MASASI AKSİYONLARI
+  // ==========================================
+  const handleBanUserFromReport = async (report: ReportItem) => {
     const ok = await showConfirm(
-      `"${report.reported_name || 'Bu kullanıcı'}" adlı kullanıcıyı kalıcı olarak YASAKLAMAK istediğinize emin misiniz?`,
+      `"${report.reported_name}" adlı kullanıcıyı KALICI OLARAK YASAKLAMAK istediğinize emin misiniz?`,
       'Kullanıcıyı Yasakla',
       true,
       'Yasakla'
@@ -1476,3236 +853,2320 @@ ${order.sender_name ? `✍️ <b>Gönderen:</b> ${order.sender_name}\n` : ''}${o
     if (!ok) return;
 
     try {
-      syncLocalReportStatus(report.id, 'banned');
-
-      // 1. Profil tablosunda is_banned = true yap
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ is_banned: true })
-        .eq('id', report.reported_user_id);
-
-      if (profileError) {
-        console.error('Ban hatası:', profileError);
-      }
-
-      // 2. Şikayeti banned olarak işaretle
-      try {
-        await supabase
-          .from('reports')
-          .update({ status: 'banned' })
-          .eq('id', report.id);
-      } catch (_) {}
-
+      await supabase.from('profiles').update({ is_banned: true }).eq('id', report.reported_user_id);
+      await supabase.from('reports').update({ status: 'banned' }).eq('id', report.id);
       setReports(prev => prev.map(r => r.id === report.id ? { ...r, status: 'banned' } : r));
-      setActionMessage(`🚫 ${report.reported_name || 'Kullanıcı'} başarıyla yasaklandı.`);
-      setTimeout(() => setActionMessage(null), 4000);
-
-      // Telegrama bildir
-      sendTelegramAlert(`🔨 <b>KULLANICI YASAKLANDI!</b>\n👤 <b>Yasaklanan:</b> ${report.reported_name || 'Kullanıcı'} (<code>${report.reported_user_id.slice(0, 8)}</code>)\n⚠️ <b>Sebep:</b> ${report.category || report.reason}\n🛡️ <b>Moderatör:</b> Panelden yasaklandı.`);
-    } catch (err) {
-      console.error(err);
-      await showAlert('İşlem sırasında hata oluştu.', 'Hata');
+      setActionMessage(`🚫 ${report.reported_name} yasaklandı.`);
+      logModeratorAction('ban', report.reported_name || report.reported_user_id, `Şikayet üzerinden kalıcı ban. Sebep: ${report.reason || report.category}`);
+      sendTelegramAlert(`🔨 <b>KULLANICI YASAKLANDI!</b>\n👤 <b>Yasaklanan:</b> ${report.reported_name} (<code>${report.reported_user_id.slice(0, 8)}</code>)\n⚠️ <b>Sebep:</b> ${report.category || report.reason}\n🛡️ <b>İşlem:</b> Panel Moderasyon`);
+      setTimeout(() => setActionMessage(null), 3000);
+    } catch (err: any) {
+      await showAlert('Hata: ' + (err.message || 'Yasaklanamadı'), 'Hata');
     }
   };
 
-  // Şikayeti Kapat (Dismiss / Resolve)
   const handleResolveReport = async (reportId: string) => {
     try {
-      syncLocalReportStatus(reportId, 'resolved');
-      try {
-        await supabase
-          .from('reports')
-          .update({ status: 'resolved' })
-          .eq('id', reportId);
-      } catch (_) {}
-
+      await supabase.from('reports').update({ status: 'resolved' }).eq('id', reportId);
       setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: 'resolved' } : r));
-      setActionMessage('✅ Şikayet incelendi ve kalıcı olarak kapatıldı.');
+      setActionMessage('✅ Şikayet çözüldü olarak kapatıldı.');
+      logModeratorAction('report_resolve', reportId, 'Şikayet çözüldü');
       setTimeout(() => setActionMessage(null), 3000);
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Şikayeti Asılsız Olarak İşaretle (Dismiss)
   const handleDismissReport = async (reportId: string) => {
     try {
-      syncLocalReportStatus(reportId, 'dismissed');
-      try {
-        await supabase
-          .from('reports')
-          .update({ status: 'dismissed' })
-          .eq('id', reportId);
-      } catch (_) {}
-
+      await supabase.from('reports').update({ status: 'dismissed' }).eq('id', reportId);
       setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: 'dismissed' } : r));
       setActionMessage('🛡️ Şikayet "Asılsız / Masum" olarak arşivlendi.');
+      logModeratorAction('report_dismiss', reportId, 'Şikayet asılsız olarak arşivlendi');
       setTimeout(() => setActionMessage(null), 3000);
     } catch (err) {
       console.error(err);
-      setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: 'dismissed' } : r));
     }
   };
 
-  // Şikayeti Kalıcı Olarak Sil (Sadece Admin)
-  const handleDeleteReport = async (reportId: string) => {
-    if (!isAdmin) {
-      await showAlert('Şikayet kaydını kalıcı olarak silme yetkisi yalnızca sistem yöneticisine (Admin) aittir. Moderatörler şikayeti "Çözüldü" veya "Asılsız" olarak işaretleyebilir.', 'Yetki Yetersiz');
-      return;
+  // ==========================================
+  // PARA ÇEKİM AKSİYONLARI
+  // ==========================================
+  const handleApproveWithdrawal = async (item: WithdrawalItem) => {
+    if (item.status !== 'pending') return;
+    try {
+      await supabase.from('withdrawal_requests').update({ status: 'approved' }).eq('id', item.id);
+      setWithdrawals(prev => prev.map(w => w.id === item.id ? { ...w, status: 'approved' } : w));
+      setActionMessage(`✅ ${item.full_name} talebi onaylandı. Ödeme hazırlığına alındı.`);
+      logModeratorAction('withdrawal_approve', item.full_name, `${withdrawalMoney(item)} tutarındaki çekim onaylandı.`);
+      sendTelegramAlert(`🔵 <b>ÇEKİM ONAYLANDI!</b>\n👤 <b>Yayıncı:</b> ${item.full_name}\n💵 <b>Tutar:</b> ${withdrawalMoney(item)}\n🏦 <b>IBAN:</b> <code>${item.iban}</code>`);
+      setTimeout(() => setActionMessage(null), 3500);
+    } catch (err: any) {
+      await showAlert('Hata: ' + err.message, 'Hata');
     }
-    const ok = await showConfirm('Bu şikayet kaydını kalıcı olarak silmek istediğinize emin misiniz?', 'Şikayeti Sil', true, 'Sil');
+  };
+
+  const handleCompleteWithdrawal = async (item: WithdrawalItem) => {
+    if (item.status === 'completed') return;
+    try {
+      await supabase.from('withdrawal_requests').update({ status: 'completed' }).eq('id', item.id);
+      setWithdrawals(prev => prev.map(w => w.id === item.id ? { ...w, status: 'completed' } : w));
+      setActionMessage(`💰 ${item.full_name} ödemesi tamamlandı ve Yatırıldı işaretlendi!`);
+      logModeratorAction('withdrawal_complete', item.full_name, `${withdrawalMoney(item)} tutarındaki ödeme hesaba yatırıldı.`);
+      sendTelegramAlert(`🟢 <b>ÖDEME HESABA YATIRILDI!</b>\n👤 <b>Yayıncı:</b> ${item.full_name}\n💵 <b>Tutar:</b> ${withdrawalMoney(item)}\n✅ <b>İşlem:</b> Tamamlandı`);
+      setTimeout(() => setActionMessage(null), 3500);
+    } catch (err: any) {
+      await showAlert('Hata: ' + err.message, 'Hata');
+    }
+  };
+
+  const handleRejectWithdrawal = async (item: WithdrawalItem) => {
+    const reason = await showPrompt(
+      `${item.full_name} kullanıcısının ${item.amount_diamonds.toLocaleString()} elmaslık çekimini reddetmek ve elmasları hesabına iade etmek üzeresiniz.\n\nRed Gerekçesi:`,
+      'Hatalı veya uyuşmayan IBAN bilgisi',
+      'Çekim Talebini Reddet'
+    );
+    if (reason === null) return;
+
+    try {
+      await supabase.from('withdrawal_requests').update({ status: 'rejected' }).eq('id', item.id);
+      const { data: prof } = await supabase.from('profiles').select('total_diamonds').eq('id', item.user_id).single();
+      const currentDiamonds = prof?.total_diamonds || 0;
+      await supabase.from('profiles').update({ total_diamonds: currentDiamonds + item.amount_diamonds }).eq('id', item.user_id);
+
+      setWithdrawals(prev => prev.map(w => w.id === item.id ? { ...w, status: 'rejected' } : w));
+      setActionMessage(`❌ Çekim reddedildi, ${item.amount_diamonds.toLocaleString()} elmas yayıncıya iade edildi.`);
+      logModeratorAction('withdrawal_reject', item.full_name, `Çekim reddedildi. İade: ${item.amount_diamonds} elmas. Sebep: ${reason}`);
+      sendTelegramAlert(`🔴 <b>ÇEKİM REDDEDİLDİ & İADE EDİLDİ!</b>\n👤 <b>Yayıncı:</b> ${item.full_name}\n💎 <b>İade:</b> ${item.amount_diamonds} elmas\n📝 <b>Gerekçe:</b> ${reason}`);
+      setTimeout(() => setActionMessage(null), 3500);
+    } catch (err: any) {
+      await showAlert('Hata: ' + err.message, 'Hata');
+    }
+  };
+
+  // ==========================================
+  // ALTIN SİPARİŞİ AKSİYONLARI
+  // ==========================================
+  const handleApprovePayment = async (order: PaymentOrderItem) => {
+    if (order.status !== 'pending') return;
+    const ok = await showConfirm(
+      `Sipariş Kodu: ${order.order_code}\nKullanıcı: ${order.user_name}\nEklenecek Altın: ${order.total_gold.toLocaleString()} Altın\nTutar: ${order.price_text}\n\nBu ödemeyi onaylayıp kullanıcının hesabına altınları yüklemek istiyor musunuz?`,
+      'Ödeme Onayı',
+      false,
+      'Onayla ve Altın Yükle'
+    );
     if (!ok) return;
+
     try {
-      removeLocalReport(reportId);
-      try {
-        await supabase.from('reports').delete().eq('id', reportId);
-      } catch (_) {}
-      try {
-        await supabase.rpc('delete_report', { p_report_id: reportId });
-      } catch (_) {}
-      setReports(prev => prev.filter(r => r.id !== reportId));
-      setActionMessage('🗑️ Şikayet kaydı kalıcı olarak silindi.');
+      const { error: rpcErr } = await supabase.rpc('approve_payment_order', {
+        p_order_id: order.id,
+        p_admin_notes: 'Yönetim panelinden onaylandı'
+      });
+      if (rpcErr) throw rpcErr;
+
+      setPaymentOrders(prev => prev.map(p => p.id === order.id ? { ...p, status: 'approved' } : p));
+      setActionMessage(`🪙 ${order.user_name} hesabına ${order.total_gold.toLocaleString()} altın yüklendi!`);
+      logModeratorAction('payment_approve', order.user_name || order.order_code, `${order.total_gold} altın siparişi onaylandı (${order.price_text}).`);
+      sendTelegramAlert(`🪙 <b>ALTIN SİPARİŞİ ONAYLANDI!</b>\n👤 <b>Kullanıcı:</b> ${order.user_name}\n💎 <b>Yüklenen Altın:</b> ${order.total_gold.toLocaleString()}\n💵 <b>Tutar:</b> ${order.price_text}\n🔢 <b>Kod:</b> <code>${order.order_code}</code>`);
+      setTimeout(() => setActionMessage(null), 3500);
+    } catch (err: any) {
+      await showAlert('Onaylama hatası: ' + err.message, 'Hata');
+    }
+  };
+
+  const handleRejectPayment = async (order: PaymentOrderItem) => {
+    const reason = await showPrompt('Bu ödeme bildirimini reddetme gerekçesi:', 'Banka hesabına tutar geçmedi', 'Ödeme Bildirimi Reddi');
+    if (reason === null) return;
+
+    try {
+      await supabase.from('payment_notifications').update({ status: 'rejected', admin_notes: reason }).eq('id', order.id);
+      setPaymentOrders(prev => prev.map(p => p.id === order.id ? { ...p, status: 'rejected', admin_notes: reason } : p));
+      setActionMessage(`❌ ${order.order_code} nolu ödeme bildirimi reddedildi.`);
+      logModeratorAction('payment_reject', order.order_code, `Ödeme reddedildi. Sebep: ${reason}`);
       setTimeout(() => setActionMessage(null), 3000);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      await showAlert('Hata: ' + err.message, 'Hata');
     }
   };
 
-  // Tüm Şikayetleri Temizle (Sadece Admin)
-  const handleClearAllReports = async () => {
-    if (!isAdmin) {
-      await showAlert('Tüm şikayet kayıtlarını temizleme yetkisi yalnızca sistem yöneticisine (Admin) aittir.', 'Yetki Yetersiz');
-      return;
-    }
-    const ok = await showConfirm('Tüm şikayet kayıtlarını kalıcı olarak temizlemek istediğinize emin misiniz? Bu işlem geri alınamaz.', 'Tüm Şikayetleri Temizle', true, 'Tümünü Temizle');
-    if (!ok) return;
-    try {
-      localStorage.removeItem('pyngoo_local_reports');
-      try {
-        await supabase.from('reports').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      } catch (_) {}
-      setReports([]);
-      setActionMessage('🗑️ Tüm şikayet kayıtları kalıcı olarak temizlendi.');
-      setTimeout(() => setActionMessage(null), 3000);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Tüm Kayıtlı Kullanıcıları Çek
-  const fetchAllUsers = async () => {
-    setLoadingUsers(true);
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .neq('role', 'deleted')
-        .not('display_name', 'ilike', '%silinmiş%')
-        .not('display_name', 'ilike', '%silinmis%')
-        .order('created_at', { ascending: false });
-
-      if (data) {
-        setAllUsersList(data);
-      }
-    } catch (err) {
-      console.error('Kullanıcılar çekilemedi:', err);
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  // Kullanıcıyı Yasakla / Yasağı Kaldır
-  const handleToggleBanUser = async (user: any) => {
+  // ==========================================
+  // KULLANICI CRM AKSİYONLARI
+  // ==========================================
+  const handleToggleBanUser = async (user: UserProfileItem) => {
     const newStatus = !user.is_banned;
-    const msg = newStatus 
-      ? `"${user.display_name}" adlı kullanıcıyı YASAKLAMAK istediğinize emin misiniz?` 
-      : `"${user.display_name}" kullanıcısının yasağını KALDIRMAK istediğinize emin misiniz?`;
-    const ok = await showConfirm(msg, newStatus ? 'Kullanıcıyı Yasakla' : 'Yasağı Kaldır', newStatus, newStatus ? 'Yasakla' : 'Yasağı Kaldır');
+    const ok = await showConfirm(
+      `"${user.display_name}" kullanıcısını ${newStatus ? 'YASAKLAMAK' : 'YASAĞINI KALDIRMAK'} istediğinize emin misiniz?`,
+      newStatus ? 'Kullanıcıyı Yasakla' : 'Yasağı Kaldır',
+      newStatus
+    );
     if (!ok) return;
 
     try {
       await supabase.from('profiles').update({ is_banned: newStatus }).eq('id', user.id);
       setAllUsersList(prev => prev.map(u => u.id === user.id ? { ...u, is_banned: newStatus } : u));
-      setActionMessage(newStatus ? `🚫 "${user.display_name}" başarıyla yasaklandı.` : `✅ "${user.display_name}" yasağı kaldırıldı.`);
+      setActionMessage(newStatus ? `🚫 "${user.display_name}" yasaklandı.` : `✅ "${user.display_name}" yasağı kaldırıldı.`);
+      logModeratorAction(newStatus ? 'user_ban' : 'user_unban', user.display_name, newStatus ? 'Kullanıcı banlandı' : 'Kullanıcı yasağı kaldırıldı');
       setTimeout(() => setActionMessage(null), 3000);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      await showAlert('Hata: ' + err.message, 'Hata');
     }
   };
 
-  // Kullanıcı Profilini Kalıcı Sil (Kullanıcı Adını Boşa Çıkar)
-  const handleDeleteUserProfile = async (user: any) => {
+  const handleDeleteUserProfile = async (user: UserProfileItem) => {
+    if (!isOmer) {
+      await showAlert('Kullanıcı profilini kalıcı olarak silme yetkisi yalnızca Süper Yöneticiye aittir.', 'Yetki Yetersiz');
+      return;
+    }
     const ok = await showConfirm(
-      `"${user.display_name}" adlı kullanıcı profilini kalıcı olarak silmek ve "${user.display_name}" kullanıcı adını tamamen boşa çıkarmak istediğinize emin misiniz?\n\nBu işlem "${user.display_name}" kullanıcı adını tekrar kayıt olunabilir hale getirir.`,
-      'Profili Kalıcı Sil',
+      `"${user.display_name}" adlı kullanıcı profilini kalıcı olarak silmek ve rumuzu tamamen boşa çıkarmak istediğinize emin misiniz?\n\nBu işlem geri alınamaz!`,
+      'Profili Kalıcı Olarak Sil',
       true,
       'Kalıcı Olarak Sil'
     );
     if (!ok) return;
 
-    setDeletingUserId(user.id);
     try {
-      try {
-        await supabase.rpc('admin_delete_profile', { p_user_id: user.id });
-      } catch (_) {}
-
+      try { await supabase.rpc('purge_user_data', { p_target_user_id: user.id }); } catch (_) {}
       await supabase.from('profiles').delete().eq('id', user.id);
       try { await supabase.from('waiting_room').delete().eq('user_id', user.id); } catch (_) {}
-      try { await supabase.from('reports').delete().or(`reporter_id.eq.${user.id},reported_user_id.eq.${user.id}`); } catch (_) {}
-
       setAllUsersList(prev => prev.filter(u => u.id !== user.id));
-      setActionMessage(`🗑️ "${user.display_name}" profili silindi ve kullanıcı adı boşa çıkarıldı!`);
+      setActionMessage(`🗑️ "${user.display_name}" profili tamamen silindi ve rumuz boşa çıkarıldı.`);
+      logModeratorAction('user_delete', user.display_name, `Profil kalıcı olarak silindi (ID: ${user.id}).`);
       setTimeout(() => setActionMessage(null), 3500);
     } catch (err: any) {
-      console.error('Profil silme hatası:', err);
-      await showAlert('Silme sırasında hata: ' + (err.message || 'Bilinmiyor'), 'Hata');
-    } finally {
-      setDeletingUserId(null);
+      await showAlert('Silme hatası: ' + err.message, 'Hata');
     }
   };
 
-  // Moderatör Listesini Çek
-  const fetchModerators = async () => {
-    setLoadingMods(true);
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, display_name, gender, total_gold, is_moderator, role')
-        .or('is_moderator.eq.true,role.eq.moderator,role.eq.admin');
-      
-      const mods: any[] = data || [];
-
-      // Yetki KAYNAĞI veritabanıdır (profiles.role / is_moderator). Yönetici yalnızca role = 'admin' olan hesaptır;
-      // diğer herkes moderatör olarak listelenir. (Eskiden tarayıcıdaki kara liste ve sabit 'omer' kaydı listeyi değiştiriyordu.)
-      const enriched = mods.map(m => ({
-        ...m,
-        role: m.role === 'admin' ? 'admin' : 'moderator'
-      }));
-
-      setModeratorsList(enriched);
-    } catch (e) {
-      console.error('Moderator list error:', e);
-    } finally {
-      setLoadingMods(false);
-    }
-  };
-
-  // Kullanıcıya Moderatör Yetkisi Ver (yetki veritabanında tutulur; şifre üretilmez)
-  const handleAssignModerator = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAdjustBalance = async (user: UserProfileItem) => {
     if (!isAdmin) {
-      setModErrorMsg('Moderatör yetkisi tanımlama yalnızca sistem yöneticisine (Admin) aittir.');
+      await showAlert('Bakiye ayarlama yetkisi yalnızca Sistem Yöneticisine aittir.', 'Yetki Yetersiz');
       return;
     }
-    const query = modUsernameInput.trim();
+    const goldInput = await showPrompt(
+      `"${user.display_name}" için eklenecek veya çıkarılacak ALTIN miktarı:\n(Örnek: +500 veya -200)\n\nMevcut Altın: ${user.total_gold.toLocaleString()}`,
+      '0',
+      'Altın Bakiyesi Düzenleme'
+    );
+    if (goldInput === null) return;
+    const goldDelta = parseInt(goldInput, 10) || 0;
 
-    if (!query) {
-      setModErrorMsg('Lütfen kullanıcı adını girin!');
-      return;
-    }
+    const diamondInput = await showPrompt(
+      `"${user.display_name}" için eklenecek veya çıkarılacak ELMAS miktarı:\n(Örnek: +100 veya -50)\n\nMevcut Elmas: ${user.total_diamonds.toLocaleString()}`,
+      '0',
+      'Elmas Bakiyesi Düzenleme'
+    );
+    if (diamondInput === null) return;
+    const diamondDelta = parseInt(diamondInput, 10) || 0;
 
-    setModSuccessMsg(null);
-    setModErrorMsg(null);
+    if (goldDelta === 0 && diamondDelta === 0) return;
+
+    const newGold = Math.max(0, user.total_gold + goldDelta);
+    const newDiamonds = Math.max(0, user.total_diamonds + diamondDelta);
 
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query);
-      let userQuery = supabase.from('profiles').select('*');
-      if (isUuid) {
-        userQuery = userQuery.eq('id', query);
-      } else {
-        userQuery = userQuery.ilike('display_name', query);
-      }
-      
-      const { data: userRecord, error: searchError } = await userQuery.limit(1).maybeSingle();
+      await supabase.from('profiles').update({
+        total_gold: newGold,
+        total_diamonds: newDiamonds
+      }).eq('id', user.id);
 
-      if (searchError) {
-        setModErrorMsg(`Arama hatası: ${searchError.message}`);
-        return;
-      }
-
-      if (!userRecord) {
-        setModErrorMsg(`"${query}" kullanıcı adına sahip bir profil bulunamadı.`);
-        return;
-      }
-
-      const isFemale = userRecord.gender === 'kadin' || userRecord.role === 'streamer';
-      const targetRole = isFemale ? 'streamer' : 'moderator';
-
-      // 1. Güvenli RPC dene: admin_set_moderator_status
-      let rpcSuccess = false;
-      try {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('admin_set_moderator_status', {
-          p_target: userRecord.id,
-          p_is_moderator: true,
-          p_role: targetRole
-        });
-        if (!rpcErr && rpcRes && rpcRes.success) {
-          rpcSuccess = true;
-        }
-      } catch (_) {}
-
-      // 2. Doğrudan güncelleme dene
-      if (!rpcSuccess) {
-        await supabase
-          .from('profiles')
-          .update({ is_moderator: true, role: targetRole })
-          .eq('id', userRecord.id);
-      }
-
-      setModSuccessMsg(`✅ "${userRecord.display_name}" kullanıcısına Moderatör yetkisi tanımlandı. Kullanıcı, kendi hesabının e-posta ve şifresiyle panele giriş yapar (bu ekranda hiçbir şifre gösterilmez veya saklanmaz).`);
-      setModUsernameInput('');
-      fetchModerators();
-
-      logModeratorAction('mod_assign', userRecord.display_name, `Yeni moderatör tanımlandı: ${userRecord.display_name}`);
+      setAllUsersList(prev => prev.map(u => u.id === user.id ? { ...u, total_gold: newGold, total_diamonds: newDiamonds } : u));
+      setActionMessage(`💰 "${user.display_name}" bakiyesi güncellendi: ${newGold.toLocaleString()} Altın / ${newDiamonds.toLocaleString()} Elmas.`);
+      logModeratorAction('balance_adjust', user.display_name, `Bakiye güncellendi (Altın: ${goldDelta > 0 ? '+' : ''}${goldDelta}, Elmas: ${diamondDelta > 0 ? '+' : ''}${diamondDelta})`);
+      setTimeout(() => setActionMessage(null), 3500);
     } catch (err: any) {
-      setModErrorMsg(`Hata: ${err.message || 'Bilinmeyen hata'}`);
+      await showAlert('Bakiye güncelleme hatası: ' + err.message, 'Hata');
     }
   };
 
-  // Moderatör Yetkisini Kaldır (Sadece Ömer yapabilir)
-  const handleRevokeModerator = async (targetId: string, targetName: string) => {
-    if (!isOmer) {
-      await showAlert('Moderatörlük yetkisini sadece yönetici Ömer kaldırabilir.', 'Yetki Yetersiz');
-      return;
-    }
-    const cleanTargetName = (targetName || '').trim().toLowerCase();
-    if (cleanTargetName === 'omer' || targetId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || targetId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c') {
-      await showAlert('Ana Yönetici (Ömer) hesabının yetkisi kaldırılamaz!', 'İşlem Engellendi');
+  // ==========================================
+  // SİSTEM DUYURU AKSİYONLARI
+  // ==========================================
+  const handleSendBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!broadcastTitle.trim() || !broadcastContent.trim()) {
+      await showAlert('Lütfen duyuru başlığı ve içeriğini eksiksiz doldurun.', 'Eksik Bilgi');
       return;
     }
     const ok = await showConfirm(
-      `"${targetName}" kullanıcısının moderatör yetkisini geri almak istediğinize emin misiniz?`,
-      'Moderatör Yetkisi Kaldırma',
-      true,
-      'Yetkiyi Kaldır'
+      `Hedef: ${broadcastTarget === 'all' ? 'Tüm Kullanıcılar' : broadcastTarget === 'female' ? 'Sadece Kadınlar / Yayıncılar' : 'Sadece Erkekler'}\nBaşlık: ${broadcastTitle}\n\nBu duyuruyu göndermek istiyor musunuz?`,
+      'Duyuru Fırlat',
+      false,
+      'Duyuruyu Yayınla'
     );
     if (!ok) return;
 
+    const newMsg: BroadcastMessage = {
+      id: `bc_${Date.now()}`,
+      title: broadcastTitle.trim(),
+      content: broadcastContent.trim(),
+      target: broadcastTarget,
+      sent_at: new Date().toISOString(),
+      sent_by: activeModUser?.username || 'Admin'
+    };
+
+    const updatedHistory = [newMsg, ...broadcastHistory].slice(0, 50);
+    setBroadcastHistory(updatedHistory);
+    try { localStorage.setItem('pyngoo_broadcast_history', JSON.stringify(updatedHistory)); } catch (_) {}
+
+    // Telegram'a ilet
+    sendTelegramAlert(`📢 <b>SİSTEM DUYURUSU YAYINLANDI!</b>\n🎯 <b>Hedef Kitle:</b> ${broadcastTarget.toUpperCase()}\n📌 <b>Başlık:</b> ${newMsg.title}\n💬 <b>İçerik:</b> ${newMsg.content}\n👑 <b>Yayınlayan:</b> ${newMsg.sent_by}`);
+
+    setBroadcastTitle('');
+    setBroadcastContent('');
+    setActionMessage('📢 Sistem duyurusu başarıyla yayınlandı!');
+    setTimeout(() => setActionMessage(null), 3500);
+  };
+
+  // ==========================================
+  // HESAP EKSTRESİ VE DENETİM RAPORU
+  // ==========================================
+  const handleFetchAuditReport = async () => {
+    const q = auditQuery.trim();
+    if (!q) {
+      setAuditError('Lütfen bir rumuz veya UUID girin.');
+      return;
+    }
+    setAuditLoading(true);
+    setAuditError(null);
+
     try {
-      // 1. Güvenli RPC dene: admin_set_moderator_status
-      let rpcSuccess = false;
-      try {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('admin_set_moderator_status', {
-          p_target: targetId || targetName,
-          p_is_moderator: false,
-          p_role: 'user'
-        });
-        if (!rpcErr && rpcRes && rpcRes.success) {
-          rpcSuccess = true;
-        }
-      } catch (_) {}
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
+      let query = supabase.from('profiles').select('*');
+      if (isUuid) query = query.eq('id', q);
+      else query = query.ilike('display_name', q);
 
-      // 2. Doğrudan güncelleme dene
-      if (!rpcSuccess) {
-        if (targetId) {
-          await supabase
-            .from('profiles')
-            .update({ is_moderator: false, role: 'user' })
-            .eq('id', targetId);
-        }
-        if (targetName) {
-          await supabase
-            .from('profiles')
-            .update({ is_moderator: false, role: 'user' })
-            .ilike('display_name', targetName);
-        }
+      const { data: prof, error: pErr } = await query.maybeSingle();
+      if (pErr || !prof) {
+        setAuditError(`"${q}" adına sahip profil bulunamadı.`);
+        setAuditUser(null);
+        setAuditItems([]);
+        return;
       }
+      setAuditUser(prof);
 
-      // 3. Yetki veritabanında kaldırıldı (kara liste / şifre tarayıcıda tutulmaz)
-      // Yetki veritabanında kaldırıldı; tarayıcıda şifre/kara liste tutulmaz.
-      try {
-        if (targetId) localStorage.removeItem(`pyngoo_role_${targetId}`);
-      } catch (_) {}
+      // İşlem geçmişini çek
+      let txQuery = supabase.from('transactions').select('*').eq('user_id', prof.id).order('created_at', { ascending: false });
+      if (auditStartDate) txQuery = txQuery.gte('created_at', auditStartDate + 'T00:00:00');
+      if (auditEndDate) txQuery = txQuery.lte('created_at', auditEndDate + 'T23:59:59');
 
-      // 4. UI durumunu anında güncelle
-      setModeratorsList(prev => prev.filter(m => 
-        m.id !== targetId && (m.display_name || '').toLowerCase() !== cleanTargetName
-      ));
-      setModSuccessMsg(`"${targetName}" kullanıcısının yetkisi başarıyla kaldırıldı.`);
-      
-      // 5. Listeyi veritabanından yeniden oku
-      setTimeout(() => {
-        fetchModerators();
-      }, 400);
-
-      logModeratorAction('mod_revoke', targetName, `${targetName} kullanıcısının moderatör yetkisi kaldırıldı.`);
+      const { data: txs } = await txQuery.limit(200);
+      setAuditItems(txs || []);
     } catch (err: any) {
-      console.error('Yetki kaldırma hatası:', err);
-      await showAlert('Hata: ' + (err.message || 'Yetki kaldırılamadı'), 'Hata');
+      setAuditError('Rapor çekme hatası: ' + err.message);
+    } finally {
+      setAuditLoading(false);
     }
   };
 
-  const filteredReports = reports.filter(r => {
-    if (filter === 'pending') return r.status === 'pending';
-    if (filter === 'banned') return r.status === 'banned';
-    if (filter === 'resolved') return r.status === 'resolved';
-    if (filter === 'dismissed') return r.status === 'dismissed';
-    return true;
-  });
+  // ==========================================
+  // MODERATÖR PERSONEL AKSİYONLARI
+  // ==========================================
+  const handleAssignModerator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    const name = modUsernameInput.trim();
+    if (!name) return;
 
-  // Giriş Yapılmadıysa Kullanıcı Adı & Şifre Ekranı
+    try {
+      const { data: prof } = await supabase.from('profiles').select('id, display_name').ilike('display_name', name).maybeSingle();
+      if (!prof) {
+        await showAlert(`"${name}" adında bir kullanıcı bulunamadı.`, 'Kullanıcı Bulunamadı');
+        return;
+      }
+      await supabase.from('profiles').update({ is_moderator: true, role: 'moderator' }).eq('id', prof.id);
+      setActionMessage(`🛡️ "${prof.display_name}" kullanıcısına Moderatör yetkisi verildi.`);
+      setModUsernameInput('');
+      fetchModerators();
+      logModeratorAction('mod_assign', prof.display_name, 'Yeni moderatör atandı');
+      setTimeout(() => setActionMessage(null), 3000);
+    } catch (err: any) {
+      await showAlert('Hata: ' + err.message, 'Hata');
+    }
+  };
+
+  const handleRevokeModerator = async (targetId: string, targetName: string) => {
+    if (!isAdmin) return;
+    if (targetName.toLowerCase() === 'omer') {
+      await showAlert('Süper Admin hesabının yetkisi kaldırılamaz!', 'Engellendi');
+      return;
+    }
+    const ok = await showConfirm(`"${targetName}" kullanıcısının moderatörlük yetkisini geri almak istiyor musunuz?`, 'Yetkiyi Geri Al', true);
+    if (!ok) return;
+
+    try {
+      await supabase.from('profiles').update({ is_moderator: false, role: 'user' }).eq('id', targetId);
+      setModeratorsList(prev => prev.filter(m => m.id !== targetId));
+      setActionMessage(`✅ "${targetName}" moderatörlük yetkisi kaldırıldı.`);
+      logModeratorAction('mod_revoke', targetName, 'Moderatör yetkisi geri alındı');
+      setTimeout(() => setActionMessage(null), 3000);
+    } catch (err: any) {
+      await showAlert('Hata: ' + err.message, 'Hata');
+    }
+  };
+
+  // ==========================================
+  // GİRİŞ EKRANI (OTURUM YOKSA)
+  // ==========================================
   if (!isAuthenticated) {
     return (
       <div style={{
         minHeight: '100vh',
-        background: '#0a0b16',
+        background: theme.bg,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '20px',
-        color: '#fff'
+        color: theme.textPrimary,
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        position: 'relative'
       }}>
+        {/* Sağ üst tema değiştirici */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          title={isLight ? 'Karanlık Moda Geç' : 'Aydınlık Moda Geç'}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: theme.cardBg,
+            border: `1px solid ${theme.border}`,
+            color: theme.textSecondary,
+            borderRadius: '10px',
+            padding: '8px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            fontSize: '0.82rem',
+            fontWeight: '600',
+            boxShadow: theme.shadow
+          }}
+        >
+          {isLight ? <Moon size={16} /> : <Sun size={16} />}
+          <span>{isLight ? 'Koyu Mod' : 'Açık Mod'}</span>
+        </button>
+
         <div style={{
           width: '100%',
           maxWidth: '420px',
-          background: 'rgba(255,255,255,0.04)',
-          borderRadius: '24px',
-          border: '1px solid rgba(255,255,255,0.12)',
-          padding: '36px 28px',
+          background: theme.cardBg,
+          borderRadius: '20px',
+          border: `1px solid ${theme.border}`,
+          padding: '36px 30px',
           textAlign: 'center',
-          backdropFilter: 'blur(20px)',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+          boxShadow: isLight ? '0 10px 30px rgba(0,0,0,0.06)' : '0 25px 60px rgba(0,0,0,0.85)'
         }}>
           <div style={{
-            width: '70px',
-            height: '70px',
-            borderRadius: '50%',
-            background: 'rgba(0, 242, 254, 0.15)',
-            border: '2px solid #00f2fe',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            width: '64px', height: '64px', borderRadius: '18px',
+            background: isLight ? '#f1f5f9' : '#161928',
+            border: `1px solid ${theme.borderLight}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 20px auto'
           }}>
-            <Lock size={34} color="#00f2fe" />
+            <ShieldCheck size={32} color={isLight ? '#0284c7' : '#cbd5e1'} />
           </div>
 
-          <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '8px' }}>
-            Pyngoo Moderasyon & Yönetim Paneli
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '22px' }}>
-            Yetkili Pyngoo hesabınızla (Google veya e-posta) giriş yapın.
+          <h1 style={{ fontSize: '1.35rem', fontWeight: '800', letterSpacing: '-0.3px', margin: '0 0 6px 0', color: theme.textPrimary }}>
+            Pyngoo Yönetim Merkezi
+          </h1>
+          <p style={{ fontSize: '0.84rem', color: theme.textSecondary, margin: '0 0 24px 0' }}>
+            Yönetim ve moderasyon erişimi için kimliğinizi doğrulayın.
           </p>
 
           {lockoutTime > Date.now() ? (
-            <div style={{ background: 'rgba(255,45,85,0.15)', border: '1.5px solid #ff2d55', borderRadius: '16px', padding: '16px', marginBottom: '16px', color: '#ff6b8b', fontSize: '0.88rem' }}>
-              ⚠️ Güvenlik Uyarısı: 5 defa hatalı deneme yapıldığı için giriş 15 dakika dondurulmuştur. Lütfen daha sonra tekrar deneyin.
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: '12px', padding: '14px', color: '#f87171', fontSize: '0.84rem', fontWeight: '600'
+            }}>
+              ⚠️ Çok sayıda hatalı deneme nedeniyle giriş geçici olarak donduruldu.
             </div>
           ) : (
-            <form onSubmit={handleLogin}>
-              <div style={{ marginBottom: '14px', textAlign: 'left' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', marginBottom: '6px', fontWeight: '700' }}>
-                  E-posta:
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '0.76rem', color: theme.textSecondary, marginBottom: '6px', fontWeight: '700' }}>
+                  Yönetici Kullanıcı Adı veya E-Posta:
                 </label>
                 <input
-                  type="email"
-                  placeholder="ornek@mail.com"
+                  type="text"
+                  placeholder="omer veya ornek@mail.com"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
                   style={{
-                    width: '100%',
-                    padding: '13px 16px',
-                    borderRadius: '14px',
-                    background: 'rgba(0,0,0,0.5)',
-                    border: pinError ? '2px solid #ff2d55' : '1px solid rgba(255,255,255,0.15)',
-                    color: '#fff',
-                    fontSize: '0.95rem',
-                    outline: 'none'
+                    width: '100%', padding: '12px 14px', borderRadius: '10px',
+                    background: theme.inputBg, border: pinError ? '1px solid #ef4444' : `1px solid ${theme.inputBorder}`,
+                    color: theme.textPrimary, fontSize: '0.9rem', outline: 'none'
                   }}
                   autoFocus
                 />
               </div>
 
-              <div style={{ marginBottom: '18px', textAlign: 'left' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', marginBottom: '6px', fontWeight: '700' }}>
+              <div style={{ textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '0.76rem', color: theme.textSecondary, marginBottom: '6px', fontWeight: '700' }}>
                   Şifre:
                 </label>
                 <input
                   type="password"
-                  placeholder="Şifreniz..."
+                  placeholder="••••••••"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
                   style={{
-                    width: '100%',
-                    padding: '13px 16px',
-                    borderRadius: '14px',
-                    background: 'rgba(0,0,0,0.5)',
-                    border: pinError ? '2px solid #ff2d55' : '1px solid rgba(255,255,255,0.15)',
-                    color: '#fff',
-                    fontSize: '0.95rem',
-                    outline: 'none'
+                    width: '100%', padding: '12px 14px', borderRadius: '10px',
+                    background: theme.inputBg, border: pinError ? '1px solid #ef4444' : `1px solid ${theme.inputBorder}`,
+                    color: theme.textPrimary, fontSize: '0.9rem', outline: 'none'
                   }}
                 />
               </div>
 
               {pinError && (
-                <p style={{ color: '#ff2d55', fontSize: '0.82rem', marginBottom: '14px', fontWeight: '700' }}>
-                  ⚠️ Hatalı E-posta veya Şifre! (Deneme: {failedAttempts}/5)
+                <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: 0, fontWeight: '700' }}>
+                  ⚠️ Geçersiz kimlik bilgileri! (Deneme: {failedAttempts}/5)
                 </p>
               )}
 
               <button
                 type="submit"
                 style={{
-                  width: '100%',
-                  padding: '14px',
-                  borderRadius: '16px',
-                  background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                  border: 'none',
-                  color: '#000',
-                  fontWeight: '800',
-                  fontSize: '1rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 8px 25px rgba(0, 242, 254, 0.35)'
+                  width: '100%', padding: '13px', borderRadius: '10px',
+                  background: isLight ? '#0f172a' : '#ffffff',
+                  border: 'none', color: isLight ? '#ffffff' : '#090a10', fontWeight: '800', fontSize: '0.92rem',
+                  cursor: 'pointer', transition: 'opacity 0.15s ease'
                 }}
               >
-                Panele Giriş Yap 🚀
+                Giriş Yap
               </button>
             </form>
           )}
+
+          <div style={{ margin: '16px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ flex: 1, height: '1px', background: theme.border }} />
+            <span style={{ fontSize: '0.72rem', color: theme.textMuted }}>VEYA</span>
+            <div style={{ flex: 1, height: '1px', background: theme.border }} />
+          </div>
 
           <button
             type="button"
             onClick={handleGoogleLogin}
             style={{
-              width: '100%',
-              marginTop: '12px',
-              padding: '13px',
-              borderRadius: '16px',
-              background: '#fff',
-              border: 'none',
-              color: '#111',
-              fontWeight: '800',
-              fontSize: '0.95rem',
-              cursor: 'pointer'
+              width: '100%', padding: '12px', borderRadius: '10px',
+              background: isLight ? '#ffffff' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${theme.borderLight}`,
+              color: theme.textPrimary,
+              fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              boxShadow: isLight ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
             }}
           >
-            Google ile Giriş Yap
+            <span style={{ fontWeight: '900', color: '#4285F4' }}>G</span> Google Yetkilendirmesi ile Giriş
           </button>
 
           {authMessage && (
-            <p style={{ color: '#ff6b8b', fontSize: '0.82rem', marginTop: '14px', fontWeight: '700' }}>
+            <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '14px', fontWeight: '700' }}>
               {authMessage}
             </p>
           )}
-
-          <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
-            <button
-              type="button"
-              onClick={handleReturnToApp}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'rgba(255,255,255,0.5)',
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <ArrowLeft size={15} /> Pyngoo Ana Sayfasına Git
-            </button>
-          </div>
         </div>
       </div>
     );
   }
 
+  // ==========================================
+  // ANA KOMUTA MERKEZİ ARAYÜZÜ (SIDEBAR + CONTENT)
+  // ==========================================
   return (
-    <div style={{ minHeight: '100vh', background: '#090a16', color: '#fff', padding: '24px' }}>
-      
-      {/* ÜST BİLGİ VE KONTROL ÇUBUĞU */}
-      <div style={{
-        maxWidth: '1200px',
-        margin: '0 auto 24px auto',
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      background: theme.bg,
+      color: theme.textPrimary,
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
+      {/* ========================================== */}
+      {/* SOL NAVİGASYON MENÜSÜ (SIDEBAR)            */}
+      {/* ========================================== */}
+      <aside style={{
+        width: sidebarCollapsed ? '76px' : '250px',
+        background: theme.sidebarBg,
+        borderRight: `1px solid ${theme.border}`,
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
-        background: 'rgba(255,255,255,0.03)',
-        padding: '18px 24px',
-        borderRadius: '20px',
-        border: '1px solid rgba(255,255,255,0.08)'
+        transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        position: 'sticky',
+        top: 0,
+        height: '100vh',
+        zIndex: 50
       }}>
-        {/* ÜST SATIR: baslik solda, Çikis Yap + Yenile sag ust kösede */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{
-            width: '46px', height: '46px', borderRadius: '14px',
-            background: isAdmin ? 'rgba(255,45,85,0.2)' : 'rgba(0,242,254,0.15)', 
-            border: isAdmin ? '2px solid #ff2d55' : '2px solid #00f2fe',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            {isAdmin ? <ShieldAlert size={26} color="#ff2d55" /> : <ShieldCheck size={26} color="#00f2fe" />}
-          </div>
-          <div>
-            <h1 style={{ fontSize: '1.3rem', fontWeight: '800', margin: 0 }}>
-              Pyngoo {isAdmin ? 'Yönetici & Moderasyon Paneli' : 'Moderatör Paneli'}
-            </h1>
-            <span style={{ fontSize: '0.8rem', color: isAdmin ? '#ff4d6d' : '#00f2fe' }}>
-              {isAdmin ? `👑 Sistem Yöneticisi: ${activeModUser?.username || 'Ömer'}` : `🛡️ Moderatör Yetkili: ${activeModUser?.username || 'Moderatör'}`}
-            </span>
-          </div>
-        </div>
-
-          {/* SAĞ ÜST KÖŞE: Çıkış Yap + Yenile */}
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button
-              onClick={fetchReports}
-              style={{
-                padding: '10px 16px', borderRadius: '12px',
-                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-                color: '#fff', fontWeight: '700', fontSize: '0.85rem',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-            >
-              <RefreshCw size={16} /> Yenile
-            </button>
-            <button
-              onClick={handleLogoutPanel}
-              style={{
-                padding: '10px 16px', borderRadius: '12px',
-                background: 'rgba(255, 45, 85, 0.15)', border: '1px solid rgba(255, 45, 85, 0.4)',
-                color: '#ff6b8b', fontWeight: '800', fontSize: '0.85rem',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                transition: 'all 0.2s'
-              }}
-            >
-              🚪 Çıkış Yap
-            </button>
-          </div>
-        </div>
-
-        {/* İKİNCİ SATIR: yönetim butonları */}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {/* DENETİM GÜNLÜĞÜ (ADMİN İÇİN) */}
-          {isAdmin && (
-            <button
-              onClick={() => setShowModLogModal(true)}
-              style={{
-                padding: '10px 16px', borderRadius: '12px',
-                background: 'rgba(243, 156, 18, 0.15)', border: '1px solid rgba(243, 156, 18, 0.4)',
-                color: '#f39c12', fontWeight: '800', fontSize: '0.85rem',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-            >
-              📜 Denetim Günlüğü
-            </button>
-          )}
-
-          {/* SADECE SİSTEM YÖNETİCİSİ (ADMİN) İÇİN ÖZEL YETKİLER */}
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => { setShowWithdrawalModal(true); fetchWithdrawals(); }}
-                style={{
-                  padding: '10px 16px', borderRadius: '12px',
-                  background: pendingWithdrawalCount > 0 
-                    ? 'linear-gradient(135deg, rgba(46, 204, 113, 0.25), rgba(0, 242, 254, 0.2))' 
-                    : 'rgba(46, 204, 113, 0.15)',
-                  border: pendingWithdrawalCount > 0 ? '1.5px solid #2ecc71' : '1px solid rgba(46, 204, 113, 0.4)',
-                  color: '#2ecc71', fontWeight: '800', fontSize: '0.85rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                  boxShadow: pendingWithdrawalCount > 0 ? '0 0 15px rgba(46, 204, 113, 0.3)' : 'none',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <CreditCard size={16} /> 💸 Para Çekim Talepleri
-                {pendingWithdrawalCount > 0 && (
-                  <span style={{
-                    background: '#e74c3c', color: '#fff', fontSize: '0.72rem',
-                    padding: '2px 7px', borderRadius: '10px', fontWeight: '900',
-                    boxShadow: '0 2px 6px rgba(231, 76, 60, 0.6)'
-                  }}>
-                    {pendingWithdrawalCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => { setShowPaymentModal(true); fetchPaymentOrders(); }}
-                style={{
-                  padding: '10px 16px', borderRadius: '12px',
-                  background: pendingPaymentCount > 0 
-                    ? 'linear-gradient(135deg, rgba(255, 170, 0, 0.25), rgba(254, 218, 0, 0.2))' 
-                    : 'rgba(255, 170, 0, 0.15)',
-                  border: pendingPaymentCount > 0 ? '1.5px solid #ffaa00' : '1px solid rgba(255, 170, 0, 0.4)',
-                  color: '#ffaa00', fontWeight: '800', fontSize: '0.85rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                  boxShadow: pendingPaymentCount > 0 ? '0 0 15px rgba(255, 170, 0, 0.3)' : 'none',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                🪙 Altın Ödemeleri
-                {pendingPaymentCount > 0 && (
-                  <span style={{
-                    background: '#e74c3c', color: '#fff', fontSize: '0.72rem',
-                    padding: '2px 7px', borderRadius: '10px', fontWeight: '900',
-                    boxShadow: '0 2px 6px rgba(231, 76, 60, 0.6)'
-                  }}>
-                    {pendingPaymentCount}
-                  </span>
-                )}
-              </button>
-
-              
-
-              <button
-                onClick={() => setShowAuditModal(true)}
-                style={{
-                  padding: '10px 16px', borderRadius: '12px',
-                  background: 'rgba(0, 242, 254, 0.15)', border: '1px solid #00f2fe',
-                  color: '#00f2fe', fontWeight: '800', fontSize: '0.85rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                  boxShadow: '0 0 15px rgba(0, 242, 254, 0.2)'
-                }}
-              >
-                <FileText size={16} /> 📊 Altın & Aktivite Raporu
-              </button>
-
-              <button
-                onClick={() => { setShowQuotaModal(true); handleFetchQuotaMetrics(); }}
-                style={{
-                  padding: '10px 16px', borderRadius: '12px',
-                  background: 'linear-gradient(135deg, rgba(155, 89, 182, 0.25), rgba(0, 242, 254, 0.25))',
-                  border: '1.5px solid #9b59b6',
-                  color: '#e056fd', fontWeight: '800', fontSize: '0.85rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                  boxShadow: '0 0 15px rgba(155, 89, 182, 0.3)'
-                }}
-              >
-                <Zap size={16} color="#e056fd" /> ⚡ Altyapı & Kota Takibi
-              </button>
-
-              <button
-                onClick={() => { setShowUsersModal(true); fetchAllUsers(); }}
-                style={{
-                  padding: '10px 16px', borderRadius: '12px',
-                  background: 'rgba(0, 242, 254, 0.18)', border: '1px solid #00f2fe',
-                  color: '#00f2fe', fontWeight: '700', fontSize: '0.85rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                }}
-              >
-                <Users size={16} /> 👥 Kayıtlı Kullanıcılar
-              </button>
-
-              <button
-                onClick={() => { setShowModModal(true); fetchModerators(); }}
-                style={{
-                  padding: '10px 16px', borderRadius: '12px',
-                  background: 'rgba(243, 156, 18, 0.2)', border: '1px solid #f39c12',
-                  color: '#f39c12', fontWeight: '700', fontSize: '0.85rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                }}
-              >
-                <ShieldCheck size={16} /> Moderatör Tanımla
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* SADECE SİSTEM YÖNETİCİSİ (ÖMER) İÇİN ÖZEL GERÇEK ANALİZ VE ÇEVRİMİÇİ KARTI */}
-      <LiveRealAnalyticsBanner isAdmin={isAdmin} />
-
-      {/* SADECE YÖNETİCİ: güncel kur ile ₺ fiyat referans kuru arasındaki fark uyarısı */}
-      <EconomyHealthBanner isAdmin={isAdmin} />
-
-      {/* AKSİYON BİLDİRİMİ */}
-      {actionMessage && (
+        {/* Brand / Logo Header */}
         <div style={{
-          maxWidth: '1200px', margin: '0 auto 16px auto',
-          padding: '14px 20px', borderRadius: '14px',
-          background: 'rgba(46, 204, 113, 0.2)', border: '1px solid #2ecc71',
-          color: '#2ecc71', fontWeight: '700', fontSize: '0.9rem'
+          padding: '18px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: sidebarCollapsed ? 'center' : 'space-between',
+          borderBottom: `1px solid ${theme.border}`
         }}>
-          {actionMessage}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '38px', height: '38px', borderRadius: '10px',
+              background: isLight ? '#f1f5f9' : '#161928',
+              border: `1px solid ${theme.borderLight}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <ShieldCheck size={20} color={isLight ? '#0284c7' : '#cbd5e1'} />
+            </div>
+            {!sidebarCollapsed && (
+              <div>
+                <div style={{ fontSize: '0.98rem', fontWeight: '800', letterSpacing: '-0.3px', color: theme.textPrimary }}>
+                  PYNGOO
+                </div>
+                <div style={{ fontSize: '0.64rem', color: theme.textMuted, fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                  Yönetim Paneli
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            style={{
+              background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${theme.border}`,
+              color: theme.textSecondary,
+              borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+            title={sidebarCollapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
+          >
+            {sidebarCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          </button>
         </div>
-      )}
 
-      {/* FİLTRELEME BUTONLARI */}
-      <div style={{ maxWidth: '1200px', margin: '0 auto 20px auto', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {/* Menü Linkleri */}
+        <nav style={{ flex: 1, padding: '14px 8px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
           {[
-            { key: 'pending', label: 'Bekleyenler', count: reports.filter(r => r.status === 'pending').length },
-            { key: 'banned', label: 'Yasaklananlar (Ban)', count: reports.filter(r => r.status === 'banned').length },
-            { key: 'dismissed', label: 'Asılsız / Masum', count: reports.filter(r => r.status === 'dismissed').length },
-            { key: 'resolved', label: 'Kapatılanlar', count: reports.filter(r => r.status === 'resolved').length },
-            { key: 'all', label: 'Tümü', count: reports.length }
-          ].map((btn) => (
+            { id: 'dashboard', label: 'Genel Bakış', icon: Activity, badge: null },
+            { id: 'reports', label: 'Şikayet Masası', icon: ShieldAlert, badge: pendingReportCount, isDangerBadge: true },
+            { id: 'users', label: 'Kullanıcı CRM', icon: Users, badge: null },
+            { id: 'payments', label: 'Altın Siparişleri', icon: CreditCard, badge: pendingPaymentCount },
+            { id: 'withdrawals', label: 'Para Çekimleri', icon: DollarSign, badge: pendingWithdrawalCount },
+            { id: 'live_rooms', label: 'Canlı Odalar', icon: Radio, badge: liveRooms.length },
+            { id: 'broadcast', label: 'Sistem Duyuru', icon: Send, badge: null },
+            { id: 'infra', label: 'Altyapı & Kota', icon: Cpu, badge: null },
+            { id: 'audit', label: 'Hesap Ekstresi', icon: FileText, badge: null },
+            { id: 'staff', label: 'Personel & Günlük', icon: Award, badge: null }
+          ].map(tab => {
+            const IconComponent = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: sidebarCollapsed ? 'center' : 'space-between',
+                  gap: '10px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  background: isActive ? (isLight ? '#f1f5f9' : 'rgba(255, 255, 255, 0.08)') : 'transparent',
+                  border: isActive ? `1px solid ${theme.borderLight}` : '1px solid transparent',
+                  color: isActive ? theme.textPrimary : theme.textSecondary,
+                  cursor: 'pointer',
+                  fontWeight: isActive ? '700' : '500',
+                  fontSize: '0.84rem',
+                  transition: 'background 0.12s ease, color 0.12s ease'
+                }}
+                title={sidebarCollapsed ? tab.label : undefined}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <IconComponent size={18} color={isActive ? (isLight ? '#0284c7' : '#ffffff') : theme.textMuted} />
+                  {!sidebarCollapsed && <span>{tab.label}</span>}
+                </div>
+                {!sidebarCollapsed && tab.badge !== null && tab.badge > 0 && (
+                  <span style={{
+                    background: tab.isDangerBadge ? '#ef4444' : (isLight ? '#e2e8f0' : '#1e2335'),
+                    color: tab.isDangerBadge ? '#ffffff' : theme.textPrimary,
+                    border: tab.isDangerBadge ? 'none' : `1px solid ${theme.border}`,
+                    fontWeight: '700',
+                    fontSize: '0.7rem',
+                    padding: '2px 7px',
+                    borderRadius: '6px'
+                  }}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Alt Profil & Çıkış Kartı */}
+        <div style={{
+          padding: '12px 10px',
+          borderTop: `1px solid ${theme.border}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
+          {!sidebarCollapsed && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 4px' }}>
+              <div style={{
+                width: '32px', height: '32px', borderRadius: '8px',
+                background: isLight ? '#f1f5f9' : '#161928',
+                border: `1px solid ${theme.borderLight}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Lock size={15} color={theme.textSecondary} />
+              </div>
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: theme.textPrimary }}>
+                  {activeModUser?.username || 'Yönetici'}
+                </div>
+                <div style={{ fontSize: '0.66rem', color: theme.textMuted, fontWeight: '600' }}>
+                  {isSuperAdmin ? 'Süper Admin' : 'Moderatör'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleLogoutPanel}
+            style={{
+              padding: '8px 10px',
+              borderRadius: '8px',
+              background: isLight ? '#f8fafc' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${theme.border}`,
+              color: theme.textSecondary,
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.78rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <LogOut size={14} /> {!sidebarCollapsed && 'Oturumu Kapat'}
+          </button>
+        </div>
+      </aside>
+
+      {/* ========================================== */}
+      {/* SAĞ ÇALIŞMA ALANI                          */}
+      {/* ========================================== */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden' }}>
+        
+        {/* Üst Header Bar */}
+        <header style={{
+          padding: '14px 24px',
+          background: isLight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(12, 13, 21, 0.85)',
+          borderBottom: `1px solid ${theme.border}`,
+          backdropFilter: 'blur(20px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          position: 'sticky',
+          top: 0,
+          zIndex: 40
+        }}>
+          <div>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: '800', margin: 0, color: theme.textPrimary }}>
+              {activeTab === 'dashboard' && 'Genel Bakış'}
+              {activeTab === 'reports' && 'Şikayet Masası & Moderasyon'}
+              {activeTab === 'users' && 'Kullanıcı Yönetimi (CRM)'}
+              {activeTab === 'payments' && 'Altın Siparişleri'}
+              {activeTab === 'withdrawals' && 'Para Çekim Talepleri'}
+              {activeTab === 'live_rooms' && 'Canlı Odalar'}
+              {activeTab === 'broadcast' && 'Sistem Duyuruları'}
+              {activeTab === 'infra' && 'Altyapı & Kota Metrikleri'}
+              {activeTab === 'audit' && 'Kullanıcı Hesap Ekstresi'}
+              {activeTab === 'staff' && 'Personel & Denetim Günlüğü'}
+            </h2>
+            <div style={{ fontSize: '0.74rem', color: theme.textMuted, marginTop: '2px' }}>
+              Pyngoo Realtime Platform Denetim Sistemi
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Canlı Bağlantı Durumu */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '5px 10px', borderRadius: '6px',
+              background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',
+              fontSize: '0.72rem', color: '#10b981', fontWeight: '700'
+            }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+              CANLI
+            </div>
+
+            {/* Tema Değiştirici (Dark / Light) */}
             <button
-              key={btn.key}
-              onClick={() => setFilter(btn.key as any)}
+              onClick={toggleTheme}
               style={{
-                padding: '8px 18px', borderRadius: '16px',
-                border: filter === btn.key ? '2px solid #00f2fe' : '1px solid rgba(255,255,255,0.1)',
-                background: filter === btn.key ? 'rgba(0, 242, 254, 0.2)' : 'rgba(255,255,255,0.04)',
-                color: filter === btn.key ? '#00f2fe' : 'rgba(255,255,255,0.7)',
-                fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer'
+                padding: '7px 12px', borderRadius: '6px',
+                background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${theme.borderLight}`,
+                color: theme.textPrimary, fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px',
+                boxShadow: theme.shadow
+              }}
+              title={isLight ? 'Karanlık Moda Geç' : 'Aydınlık Moda Geç'}
+            >
+              {isLight ? <Moon size={13} /> : <Sun size={13} />}
+              <span>{isLight ? 'Koyu Mod' : 'Açık Mod'}</span>
+            </button>
+
+            {/* Yenile Butonu */}
+            <button
+              onClick={refreshAllData}
+              style={{
+                padding: '7px 12px', borderRadius: '6px',
+                background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${theme.borderLight}`,
+                color: theme.textPrimary, fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px'
               }}
             >
-              {btn.label} ({btn.count})
+              <RefreshCw size={13} /> Yenile
             </button>
-          ))}
-        </div>
-
-        {isAdmin && reports.length > 0 && (
-          <button
-            onClick={handleClearAllReports}
-            title="Tüm şikayet kayıtlarını kalıcı olarak temizle"
-            style={{
-              padding: '8px 14px', borderRadius: '14px',
-              background: 'rgba(255, 45, 85, 0.15)', border: '1px solid rgba(255, 45, 85, 0.4)',
-              color: '#ff2d55', fontWeight: '700', fontSize: '0.82rem',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-            }}
-          >
-            <Trash2 size={14} /> Tüm Kayıtları Temizle
-          </button>
-        )}
-      </div>
-
-      {/* ŞİKAYET LİSTESİ */}
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'rgba(255,255,255,0.5)' }}>
-            Şikayetler yükleniyor...
           </div>
-        ) : filteredReports.length === 0 ? (
+        </header>
+
+        {/* Canlı Bildirim / Toast Çubuğu */}
+        {actionMessage && (
           <div style={{
-            textAlign: 'center', padding: '60px 20px',
-            background: 'rgba(255,255,255,0.02)', borderRadius: '20px',
-            border: '1px solid rgba(255,255,255,0.06)'
+            margin: '14px 24px 0 24px',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            background: isLight ? '#f1f5f9' : '#141726',
+            border: `1px solid ${theme.border}`,
+            color: theme.textPrimary,
+            fontWeight: '600',
+            fontSize: '0.84rem'
           }}>
-            <CheckCircle size={48} color="#2ecc71" style={{ marginBottom: '14px', opacity: 0.8 }} />
-            <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>Bu filtrede şikayet bulunmuyor</h3>
-            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
-              Harika! Şu an çözülmeyi bekleyen herhangi bir şikayet yok.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {filteredReports.map((report) => (
-              <div
-                key={report.id}
-                style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: report.status === 'pending' ? '1px solid rgba(255, 45, 85, 0.4)' : '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '18px',
-                  padding: '18px 22px',
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '18px',
-                  boxShadow: report.status === 'pending' ? '0 4px 20px rgba(255,45,85,0.1)' : 'none'
-                }}
-              >
-                {/* Sol: Bilgiler */}
-                <div style={{ flex: '1 1 280px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                    <span style={{
-                      padding: '4px 10px', borderRadius: '10px',
-                      background: 'rgba(255, 45, 85, 0.2)', color: '#ff2d55',
-                      fontWeight: '800', fontSize: '0.75rem', border: '1px solid rgba(255,45,85,0.4)'
-                    }}>
-                      {report.category || '⚠️ Genel Şikayet'}
-                    </span>
-
-                    <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
-                      {new Date(report.created_at).toLocaleString('tr-TR')}
-                    </span>
-
-                    {report.status === 'banned' && (
-                      <span style={{ fontSize: '0.75rem', color: '#ff2d55', fontWeight: '700' }}>
-                        ● YASAKLANDI
-                      </span>
-                    )}
-
-                    {report.status === 'dismissed' && (
-                      <span style={{ fontSize: '0.75rem', color: '#aaa', fontWeight: '700' }}>
-                        ● ASILSIZ / TEMİZ
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '6px' }}>
-                    🎯 Şikayet Edilen: <span style={{ color: '#00f2fe' }}>{report.reported_name || 'Kullanıcı'}</span>
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleOpenAuditForUser(report.reported_name || report.reported_user_id)}
-                        title="Bu kullanıcının altın ve harcama ekstresini incele"
-                        style={{
-                          marginLeft: '10px', padding: '3px 8px', borderRadius: '8px',
-                          background: 'rgba(0, 242, 254, 0.15)', border: '1px solid rgba(0, 242, 254, 0.4)',
-                          color: '#00f2fe', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer'
-                        }}
-                      >
-                        📊 Ekstre
-                      </button>
-                    )}
-                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginLeft: '8px' }}>
-                      (ID: {report.reported_user_id.slice(0, 8)})
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
-                    👤 Şikayet Eden: {report.reporter_name || 'Kullanıcı'} (ID: {report.reporter_id.slice(0, 8)})
-                  </div>
-
-                  {report.reason && (
-                    <div style={{
-                      padding: '10px 14px', borderRadius: '12px',
-                      background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.06)',
-                      fontSize: '0.85rem', color: '#ffc107', fontStyle: 'italic'
-                    }}>
-                      💬 Açıklama: "{report.reason}"
-                    </div>
-                  )}
-                </div>
-
-                {/* Orta: Kanıt Görseli (Snapshot) */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  {report.snapshot_data ? (
-                    <div 
-                      onClick={() => setPreviewImage(report.snapshot_data!)}
-                      style={{
-                        cursor: 'pointer',
-                        position: 'relative',
-                        borderRadius: '14px',
-                        overflow: 'hidden',
-                        border: '2px solid rgba(255, 45, 85, 0.5)',
-                        width: '104px',
-                        height: '84px',
-                        background: '#000',
-                        boxShadow: '0 4px 15px rgba(255,45,85,0.25)',
-                        transition: 'transform 0.2s'
-                      }}
-                      title="Şikayet anındaki görüntüyü büyütmek için tıkla"
-                    >
-                      <img 
-                        src={report.snapshot_data} 
-                        alt="Kanıt Karesi" 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <div style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0,
-                        background: 'rgba(0,0,0,0.75)', color: '#ff2d55',
-                        fontSize: '0.65rem', fontWeight: '800', textAlign: 'center',
-                        padding: '2px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px'
-                      }}>
-                        <Eye size={11} /> İNCELE
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{
-                      width: '104px', height: '84px', borderRadius: '14px',
-                      background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.12)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                      color: 'rgba(255,255,255,0.4)', fontSize: '0.68rem', textAlign: 'center', padding: '6px'
-                    }}>
-                      <Camera size={18} style={{ opacity: 0.5, marginBottom: '4px' }} />
-                      <span>Görsel Kanıt Yok</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Sağ: Aksiyon Butonları */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {report.status !== 'banned' && (
-                    <button
-                      onClick={() => handleBanUser(report)}
-                      style={{
-                        padding: '10px 16px', borderRadius: '14px',
-                        background: '#ff2d55', border: 'none',
-                        color: '#fff', fontWeight: '800', fontSize: '0.85rem',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                      }}
-                    >
-                      <UserX size={16} /> Yasakla (Ban)
-                    </button>
-                  )}
-
-                  {report.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => handleDismissReport(report.id)}
-                        style={{
-                          padding: '10px 14px', borderRadius: '14px',
-                          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
-                          color: '#ddd', fontWeight: '700', fontSize: '0.85rem',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                        }}
-                        title="Kanıtta ihlal yoksa şikayeti asılsız olarak kapat"
-                      >
-                        <ThumbsDown size={15} /> Asılsız
-                      </button>
-
-                      <button
-                        onClick={() => handleResolveReport(report.id)}
-                        style={{
-                          padding: '10px 16px', borderRadius: '14px',
-                          background: 'rgba(46, 204, 113, 0.2)', border: '1px solid #2ecc71',
-                          color: '#2ecc71', fontWeight: '700', fontSize: '0.85rem',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                        }}
-                      >
-                        <CheckCircle size={16} /> Çözüldü
-                      </button>
-                    </>
-                  )}
-
-                  {isAdmin && (
-                    <button
-                      onClick={() => handleDeleteReport(report.id)}
-                      style={{
-                        padding: '10px 12px', borderRadius: '14px',
-                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'rgba(255,255,255,0.6)', cursor: 'pointer'
-                      }}
-                      title="Kaydı Sil"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+            {actionMessage}
           </div>
         )}
-      </div>
 
-      {/* MODERATÖR YÖNETİMİ & TANIMLAMA MODALI (SADECE ADMİN) */}
-      {isAdmin && showModModal && (
-        <div
-          onClick={() => setShowModModal(false)}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: '20px'
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'linear-gradient(180deg, #181c2f 0%, #0d0f1b 100%)',
-              borderRadius: '24px', border: '1px solid rgba(243, 156, 18, 0.4)',
-              width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto',
-              padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.8)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ShieldCheck size={26} color="#f39c12" />
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#fff' }}>
-                  Moderatör Tanımlama & Yönetimi
-                </h2>
-              </div>
-              <button
-                onClick={() => setShowModModal(false)}
-                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                ✕
-              </button>
-            </div>
+        {/* ========================================== */}
+        {/* SEKME İÇERİKLERİ                           */}
+        {/* ========================================== */}
+        <div style={{ padding: '20px 24px', flex: 1 }}>
 
-            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', marginBottom: '20px' }}>
-              Burada yetki verdiğiniz kullanıcıların profillerinde otomatik olarak <b>Moderatör & Yönetim Paneli</b> menüsü açılır. Yetkisi olmayan normal kullanıcılar bu menüyü asla göremez.
-            </p>
-
-            {/* Moderatör Yetkilendirme Formu (şifre yok: kullanıcı kendi hesabıyla girer) */}
-            <form onSubmit={handleAssignModerator} style={{ marginBottom: '20px', background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(243, 156, 18, 0.2)' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', marginBottom: '10px', color: '#f39c12' }}>
-                Yeni Moderatör Tanımla (kullanıcı kendi hesabının şifresiyle girer):
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <input
-                  type="text"
-                  placeholder="Moderatör olacak kullanıcının kullanıcı adı"
-                  value={modUsernameInput}
-                  onChange={(e) => setModUsernameInput(e.target.value)}
-                  style={{
-                    width: '100%', padding: '12px 16px', borderRadius: '12px',
-                    background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff', fontSize: '0.9rem', outline: 'none'
-                  }}
-                />
-                <button
-                  type="submit"
-                  style={{
-                    width: '100%', padding: '12px 20px', borderRadius: '12px',
-                    background: 'linear-gradient(135deg, #f39c12 0%, #d35400 100%)',
-                    border: 'none', color: '#fff', fontWeight: '800', fontSize: '0.9rem',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                  }}
-                >
-                  <UserCheck size={18} /> Moderatör Yetkilendir
-                </button>
-              </div>
-            </form>
-
-            {modSuccessMsg && (
-              <div style={{ padding: '12px 16px', borderRadius: '12px', background: 'rgba(46, 204, 113, 0.2)', border: '1px solid #2ecc71', color: '#2ecc71', fontSize: '0.85rem', fontWeight: '700', marginBottom: '16px' }}>
-                {modSuccessMsg}
-              </div>
-            )}
-
-            {modErrorMsg && (
-              <div style={{ padding: '12px 16px', borderRadius: '12px', background: 'rgba(255, 45, 85, 0.2)', border: '1px solid #ff2d55', color: '#ff2d55', fontSize: '0.85rem', fontWeight: '700', marginBottom: '16px' }}>
-                {modErrorMsg}
-              </div>
-            )}
-
-            {/* Mevcut Moderatörler Listesi */}
-            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#fff', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={18} color="#f39c12" /> Mevcut Moderatörler ({moderatorsList.length})
-            </h3>
-
-            {loadingMods ? (
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Yükleniyor...</p>
-            ) : moderatorsList.length === 0 ? (
-              <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', textAlign: 'center' }}>
-                Henüz kayıtlı başka moderatör bulunmuyor. Yukarıdaki formdan istediğiniz kullanıcı adına moderatörlük tanımlayabilirsiniz.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '220px', overflowY: 'auto' }}>
-                {moderatorsList.map((m: any) => {
-                  const isOwner = m.role === 'admin';
-                  return (
-                    <div
-                      key={m.id || m.display_name}
-                      style={{
-                        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                        padding: '12px 14px', borderRadius: '12px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontWeight: '800', fontSize: '0.9rem', color: '#fff' }}>
-                            👤 {m.display_name || 'İsimsiz'}
-                          </span>
-                          <span style={{ fontSize: '0.72rem', color: isOwner ? '#f39c12' : '#00f2fe', background: isOwner ? 'rgba(243, 156, 18, 0.15)' : 'rgba(0, 242, 254, 0.15)', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
-                            {isOwner ? '👑 Admin' : '🛡️ Moderatör'}
-                          </span>
-                        </div>
-                      </div>
-                      {isOmer && !isOwner && (
-                        <button
-                          onClick={() => handleRevokeModerator(m.id, m.display_name)}
-                          style={{
-                            background: 'rgba(255, 45, 85, 0.15)', border: '1px solid rgba(255, 45, 85, 0.3)',
-                            color: '#ff2d55', padding: '6px 12px', borderRadius: '8px',
-                            fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer'
-                          }}
-                        >
-                          Yetkiyi Kaldır
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => setShowModModal(false)}
-                style={{
-                  padding: '10px 20px', borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.1)', border: 'none',
-                  color: '#fff', cursor: 'pointer', fontWeight: '700'
-                }}
-              >
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* KANIT FOTOĞRAFI TAM EKRAN İNCELEME MODALI */}
-      {previewImage && (
-        <div 
-          onClick={() => setPreviewImage(null)}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            zIndex: 10000, padding: '20px'
-          }}
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: '92%', maxHeight: '88vh', width: '560px',
-              background: '#121422', borderRadius: '24px',
-              overflow: 'hidden', border: '1.5px solid rgba(255,45,85,0.5)',
-              boxShadow: '0 30px 70px rgba(0,0,0,0.9)',
-              display: 'flex', flexDirection: 'column'
-            }}
-          >
-            <div style={{
-              padding: '16px 22px', background: 'rgba(255,255,255,0.04)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              borderBottom: '1px solid rgba(255,255,255,0.08)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '1.1rem' }}>📸</span>
-                <span style={{ fontWeight: '800', color: '#ff2d55', fontSize: '0.95rem' }}>
-                  Şikayet Anı Kanıt Fotoğrafı
-                </span>
-              </div>
-              <button 
-                onClick={() => setPreviewImage(null)}
-                style={{
-                  background: 'rgba(255,255,255,0.1)', border: 'none',
-                  color: '#fff', cursor: 'pointer', borderRadius: '50%',
-                  width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 'bold'
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ padding: '16px', display: 'flex', justifyContent: 'center', background: '#05060d' }}>
-              <img 
-                src={previewImage} 
-                alt="Kanıt İnceleme" 
-                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px' }} 
-              />
-            </div>
-
-            <div style={{
-              padding: '14px 22px', background: 'rgba(255,255,255,0.02)',
-              fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)', textAlign: 'center',
-              borderTop: '1px solid rgba(255,255,255,0.06)'
-            }}>
-              🔍 Bu görüntü, kullanıcı "Şikayet Et" butonuna bastığı salisede karşı tarafın kamerasından otomatik yakalanmıştır.
-            </div>
-          </div>
-        </div>
-      )}
-
- 
-      {/* ======================================================== */}
-      {/* KULLANICI HESAP EKSTRESİ & ALTIN DENETİM RAPORU MODALI (SADECE ADMİN) */}
-      {/* ======================================================== */}
-      {isAdmin && showAuditModal && (
-        <div 
-          onClick={() => setShowAuditModal(false)}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: '20px'
-          }}
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'linear-gradient(180deg, #13172b 0%, #0a0b16 100%)',
-              borderRadius: '24px', border: '1px solid rgba(0, 242, 254, 0.35)',
-              width: '100%', maxWidth: '960px', maxHeight: '92vh', overflowY: 'auto',
-              padding: '28px', boxShadow: '0 25px 70px rgba(0,0,0,0.85)',
-              color: '#fff'
-            }}
-          >
-            {/* Modal Başlığı */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* ------------------------------------------ */}
+          {/* TAB 1: DASHBOARD (GENEL BAKIŞ)            */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'dashboard' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              
+              {/* Canlı KPI Sayaç Kartları */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                
+                {/* Toplam Kullanıcı */}
                 <div style={{
-                  width: '44px', height: '44px', borderRadius: '12px',
-                  background: 'rgba(0, 242, 254, 0.15)', border: '1px solid #00f2fe',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  background: theme.cardBg, padding: '18px', borderRadius: '12px',
+                  border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: '6px',
+                  boxShadow: theme.shadow
                 }}>
-                  <FileText size={24} color="#00f2fe" />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: theme.textSecondary, fontSize: '0.78rem', fontWeight: '600' }}>
+                    <span>Toplam Kullanıcı</span>
+                    <Users size={16} color={theme.textMuted} />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: theme.textPrimary }}>
+                    {allUsersList.length > 0 ? allUsersList.length.toLocaleString() : '...'}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    {allUsersList.filter(u => u.gender === 'kadin').length} Kadın • {allUsersList.filter(u => u.gender === 'erkek').length} Erkek
+                  </div>
                 </div>
-                <div>
-                  <h2 style={{ fontSize: '1.3rem', fontWeight: '800', margin: 0, color: '#fff' }}>
-                    Kullanıcı Hesap Ekstresi & Altın Denetim Raporu
-                  </h2>
-                  <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>
-                    Kullanıcı itirazları için altın yükleme, harcama, özel arama ve hediye logları
-                  </p>
-                </div>
-              </div>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                {auditUser && (
-                  <button
-                    onClick={() => window.print()}
-                    style={{
-                      background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
-                      color: '#fff', padding: '8px 14px', borderRadius: '10px',
-                      fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '6px'
-                    }}
-                  >
-                    <Printer size={15} /> Yazdır
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowAuditModal(false)}
+                {/* Bekleyen Şikayetler */}
+                <div 
+                  onClick={() => setActiveTab('reports')}
                   style={{
-                    background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
-                    width: '34px', height: '34px', borderRadius: '50%', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem'
+                    background: theme.cardBg,
+                    padding: '18px', borderRadius: '12px',
+                    border: pendingReportCount > 0 ? '1px solid rgba(239, 68, 68, 0.4)' : `1px solid ${theme.border}`,
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '6px',
+                    boxShadow: theme.shadow
                   }}
                 >
-                  ✕
-                </button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: pendingReportCount > 0 ? '#ef4444' : theme.textSecondary, fontSize: '0.78rem', fontWeight: '600' }}>
+                    <span>Bekleyen Şikayetler</span>
+                    <ShieldAlert size={16} color={pendingReportCount > 0 ? '#ef4444' : theme.textMuted} />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: pendingReportCount > 0 ? '#ef4444' : theme.textPrimary }}>
+                    {pendingReportCount}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    İnceleme bekleyen şikayetler
+                  </div>
+                </div>
+
+                {/* Bekleyen Para Çekimleri */}
+                <div 
+                  onClick={() => setActiveTab('withdrawals')}
+                  style={{
+                    background: theme.cardBg,
+                    padding: '18px', borderRadius: '12px',
+                    border: pendingWithdrawalCount > 0 ? '1px solid rgba(245, 158, 11, 0.4)' : `1px solid ${theme.border}`,
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '6px',
+                    boxShadow: theme.shadow
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: pendingWithdrawalCount > 0 ? '#f59e0b' : theme.textSecondary, fontSize: '0.78rem', fontWeight: '600' }}>
+                    <span>Bekleyen Çekimler</span>
+                    <DollarSign size={16} color={pendingWithdrawalCount > 0 ? '#f59e0b' : theme.textMuted} />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: pendingWithdrawalCount > 0 ? '#f59e0b' : theme.textPrimary }}>
+                    {pendingWithdrawalCount}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    {withdrawalSums(withdrawals.filter(w => w.status === 'pending'))}
+                  </div>
+                </div>
+
+                {/* Bekleyen Altın Siparişleri */}
+                <div 
+                  onClick={() => setActiveTab('payments')}
+                  style={{
+                    background: theme.cardBg,
+                    padding: '18px', borderRadius: '12px',
+                    border: pendingPaymentCount > 0 ? '1px solid rgba(16, 185, 129, 0.4)' : `1px solid ${theme.border}`,
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '6px',
+                    boxShadow: theme.shadow
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: pendingPaymentCount > 0 ? '#10b981' : theme.textSecondary, fontSize: '0.78rem', fontWeight: '600' }}>
+                    <span>Altın Siparişleri</span>
+                    <CreditCard size={16} color={pendingPaymentCount > 0 ? '#10b981' : theme.textMuted} />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: pendingPaymentCount > 0 ? '#10b981' : theme.textPrimary }}>
+                    {pendingPaymentCount}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    Havale/EFT & Kripto Onayı
+                  </div>
+                </div>
+
+                {/* Canlı Yayınlar / Odalar */}
+                <div 
+                  onClick={() => setActiveTab('live_rooms')}
+                  style={{
+                    background: theme.cardBg, padding: '18px', borderRadius: '12px',
+                    border: `1px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '6px',
+                    boxShadow: theme.shadow
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: theme.textSecondary, fontSize: '0.78rem', fontWeight: '600' }}>
+                    <span>Aktif Canlı Odalar</span>
+                    <Radio size={16} color={theme.textMuted} />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: theme.textPrimary }}>
+                    {liveRooms.length}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    {waitingRoomCount} eşleşme bekleyen kullanıcı
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Arama ve Filtreleme Bölümü */}
-            <div style={{
-              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '18px', padding: '18px', marginBottom: '22px'
-            }}>
-              <form onSubmit={(e) => { e.preventDefault(); handleFetchAuditReport(); }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
-                  {/* Kullanıcı Adı / UUID Input */}
-                  <div style={{ flex: '1 1 240px' }}>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#00f2fe', marginBottom: '6px' }}>
-                      👤 Kullanıcı Adı veya UUID
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="text"
-                        placeholder="Örn: ahmet veya 7e34b8c1-..."
-                        value={auditQuery}
-                        onChange={(e) => setAuditQuery(e.target.value)}
-                        style={{
-                          width: '100%', padding: '10px 14px 10px 36px', borderRadius: '12px',
-                          background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)',
-                          color: '#fff', fontSize: '0.9rem', outline: 'none'
-                        }}
-                      />
-                      <Search size={16} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                    </div>
-                  </div>
+              {/* Canlı Kullanıcı & Ekonomi Takip Bannerları */}
+              <LiveRealAnalyticsBanner isAdmin={isAdmin} isLight={theme.isLight} />
+              <EconomyHealthBanner isAdmin={isAdmin} isLight={theme.isLight} />
 
-                  {/* Başlangıç Tarihi */}
-                  <div style={{ flex: '1 1 140px' }}>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: 'rgba(255,255,255,0.8)', marginBottom: '6px' }}>
-                      📅 Başlangıç Tarihi
-                    </label>
-                    <input
-                      type="date"
-                      value={auditStartDate}
-                      onChange={(e) => setAuditStartDate(e.target.value)}
-                      style={{
-                        width: '100%', padding: '9px 12px', borderRadius: '12px',
-                        background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)',
-                        color: '#fff', fontSize: '0.85rem', outline: 'none'
-                      }}
-                    />
-                  </div>
-
-                  {/* Bitiş Tarihi */}
-                  <div style={{ flex: '1 1 140px' }}>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: 'rgba(255,255,255,0.8)', marginBottom: '6px' }}>
-                      📅 Bitiş Tarihi
-                    </label>
-                    <input
-                      type="date"
-                      value={auditEndDate}
-                      onChange={(e) => setAuditEndDate(e.target.value)}
-                      style={{
-                        width: '100%', padding: '9px 12px', borderRadius: '12px',
-                        background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)',
-                        color: '#fff', fontSize: '0.85rem', outline: 'none'
-                      }}
-                    />
-                  </div>
-
-                  {/* Sorgula Butonu */}
-                  <button
-                    type="submit"
-                    disabled={auditLoading}
-                    style={{
-                      padding: '10px 22px', borderRadius: '12px',
-                      background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                      border: 'none', color: '#000', fontWeight: '800', fontSize: '0.9rem',
-                      cursor: auditLoading ? 'not-allowed' : 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '8px', height: '42px'
-                    }}
-                  >
-                    {auditLoading ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
-                    {auditLoading ? 'Sorgulanıyor...' : 'Raporu Getir'}
-                  </button>
-                </div>
-
-                {/* Hızlı Tarih Seçim Butonları */}
-                <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginRight: '4px' }}>
-                    Hızlı Filtre:
-                  </span>
-                  {[
-                    { key: 'today', label: 'Bugün' },
-                    { key: 'week', label: 'Son 7 Gün' },
-                    { key: 'month', label: 'Son 30 Gün' },
-                    { key: 'all', label: 'Tüm Zamanlar' }
-                  ].map(p => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      onClick={() => handleAuditDatePreset(p.key as any)}
-                      style={{
-                        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-                        color: 'rgba(255,255,255,0.8)', padding: '4px 10px', borderRadius: '8px',
-                        fontSize: '0.72rem', cursor: 'pointer'
-                      }}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </form>
-            </div>
-
-            {/* HATA MESAJI */}
-            {auditError && (
+              {/* Hızlı İşlem Masası */}
               <div style={{
-                padding: '14px 18px', borderRadius: '14px',
-                background: 'rgba(255, 45, 85, 0.15)', border: '1px solid #ff2d55',
-                color: '#ff2d55', fontSize: '0.88rem', fontWeight: '700', marginBottom: '20px'
+                background: theme.cardBg, padding: '18px 20px', borderRadius: '12px',
+                border: `1px solid ${theme.border}`,
+                boxShadow: theme.shadow
               }}>
-                ⚠️ {auditError}
-              </div>
-            )}
-
-            {/* KULLANICI BULUNDUYSA DETAYLAR */}
-            {auditUser && (
-              <div>
-                {/* Kullanıcı Başlık & Bakiye Kartı */}
-                <div style={{
-                  background: 'rgba(0, 242, 254, 0.05)', border: '1px solid rgba(0, 242, 254, 0.25)',
-                  borderRadius: '18px', padding: '18px 22px', marginBottom: '20px',
-                  display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{
-                      width: '48px', height: '48px', borderRadius: '50%',
-                      background: auditUser.gender === 'kadin' ? 'rgba(255, 45, 85, 0.2)' : 'rgba(0, 242, 254, 0.2)',
-                      border: `2px solid ${auditUser.gender === 'kadin' ? '#ff2d55' : '#00f2fe'}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
-                    }}>
-                      {auditUser.gender === 'kadin' ? '👩' : '👨'}
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '800' }}>
-                          {auditUser.display_name}
-                        </h3>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '700',
-                          background: auditUser.gender === 'kadin' ? 'rgba(255,45,85,0.2)' : 'rgba(0,242,254,0.2)',
-                          color: auditUser.gender === 'kadin' ? '#ff2d55' : '#00f2fe'
-                        }}>
-                          {auditUser.gender === 'kadin' ? 'Kadın' : 'Erkek'}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.4)' }}>
-                        UUID: {auditUser.id}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Güncel Bakiye Kutuları */}
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <div style={{
-                      background: 'rgba(255, 215, 0, 0.12)', border: '1px solid rgba(255, 215, 0, 0.35)',
-                      borderRadius: '14px', padding: '10px 16px', textAlign: 'center'
-                    }}>
-                      <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', display: 'block' }}>Mevcut Altın</span>
-                      <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#ffd700' }}>
-                        🪙 {auditUser.total_gold || 0}
-                      </span>
-                    </div>
-
-                    <div style={{
-                      background: 'rgba(0, 242, 254, 0.12)', border: '1px solid rgba(0, 242, 254, 0.35)',
-                      borderRadius: '14px', padding: '10px 16px', textAlign: 'center'
-                    }}>
-                      <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', display: 'block' }}>Mevcut Elmas</span>
-                      <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#00f2fe' }}>
-                        💎 {auditUser.total_diamonds || 0}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dönem İstatistikleri Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                  <div style={{ background: 'rgba(46, 204, 113, 0.1)', border: '1px solid rgba(46, 204, 113, 0.3)', borderRadius: '14px', padding: '14px' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#2ecc71', fontWeight: '700', display: 'block' }}>🟢 Yüklenen / Kazanılan</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#2ecc71' }}>
-                      +{auditItems.filter(i => i.amount > 0).reduce((s, i) => s + i.amount, 0)} 🪙
-                    </span>
-                  </div>
-
-                  <div style={{ background: 'rgba(255, 45, 85, 0.1)', border: '1px solid rgba(255, 45, 85, 0.3)', borderRadius: '14px', padding: '14px' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#ff2d55', fontWeight: '700', display: 'block' }}>🔴 Harcanan Toplam</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#ff2d55' }}>
-                      -{auditItems.filter(i => i.amount < 0).reduce((s, i) => s + Math.abs(i.amount), 0)} 🪙
-                    </span>
-                  </div>
-
-                  <div style={{ background: 'rgba(155, 89, 182, 0.1)', border: '1px solid rgba(155, 89, 182, 0.3)', borderRadius: '14px', padding: '14px' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#9b59b6', fontWeight: '700', display: 'block' }}>📞 Özel Görüşmeler</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#fff' }}>
-                      {auditItems.filter(i => i.type === 'call_cost').length} <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>adet</span>
-                    </span>
-                  </div>
-
-                  <div style={{ background: 'rgba(243, 156, 18, 0.1)', border: '1px solid rgba(243, 156, 18, 0.3)', borderRadius: '14px', padding: '14px' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#f39c12', fontWeight: '700', display: 'block' }}>🎁 Gönderilen Hediyeler</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#fff' }}>
-                      {auditItems.filter(i => i.type === 'gift_sent').length} <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>adet</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Kullanıcıya İtiraz Yanıtı Gönderme / Kopyalama Çubuğu */}
-                <div style={{
-                  background: 'rgba(0, 242, 254, 0.08)', border: '1px solid #00f2fe',
-                  borderRadius: '16px', padding: '16px 20px', marginBottom: '22px',
-                  display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '14px'
-                }}>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', color: '#00f2fe' }}>
-                      📋 Müşteri İtiraz Yanıt Metni
-                    </h4>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)' }}>
-                      Kullanıcıya "Altınım kayboldu / çalındı" dediğinde gönderebileceğiniz şeffaf hesap döküm mesajı
-                    </p>
-                  </div>
-
+                <h3 style={{ fontSize: '0.9rem', fontWeight: '700', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px', color: theme.textPrimary }}>
+                  <Sparkles size={16} color={theme.textMuted} /> Hızlı İşlemler
+                </h3>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button
-                    onClick={handleCopyAuditStatement}
+                    onClick={() => setActiveTab('reports')}
                     style={{
-                      padding: '11px 20px', borderRadius: '12px',
-                      background: copySuccess ? 'rgba(46, 204, 113, 0.3)' : 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                      border: copySuccess ? '1.5px solid #2ecc71' : 'none',
-                      color: copySuccess ? '#2ecc71' : '#000',
-                      fontWeight: '800', fontSize: '0.88rem', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s'
+                      padding: '8px 14px', borderRadius: '8px',
+                      background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+                      color: '#ef4444', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer'
                     }}
                   >
-                    {copySuccess ? <Check size={18} /> : <Copy size={18} />}
-                    {copySuccess ? 'Metin Kopyalandı! ✅' : 'İtiraz Yanıtını Kopyala'}
+                    Şikayetleri İncele ({pendingReportCount})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('withdrawals')}
+                    style={{
+                      padding: '8px 14px', borderRadius: '8px',
+                      background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)',
+                      color: '#d97706', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer'
+                    }}
+                  >
+                    Çekim Taleplerini Gör ({pendingWithdrawalCount})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('payments')}
+                    style={{
+                      padding: '8px 14px', borderRadius: '8px',
+                      background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)',
+                      color: '#059669', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer'
+                    }}
+                  >
+                    Altın Siparişlerini Onayla ({pendingPaymentCount})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('broadcast')}
+                    style={{
+                      padding: '8px 14px', borderRadius: '8px',
+                      background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${theme.border}`,
+                      color: theme.textPrimary, fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer'
+                    }}
+                  >
+                    Sistem Duyurusu Yayınla
                   </button>
                 </div>
-
-                {/* AYRINTILI İŞLEM HAREKETLERİ TABLOSU */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Clock size={18} color="#00f2fe" />
-                      Hesap Hareketleri & Kullanım Tablosu ({auditItems.length} Kayıt)
-                    </h4>
-                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
-                      En yeni işlemler başta
-                    </span>
-                  </div>
-
-                  {auditItems.length === 0 ? (
-                    <div style={{
-                      textAlign: 'center', padding: '36px', borderRadius: '16px',
-                      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
-                      color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem'
-                    }}>
-                      Seçilen tarih aralığında bu kullanıcıya ait harcama veya altın kaydı bulunamadı.
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                        <thead>
-                          <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>
-                            <th style={{ padding: '12px 16px', fontWeight: '700' }}>Tarih & Saat</th>
-                            <th style={{ padding: '12px 16px', fontWeight: '700' }}>İşlem Türü</th>
-                            <th style={{ padding: '12px 16px', fontWeight: '700' }}>Muhatap / Hedef</th>
-                            <th style={{ padding: '12px 16px', fontWeight: '700' }}>Açıklama / Süre</th>
-                            <th style={{ padding: '12px 16px', fontWeight: '700', textAlign: 'right' }}>Miktar</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {auditItems.map((item, idx) => {
-                            const isPositive = item.amount > 0;
-                            return (
-                              <tr
-                                key={item.id || idx}
-                                style={{
-                                  borderBottom: '1px solid rgba(255,255,255,0.04)',
-                                  background: idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent'
-                                }}
-                              >
-                                <td style={{ padding: '12px 16px', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.7)' }}>
-                                  {new Date(item.createdAtStr).toLocaleString('tr-TR')}
-                                </td>
-                                <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                                  <span style={{
-                                    padding: '4px 10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700',
-                                    background: isPositive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(255, 45, 85, 0.15)',
-                                    color: isPositive ? '#2ecc71' : '#ff2d55',
-                                    border: isPositive ? '1px solid rgba(46, 204, 113, 0.3)' : '1px solid rgba(255, 45, 85, 0.3)'
-                                  }}>
-                                    {item.icon} {item.label}
-                                  </span>
-                                </td>
-                                <td style={{ padding: '12px 16px', fontWeight: '600', color: '#00f2fe' }}>
-                                  {item.partnerName}
-                                </td>
-                                <td style={{ padding: '12px 16px', color: 'rgba(255,255,255,0.85)' }}>
-                                  {item.details}
-                                </td>
-                                <td style={{
-                                  padding: '12px 16px', textAlign: 'right', fontWeight: '800',
-                                  fontSize: '0.95rem',
-                                  color: isPositive ? '#2ecc71' : '#ff2d55',
-                                  whiteSpace: 'nowrap'
-                                }}>
-                                  {isPositive ? `+${item.amount}` : item.amount} {item.type.includes('earning') || item.type === 'gift_received' ? '💎' : '🪙'}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Modal Alt Butonları */}
-            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
-              <button
-                type="button"
-                onClick={() => setShowAuditModal(false)}
-                style={{
-                  padding: '10px 22px', borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.1)', border: 'none',
-                  color: '#fff', cursor: 'pointer', fontWeight: '700'
-                }}
-              >
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {/* ======================================================== */}
-      {/* ALTYAPI & KOTA TAKİP MERKEZİ (SADECE ADMİN İÇİN)        */}
-      {/* ======================================================== */}
-      {isAdmin && showQuotaModal && (
-        <div 
-          onClick={() => setShowQuotaModal(false)}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: '20px'
-          }}
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'linear-gradient(180deg, #151228 0%, #0a0b16 100%)',
-              borderRadius: '24px', border: '1.5px solid rgba(155, 89, 182, 0.45)',
-              width: '100%', maxWidth: '980px', maxHeight: '92vh', overflowY: 'auto',
-              padding: '28px', boxShadow: '0 25px 70px rgba(0,0,0,0.9)',
-              color: '#fff'
-            }}
-          >
-            {/* Başlık ve Üst Çubuk */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '46px', height: '46px', borderRadius: '14px',
-                  background: 'rgba(155, 89, 182, 0.25)', border: '1.5px solid #9b59b6',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <Server size={24} color="#e056fd" />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h2 style={{ fontSize: '1.3rem', fontWeight: '800', margin: 0, color: '#fff' }}>
-                      Altyapı & Kota Takip Merkezi
-                    </h2>
-                    <span style={{
-                      padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800',
-                      background: 'rgba(224, 86, 253, 0.2)', color: '#e056fd', border: '1px solid #e056fd'
-                    }}>
-                      🔒 Sadece Ömer (Admin)
-                    </span>
-                  </div>
-                  <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>
-                    Supabase Veritabanı, Agora Ses/Video Kotaları ve Vercel Dağıtım Durumları
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <button
-                  onClick={handleFetchQuotaMetrics}
-                  disabled={quotaLoading}
-                  style={{
-                    padding: '8px 16px', borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                    border: 'none', color: '#000', fontWeight: '800', fontSize: '0.82rem',
-                    cursor: quotaLoading ? 'not-allowed' : 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '6px'
-                  }}
-                >
-                  <RefreshCw size={14} className={quotaLoading ? 'animate-spin' : ''} />
-                  {quotaLoading ? 'Sorgulanıyor...' : 'Canlı Sorgula'}
-                </button>
-
-                <button
-                  onClick={() => setShowQuotaModal(false)}
-                  style={{
-                    background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
-                    width: '34px', height: '34px', borderRadius: '50%', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem'
-                  }}
-                >
-                  ✕
-                </button>
               </div>
             </div>
+          )}
 
-            {quotaMetrics && (
-              <div>
-                {/* ALTYAPI KARTLARI: yalnızca ölçülebilen GERÇEK değerler gösterilir */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '16px', marginBottom: '22px' }}>
-
-                  {/* 1. AGORA */}
-                  <div style={{ background: 'rgba(0, 242, 254, 0.04)', border: '1.5px solid rgba(0, 242, 254, 0.35)', borderRadius: '20px', padding: '20px', minWidth: 0, boxSizing: 'border-box' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                      <span style={{ fontSize: '1.6rem' }}>📞</span>
-                      <div>
-                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#00f2fe' }}>Agora Görüşme Dakikaları</h3>
-                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>
-                          {quotaMetrics.agora.hasConsole ? 'Elle girilen Agora Console değeri' : 'Kendi kayıtlarımızdan (bu ay)'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>Kalan ücretsiz hak:</span>
-                      <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#2ecc71' }}>{quotaMetrics.agora.remainingMinutes.toLocaleString('tr-TR')} dk</span>
-                    </div>
-                    <div style={{ height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px' }}>
-                      <div style={{ height: '100%', width: `${Math.max(quotaMetrics.agora.totalMinutes > 0 ? 0.5 : 0, quotaMetrics.agora.percentUsed)}%`, background: '#00f2fe', transition: 'width 0.5s ease' }} />
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', marginBottom: '12px' }}>
-                      {quotaMetrics.agora.totalMinutes.toLocaleString('tr-TR')} / {quotaMetrics.agora.freeLimitMinutes.toLocaleString('tr-TR')} dk (%{quotaMetrics.agora.percentUsed})
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                      <div style={{ background: 'rgba(245, 166, 35, 0.08)', border: '1px solid rgba(245, 166, 35, 0.25)', borderRadius: '12px', padding: '8px 10px' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#f5a623', fontWeight: '700' }}>🎤 Sesli</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>{quotaMetrics.agora.voiceMinutes.toLocaleString('tr-TR')} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>dk</span></div>
-                      </div>
-                      <div style={{ background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.25)', borderRadius: '12px', padding: '8px 10px' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#00f2fe', fontWeight: '700' }}>🎥 Görüntülü</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#fff' }}>{quotaMetrics.agora.videoMinutes.toLocaleString('tr-TR')} <span style={{ fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>dk</span></div>
-                      </div>
-                    </div>
-
-                    <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.75)', lineHeight: '1.6', marginBottom: '10px' }}>
-                      Kayıtlı bağlantı sayısı: <b>{quotaMetrics.agora.sessions}</b><br />
-                      Liste fiyatıyla bu ayki tutar: <b>${quotaMetrics.agora.listCostUsd.toFixed(2)}</b> (ücretsiz dilim düşülmeden)<br />
-                      Ücretsiz dilim aşılırsa ödenecek: <b style={{ color: quotaMetrics.agora.overageCostUsd > 0 ? '#ff6b6b' : '#2ecc71' }}>${quotaMetrics.agora.overageCostUsd.toFixed(2)}</b>
-                    </div>
-
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', lineHeight: '1.55', marginBottom: '12px', overflowWrap: 'anywhere' }}>
-                      Dakikalar görüşmeye katılan <b>her kişi için ayrı</b> sayılır (Agora böyle faturalar). Bu kayıt{' '}
-                      {quotaMetrics.agora.since ? `${new Date(quotaMetrics.agora.since).toLocaleDateString('tr-TR')} tarihinde` : 'ilk görüşmeden'} başlar; öncesi ve sekme aniden kapanan görüşmeler dahil değildir. Kesin değer için Agora Console'a bakın.
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={agoraConsoleMinutes}
-                        onChange={(e) => setAgoraConsoleMinutes(e.target.value)}
-                        placeholder="Console'daki bu ay toplamı (dk)"
-                        style={{ flex: 1, minWidth: '150px', padding: '8px 10px', borderRadius: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveAgoraConsoleMinutes}
-                        style={{ padding: '8px 12px', borderRadius: '10px', background: 'linear-gradient(135deg, #00f2fe, #4facfe)', border: 'none', color: '#000', fontWeight: '800', fontSize: '0.78rem', cursor: 'pointer' }}
-                      >
-                        Kaydet
-                      </button>
-                    </div>
-                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', marginTop: '6px' }}>
-                      Boş bırakıp kaydederseniz kendi kayıtlarımız gösterilir. Konsol:{' '}
-                      <a href="https://console.agora.io/" target="_blank" rel="noopener noreferrer" style={{ color: '#00f2fe' }}>console.agora.io</a>
-                    </div>
-                  </div>
-
-                  {/* 2. SUPABASE */}
-                  <div style={{ background: 'rgba(46, 204, 113, 0.04)', border: '1.5px solid rgba(46, 204, 113, 0.35)', borderRadius: '20px', padding: '20px', minWidth: 0, boxSizing: 'border-box' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                      <span style={{ fontSize: '1.6rem' }}>⚡</span>
-                      <div>
-                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#2ecc71' }}>Supabase Veritabanı</h3>
-                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>Gerçek ölçüm (pg_database_size) · Ping {quotaMetrics.supabase.pingMs} ms</span>
-                      </div>
-                    </div>
-
-                    {quotaMetrics.supabase.dbMb === null ? (
-                      <div style={{ fontSize: '0.8rem', color: '#ffb3b3', marginBottom: '12px' }}>Veritabanı boyutu okunamadı (yönetici oturumu gerekli).</div>
-                    ) : (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>Veritabanı boyutu:</span>
-                          <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#2ecc71' }}>{quotaMetrics.supabase.dbMb} MB</span>
-                        </div>
-                        <div style={{ height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px' }}>
-                          <div style={{ height: '100%', width: `${Math.max(0.5, quotaMetrics.supabase.dbPercent || 0)}%`, background: '#2ecc71', transition: 'width 0.5s ease' }} />
-                        </div>
-                        <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', marginBottom: '12px' }}>
-                          {quotaMetrics.supabase.dbMb} / {quotaMetrics.supabase.dbLimitMb} MB (%{quotaMetrics.supabase.dbPercent}) · Ücretsiz plan sınırı
-                        </div>
-                      </>
-                    )}
-
-                    <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.75)', lineHeight: '1.6', marginBottom: '10px' }}>
-                      Profil: <b>{quotaMetrics.supabase.profiles}</b> · Mesaj: <b>{quotaMetrics.supabase.messages}</b> · Görüşme kaydı: <b>{quotaMetrics.supabase.matches}</b><br />
-                      İşlem: <b>{quotaMetrics.supabase.transactions}</b> · Şikâyet: <b>{quotaMetrics.supabase.reports}</b>
-                    </div>
-
-                    {quotaMetrics.supabase.topTables.length > 0 && (
-                      <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.6', marginBottom: '10px' }}>
-                        <div style={{ fontWeight: '700', color: 'rgba(255,255,255,0.8)' }}>En büyük tablolar:</div>
-                        {quotaMetrics.supabase.topTables.map((t: any) => (
-                          <div key={t.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                            <span style={{ overflowWrap: 'anywhere' }}>{t.name}</span><span>{t.mb} MB</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', lineHeight: '1.55', overflowWrap: 'anywhere' }}>
-                      Buradan ölçülemeyenler: eşzamanlı Realtime bağlantısı (ücretsiz planda 200) ve çıkış trafiği (5 GB). Bunlar için Supabase Dashboard → Reports sayfasına bakın.
-                    </div>
-                  </div>
-
-                  {/* 3. VERCEL */}
-                  <div style={{ background: 'rgba(155, 89, 182, 0.05)', border: '1.5px solid rgba(155, 89, 182, 0.35)', borderRadius: '20px', padding: '20px', minWidth: 0, boxSizing: 'border-box' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                      <span style={{ fontSize: '1.6rem' }}>▲</span>
-                      <div>
-                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#e056fd' }}>Vercel (barındırma)</h3>
-                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>Buradan ölçülmez</span>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)', lineHeight: '1.6', overflowWrap: 'anywhere' }}>
-                      Vercel kullanımı bu panelden güvenilir biçimde okunamıyor. Eskiden burada koda sabit yazılmış (uydurma) bant genişliği ve dağıtım sayıları ile tarayıcıda saklanan bir Vercel erişim anahtarı vardı; ikisi de kaldırıldı.
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', lineHeight: '1.6', marginTop: '10px' }}>
-                      Kullanıma bakmak için:{' '}
-                      <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: '#e056fd' }}>vercel.com/dashboard</a> → Usage.
-                      Ücretsiz planda bant genişliği sınırı 100 GB/aydır.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Modal Alt Kapat Butonu */}
-            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
-              <button
-                type="button"
-                onClick={() => setShowQuotaModal(false)}
-                style={{
-                  padding: '10px 22px', borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.1)', border: 'none',
-                  color: '#fff', cursor: 'pointer', fontWeight: '700'
-                }}
-              >
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================== */}
-      {/* 💸 PARA ÇEKİM TALEPLERİ MODAL (SADECE ADMİN) */}
-      {/* ========================================== */}
-      {isAdmin && showWithdrawalModal && (
-        <div 
-          onClick={() => setShowWithdrawalModal(false)}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(5, 7, 15, 0.88)', backdropFilter: 'blur(10px)',
-            zIndex: 12000, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '20px', animation: 'fadeIn 0.2s ease-out'
-          }}
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: '#131528',
-              border: '1.5px solid rgba(46, 204, 113, 0.35)',
-              borderRadius: '24px',
-              width: '100%', maxWidth: '960px', maxHeight: '90vh',
-              display: 'flex', flexDirection: 'column',
-              boxShadow: '0 25px 60px rgba(0,0,0,0.8), 0 0 40px rgba(46, 204, 113, 0.15)',
-              overflow: 'hidden'
-            }}
-          >
-            {/* Modal Header */}
-            <div style={{
-              padding: '20px 24px',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: 'rgba(255, 255, 255, 0.02)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '42px', height: '42px', borderRadius: '14px',
-                  background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.3), rgba(0, 242, 254, 0.2))',
-                  border: '1px solid #2ecc71',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '1.4rem'
-                }}>
-                  💸
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    Yayıncı Para Çekim Talepleri
-                    {pendingWithdrawalCount > 0 && (
-                      <span style={{ background: '#e74c3c', color: '#fff', fontSize: '0.72rem', padding: '2px 8px', borderRadius: '10px', fontWeight: '800' }}>
-                        {pendingWithdrawalCount} Bekleyen
-                      </span>
-                    )}
-                  </h3>
-                  <p style={{ margin: '3px 0 0 0', fontSize: '0.80rem', color: 'rgba(255,255,255,0.6)' }}>
-                    Bayan kullanıcıların elmas çekim taleplerini onaylayın, banka transferi sonrasında 'Yatırıldı' yapın.
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  onClick={fetchWithdrawals}
-                  disabled={loadingWithdrawals}
-                  style={{
-                    background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#fff', padding: '7px 12px', borderRadius: '10px',
-                    fontSize: '0.80rem', fontWeight: '700', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '6px'
-                  }}
-                >
-                  <RefreshCw size={14} className={loadingWithdrawals ? 'spin' : ''} />
-                  Yenile
-                </button>
-                <button
-                  onClick={() => setShowWithdrawalModal(false)}
-                  style={{
-                    background: 'rgba(255,255,255,0.08)', border: 'none',
-                    color: '#fff', width: '34px', height: '34px', borderRadius: '50%',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              {/* Özet İstatistik Kartları */}
-              {(() => {
-                const pendingList = withdrawals.filter(w => (w.status || 'pending') === 'pending');
-                const approvedList = withdrawals.filter(w => w.status === 'approved');
-                const completedList = withdrawals.filter(w => w.status === 'completed');
-
-                return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                    <div style={{ background: 'rgba(241, 196, 15, 0.08)', border: '1px solid rgba(241, 196, 15, 0.3)', borderRadius: '16px', padding: '14px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#f1c40f', fontWeight: '800', marginBottom: '4px' }}>🟡 BEKLEYEN TALEPLER</div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{withdrawalSums(pendingList)}</div>
-                      <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>{pendingList.length} talep onay bekliyor</div>
-                    </div>
-
-                    <div style={{ background: 'rgba(52, 152, 219, 0.08)', border: '1px solid rgba(52, 152, 219, 0.3)', borderRadius: '16px', padding: '14px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#3498db', fontWeight: '800', marginBottom: '4px' }}>🔵 YATIRIM AŞAMASINDA</div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{withdrawalSums(approvedList)}</div>
-                      <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>{approvedList.length} talep transfer bekliyor</div>
-                    </div>
-
-                    <div style={{ background: 'rgba(46, 204, 113, 0.08)', border: '1px solid rgba(46, 204, 113, 0.3)', borderRadius: '16px', padding: '14px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#2ecc71', fontWeight: '800', marginBottom: '4px' }}>🟢 TAMAMLANAN (YATIRILDI)</div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{withdrawalSums(completedList)}</div>
-                      <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>{completedList.length} talep ödendi</div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Filtre ve Arama Barı */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {/* ------------------------------------------ */}
+          {/* TAB 2: ŞİKAYET & MODERASYON MASASI         */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'reports' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Filtre ve Üst Kontroller */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '6px' }}>
                   {[
-                    { key: 'all', label: 'Tümü', count: withdrawals.length },
-                    { key: 'pending', label: '🟡 Bekleyenler', count: withdrawals.filter(w => (w.status || 'pending') === 'pending').length },
-                    { key: 'approved', label: '🔵 Yatırım Aşamasında', count: withdrawals.filter(w => w.status === 'approved').length },
-                    { key: 'completed', label: '🟢 Yatırılanlar', count: withdrawals.filter(w => w.status === 'completed').length },
-                    { key: 'rejected', label: '🔴 Reddedilenler', count: withdrawals.filter(w => w.status === 'rejected').length },
+                    { id: 'pending', label: `Bekleyenler (${pendingReportCount})` },
+                    { id: 'banned', label: 'Yasaklananlar' },
+                    { id: 'resolved', label: 'Çözülenler' },
+                    { id: 'dismissed', label: 'Asılsız Arşiv' },
+                    { id: 'all', label: 'Tümü' }
                   ].map(f => (
                     <button
-                      key={f.key}
-                      onClick={() => setWithdrawalFilter(f.key as any)}
+                      key={f.id}
+                      onClick={() => setReportFilter(f.id as any)}
                       style={{
-                        padding: '7px 12px', borderRadius: '10px',
-                        background: withdrawalFilter === f.key ? '#00f2fe' : 'rgba(255,255,255,0.06)',
-                        border: withdrawalFilter === f.key ? 'none' : '1px solid rgba(255,255,255,0.12)',
-                        color: withdrawalFilter === f.key ? '#000' : '#fff',
-                        fontWeight: '800', fontSize: '0.76rem', cursor: 'pointer',
-                        transition: 'all 0.2s'
+                        padding: '7px 12px', borderRadius: '8px',
+                        background: reportFilter === f.id ? (isLight ? '#0f172a' : '#272b3b') : (isLight ? '#ffffff' : 'rgba(255,255,255,0.03)'),
+                        border: reportFilter === f.id ? `1px solid ${theme.borderLight}` : `1px solid ${theme.border}`,
+                        color: reportFilter === f.id ? '#ffffff' : theme.textSecondary,
+                        fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer'
                       }}
                     >
-                      {f.label} ({f.count})
+                      {f.label}
                     </button>
                   ))}
                 </div>
 
-                <div style={{ position: 'relative', minWidth: '220px' }}>
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: 'rgba(255,255,255,0.4)' }} />
+                <button
+                  onClick={() => exportToCSV('pyngoo_sikayetler', reports)}
+                  style={{
+                    padding: '7px 12px', borderRadius: '8px',
+                    background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)', border: `1px solid ${theme.border}`,
+                    color: theme.textPrimary, fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '6px'
+                  }}
+                >
+                  <Download size={13} /> CSV İndir
+                </button>
+              </div>
+
+              {/* Şikayet Listesi */}
+              {loadingReports ? (
+                <div style={{ padding: '60px', textAlign: 'center', color: theme.textSecondary }}>Şikayetler yükleniyor...</div>
+              ) : reports.filter(r => reportFilter === 'all' || r.status === reportFilter).length === 0 ? (
+                <div style={{
+                  padding: '60px', textAlign: 'center', background: theme.cardBg,
+                  borderRadius: '12px', border: `1px solid ${theme.border}`,
+                  boxShadow: theme.shadow
+                }}>
+                  <ShieldCheck size={40} color="#10b981" style={{ margin: '0 auto 10px auto' }} />
+                  <div style={{ fontSize: '1rem', fontWeight: '700', color: theme.textPrimary }}>Bu kategoride bekleyen şikayet yok!</div>
+                  <div style={{ fontSize: '0.78rem', color: theme.textMuted, marginTop: '4px' }}>Platform tertemiz ve güvenli.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {reports
+                    .filter(r => reportFilter === 'all' || r.status === reportFilter)
+                    .map(r => (
+                      <div
+                        key={r.id}
+                        style={{
+                          background: theme.cardBg,
+                          padding: '16px 20px', borderRadius: '12px',
+                          border: r.status === 'pending' ? '1px solid rgba(239, 68, 68, 0.4)' : `1px solid ${theme.border}`,
+                          boxShadow: theme.shadow,
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap'
+                        }}
+                      >
+                        <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                          {/* Kanıt Görseli Varsa Önizleme */}
+                          {r.snapshot_data ? (
+                            <div
+                              onClick={() => setPreviewImage(r.snapshot_data!)}
+                              style={{
+                                width: '56px', height: '56px', borderRadius: '8px',
+                                overflow: 'hidden', cursor: 'pointer', border: '1px solid rgba(239, 68, 68, 0.4)',
+                                position: 'relative'
+                              }}
+                            >
+                              <img src={r.snapshot_data} alt="Kanıt" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <div style={{
+                                position: 'absolute', bottom: 0, width: '100%', background: 'rgba(0,0,0,0.7)',
+                                fontSize: '0.54rem', textAlign: 'center', color: '#f87171', fontWeight: '700'
+                              }}>KANIT</div>
+                            </div>
+                          ) : (
+                            <div style={{
+                              width: '48px', height: '48px', borderRadius: '8px',
+                              background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                              <AlertTriangle size={20} color="#ef4444" />
+                            </div>
+                          )}
+
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.92rem', fontWeight: '700', color: theme.textPrimary }}>
+                                Şikayet Edilen: @{r.reported_name}
+                              </span>
+                              <span style={{
+                                padding: '2px 7px', borderRadius: '5px', fontSize: '0.68rem', fontWeight: '700',
+                                background: r.status === 'pending' ? 'rgba(239, 68, 68, 0.15)' : r.status === 'banned' ? '#7f1d1d' : 'rgba(16, 185, 129, 0.15)',
+                                color: r.status === 'pending' ? '#ef4444' : r.status === 'banned' ? '#fca5a5' : '#10b981'
+                              }}>
+                                {r.status === 'pending' ? 'BEKLİYOR' : r.status === 'banned' ? 'YASAKLANDI' : 'ÇÖZÜLDÜ'}
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '3px', fontWeight: '600' }}>
+                              Sebep: {r.category || r.reason || 'Kural İhlali'}
+                            </div>
+
+                            <div style={{ fontSize: '0.72rem', color: theme.textMuted, marginTop: '3px' }}>
+                              Şikayet Eden: @{r.reporter_name} • {new Date(r.created_at).toLocaleString('tr-TR')}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Aksiyon Butonları */}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {r.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => handleBanUserFromReport(r)}
+                                style={{
+                                  padding: '8px 14px', borderRadius: '8px',
+                                  background: '#ef4444', border: 'none',
+                                  color: '#fff', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer'
+                                }}
+                              >
+                                Kullanıcıyı Banla
+                              </button>
+                              <button
+                                onClick={() => handleResolveReport(r.id)}
+                                style={{
+                                  padding: '8px 12px', borderRadius: '8px',
+                                  background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)',
+                                  color: '#10b981', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer'
+                                }}
+                              >
+                                Çözüldü
+                              </button>
+                              <button
+                                onClick={() => handleDismissReport(r.id)}
+                                style={{
+                                  padding: '8px 12px', borderRadius: '8px',
+                                  background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
+                                  border: `1px solid ${theme.border}`,
+                                  color: theme.textSecondary, fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer'
+                                }}
+                              >
+                                Asılsız
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ------------------------------------------ */}
+          {/* TAB 3: KULLANICI YÖNETİMİ & CRM            */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'users' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Arama ve Filtreleme */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '260px' }}>
+                  <div style={{
+                    position: 'relative', width: '100%', maxWidth: '340px'
+                  }}>
+                    <Search size={15} color={theme.textMuted} style={{ position: 'absolute', left: '12px', top: '11px' }} />
+                    <input
+                      type="text"
+                      placeholder="Rumuz, ID veya Cihaz Kimliği ara..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      style={{
+                        width: '100%', padding: '9px 12px 9px 34px', borderRadius: '8px',
+                        background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                        color: theme.textPrimary, fontSize: '0.84rem', outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    {[
+                      { id: 'all', label: 'Tümü' },
+                      { id: 'female', label: 'Kadınlar' },
+                      { id: 'male', label: 'Erkekler' },
+                      { id: 'banned', label: 'Yasaklılar' },
+                      { id: 'moderator', label: 'Yetkililer' }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setUserRoleFilter(f.id as any)}
+                        style={{
+                          padding: '6px 11px', borderRadius: '7px',
+                          background: userRoleFilter === f.id ? (isLight ? '#0f172a' : '#272b3b') : (isLight ? '#ffffff' : 'rgba(255,255,255,0.03)'),
+                          border: userRoleFilter === f.id ? `1px solid ${theme.borderLight}` : `1px solid ${theme.border}`,
+                          color: userRoleFilter === f.id ? '#ffffff' : theme.textSecondary,
+                          fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer'
+                        }}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => exportToCSV('pyngoo_kullanicilar', allUsersList)}
+                  style={{
+                    padding: '7px 12px', borderRadius: '8px',
+                    background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)', border: `1px solid ${theme.border}`,
+                    color: theme.textPrimary, fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '6px'
+                  }}
+                >
+                  <Download size={13} /> Dışa Aktar (CSV)
+                </button>
+              </div>
+
+              {/* Kullanıcı Tablosu */}
+              {loadingUsers ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: theme.textSecondary }}>Kullanıcılar yükleniyor...</div>
+              ) : (
+              <div style={{
+                background: theme.cardBg, borderRadius: '12px',
+                border: `1px solid ${theme.border}`, overflow: 'hidden',
+                boxShadow: theme.shadow
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
+                  <thead>
+                    <tr style={{ background: theme.tableHeaderBg, borderBottom: `1px solid ${theme.border}`, color: theme.textMuted }}>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>KULLANICI</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>CİNSİYET & DOĞRULAMA</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>BAKİYE</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>ROL</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>KAYIT TARİHİ</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px', textAlign: 'right' }}>İŞLEMLER</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allUsersList
+                      .filter(u => {
+                        const q = userSearchQuery.toLowerCase();
+                        const matchQ = (u.display_name || '').toLowerCase().includes(q) || (u.id || '').toLowerCase().includes(q);
+                        if (!matchQ) return false;
+                        if (userRoleFilter === 'female') return u.gender === 'kadin';
+                        if (userRoleFilter === 'male') return u.gender === 'erkek';
+                        if (userRoleFilter === 'banned') return u.is_banned;
+                        if (userRoleFilter === 'moderator') return u.is_moderator || u.role === 'moderator' || u.role === 'admin';
+                        return true;
+                      })
+                      .slice(0, 100)
+                      .map(u => (
+                        <tr key={u.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{
+                                width: '32px', height: '32px', borderRadius: '8px',
+                                background: isLight ? '#f1f5f9' : '#1a1d2e',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontWeight: '700', fontSize: '0.8rem', color: theme.textSecondary
+                              }}>
+                                {(u.display_name || '?')[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: '700', color: u.is_banned ? '#ef4444' : theme.textPrimary }}>
+                                  @{u.display_name} {u.is_banned && '(YASAKLI)'}
+                                </div>
+                                <div style={{ fontSize: '0.68rem', color: theme.textMuted, fontFamily: 'monospace' }}>
+                                  {u.id.slice(0, 8)}...
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 16px', color: theme.textPrimary }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>{u.gender === 'kadin' ? '👩 Kadın' : '👨 Erkek'}</span>
+                              {u.gender === 'kadin' && (
+                                <span style={{
+                                  fontSize: '0.65rem', padding: '2px 5px', borderRadius: '4px',
+                                  background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.06)',
+                                  color: theme.textSecondary, fontWeight: '700',
+                                  border: `1px solid ${theme.border}`
+                                }}>
+                                  AI DOĞRULANDI
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: '700', color: '#eab308' }}>
+                              🪙 {Number(u.total_gold || 0).toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: theme.textSecondary, marginTop: '2px' }}>
+                              💎 {Number(u.total_diamonds || 0).toLocaleString()}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{
+                              padding: '2px 7px', borderRadius: '5px', fontSize: '0.7rem', fontWeight: '700',
+                              background: u.role === 'admin' ? 'rgba(239,68,68,0.15)' : u.is_moderator ? 'rgba(99,102,241,0.15)' : (isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)'),
+                              color: u.role === 'admin' ? '#ef4444' : u.is_moderator ? '#6366f1' : theme.textSecondary
+                            }}>
+                              {u.role === 'admin' ? 'ADMIN' : u.is_moderator ? 'MODERATÖR' : 'ÜYE'}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '12px 16px', color: theme.textMuted, fontSize: '0.76rem' }}>
+                            {u.created_at ? new Date(u.created_at).toLocaleDateString('tr-TR') : '-'}
+                          </td>
+
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '6px' }}>
+                              <button
+                                onClick={() => handleAdjustBalance(u)}
+                                title="Bakiye Ekle/Çıkar"
+                                style={{
+                                  padding: '5px 9px', borderRadius: '6px',
+                                  background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.05)',
+                                  border: `1px solid ${theme.border}`,
+                                  color: theme.textPrimary, fontWeight: '600', fontSize: '0.72rem', cursor: 'pointer'
+                                }}
+                              >
+                                Bakiye
+                              </button>
+
+                              <button
+                                onClick={() => handleToggleBanUser(u)}
+                                title={u.is_banned ? 'Yasağı Kaldır' : 'Kullanıcıyı Yasakla'}
+                                style={{
+                                  padding: '5px 9px', borderRadius: '6px',
+                                  background: u.is_banned ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                  border: u.is_banned ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
+                                  color: u.is_banned ? '#10b981' : '#ef4444',
+                                  fontWeight: '600', fontSize: '0.72rem', cursor: 'pointer'
+                                }}
+                              >
+                                {u.is_banned ? 'Yasağı Aç' : 'Yasakla'}
+                              </button>
+
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeleteUserProfile(u)}
+                                  title="Profili Kalıcı Sil (Rumuz Boşa Çıkar)"
+                                  style={{
+                                    padding: '5px 7px', borderRadius: '6px',
+                                    background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
+                                    border: `1px solid ${theme.border}`,
+                                    color: theme.textMuted, cursor: 'pointer'
+                                  }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              )}
+            </div>
+          )}
+
+          {/* ------------------------------------------ */}
+          {/* TAB 4: ALTIN SİPARİŞLERİ                   */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'payments' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'pending', label: `Bekleyenler (${pendingPaymentCount})` },
+                    { id: 'approved', label: 'Onaylananlar' },
+                    { id: 'rejected', label: 'Reddedilenler' },
+                    { id: 'all', label: 'Tümü' }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setPaymentFilter(f.id as any)}
+                      style={{
+                        padding: '7px 12px', borderRadius: '8px',
+                        background: paymentFilter === f.id ? (isLight ? '#0f172a' : '#272b3b') : (isLight ? '#ffffff' : 'rgba(255,255,255,0.03)'),
+                        border: paymentFilter === f.id ? `1px solid ${theme.borderLight}` : `1px solid ${theme.border}`,
+                        color: paymentFilter === f.id ? '#ffffff' : theme.textSecondary,
+                        fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer'
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+
                   <input
                     type="text"
-                    value={withdrawalSearch}
-                    onChange={(e) => setWithdrawalSearch(e.target.value)}
-                    placeholder="İsim veya IBAN ile ara..."
+                    placeholder="Sipariş kodu veya kullanıcı ara..."
+                    value={paymentSearch}
+                    onChange={(e) => setPaymentSearch(e.target.value)}
                     style={{
-                      width: '100%', padding: '7px 10px 7px 30px', borderRadius: '10px',
-                      background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
-                      color: '#fff', fontSize: '0.80rem', boxSizing: 'border-box'
+                      padding: '7px 11px', borderRadius: '8px',
+                      background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                      color: theme.textPrimary, fontSize: '0.82rem', outline: 'none'
                     }}
                   />
                 </div>
+
+                <button
+                  onClick={() => exportToCSV('pyngoo_altin_siparisleri', paymentOrders)}
+                  style={{
+                    padding: '7px 12px', borderRadius: '8px',
+                    background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)', border: `1px solid ${theme.border}`,
+                    color: theme.textPrimary, fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '6px'
+                  }}
+                >
+                  <Download size={13} /> Dışa Aktar (CSV)
+                </button>
               </div>
 
-              {/* Talepler Listesi */}
-              {(() => {
-                const filtered = withdrawals.filter(w => {
-                  const status = w.status || 'pending';
-                  if (withdrawalFilter !== 'all' && status !== withdrawalFilter) return false;
-                  if (withdrawalSearch.trim()) {
-                    const q = withdrawalSearch.toLowerCase().trim();
-                    const matchName = (w.full_name || '').toLowerCase().includes(q);
-                    const matchIban = (w.iban || '').toLowerCase().includes(q);
-                    const matchProf = (w.profile_name || '').toLowerCase().includes(q);
-                    if (!matchName && !matchIban && !matchProf) return false;
-                  }
-                  return true;
-                });
+              {loadingPayments ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: theme.textSecondary }}>Siparişler yükleniyor...</div>
+              ) : (
+              <div style={{
+                background: theme.cardBg, borderRadius: '12px',
+                border: `1px solid ${theme.border}`, overflow: 'hidden',
+                boxShadow: theme.shadow
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
+                  <thead>
+                    <tr style={{ background: theme.tableHeaderBg, borderBottom: `1px solid ${theme.border}`, color: theme.textMuted }}>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>SİPARİŞ KODU</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>KULLANICI</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>YÖNTEM & TUTAR</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>YÜKLENECEK ALTIN</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>DURUM</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px', textAlign: 'right' }}>AKSİYON</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentOrders
+                      .filter(p => {
+                        if (paymentFilter !== 'all' && p.status !== paymentFilter) return false;
+                        if (paymentSearch.trim()) {
+                          const s = paymentSearch.toLowerCase();
+                          return (p.order_code || '').toLowerCase().includes(s) || (p.user_name || '').toLowerCase().includes(s);
+                        }
+                        return true;
+                      })
+                      .map(p => (
+                        <tr key={p.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                          <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: '700', color: theme.textSecondary }}>
+                            {p.order_code}
+                          </td>
 
-                if (loadingWithdrawals) {
-                  return (
-                    <div style={{ textAlign: 'center', padding: '40px 0', color: '#00f2fe' }}>
-                      <RefreshCw size={28} className="spin" />
-                      <p style={{ marginTop: '10px', fontSize: '0.85rem' }}>Çekim talepleri yükleniyor...</p>
-                    </div>
-                  );
-                }
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: '700', color: theme.textPrimary }}>@{p.user_name}</div>
+                            {p.sender_name && (
+                              <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>Gönderen: {p.sender_name}</div>
+                            )}
+                          </td>
 
-                if (filtered.length === 0) {
-                  return (
-                    <div style={{ textAlign: 'center', padding: '40px 10px', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                      <CreditCard size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
-                      <p style={{ margin: 0, fontSize: '0.88rem' }}>Bu filtrelere uygun çekim talebi bulunamadı.</p>
-                    </div>
-                  );
-                }
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: '700', color: theme.textPrimary }}>{p.price_text}</div>
+                            <div style={{ fontSize: '0.72rem', color: theme.textSecondary }}>{p.payment_method.toUpperCase()}</div>
+                          </td>
 
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {filtered.map(item => {
-                      const status = item.status || 'pending';
-                      const isPending = status === 'pending';
-                      const isApproved = status === 'approved';
-                      const isCompleted = status === 'completed';
-                      const isRejected = status === 'rejected';
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: '800', color: '#eab308' }}>🪙 {p.total_gold.toLocaleString()} Altın</div>
+                            {p.bonus_amount > 0 && (
+                              <div style={{ fontSize: '0.7rem', color: '#10b981' }}>+{p.bonus_amount.toLocaleString()} Bonus</div>
+                            )}
+                          </td>
 
-                      const dateStr = new Date(item.created_at).toLocaleDateString('tr-TR');
-                      const timeStr = new Date(item.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-
-                      const borderAccent = isPending ? '#f1c40f' : isApproved ? '#3498db' : isCompleted ? '#2ecc71' : '#e74c3c';
-
-                      return (
-                        <div
-                          key={item.id}
-                          style={{
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderLeft: `4px solid ${borderAccent}`,
-                            borderRadius: '16px',
-                            padding: '16px 18px',
-                            display: 'flex', flexDirection: 'column', gap: '12px'
-                          }}
-                        >
-                          {/* Üst Satır: Kullanıcı & Durum Rozeti */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div style={{
-                                width: '38px', height: '38px', borderRadius: '50%',
-                                background: 'linear-gradient(135deg, #ff416c, #ff4b2b)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: '#fff', fontWeight: 'bold', fontSize: '1rem'
-                              }}>
-                                {(item.full_name || 'K').charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <div style={{ color: '#fff', fontWeight: '800', fontSize: '0.98rem' }}>
-                                  {item.full_name}
-                                  {item.profile_name && item.profile_name !== item.full_name && (
-                                    <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginLeft: '6px' }}>
-                                      (@{item.profile_name})
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                  📅 {dateStr} • {timeStr}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Durum Rozeti */}
-                            <div style={{
-                              padding: '4px 12px', borderRadius: '12px', fontSize: '0.78rem', fontWeight: '800',
-                              background: isPending ? 'rgba(241, 196, 15, 0.15)' : isApproved ? 'rgba(52, 152, 219, 0.15)' : isCompleted ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
-                              color: borderAccent, border: `1px solid ${borderAccent}`
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{
+                              padding: '2px 7px', borderRadius: '5px', fontSize: '0.7rem', fontWeight: '700',
+                              background: p.status === 'pending' ? 'rgba(245, 158, 11, 0.15)' : p.status === 'approved' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                              color: p.status === 'pending' ? '#f59e0b' : p.status === 'approved' ? '#10b981' : '#ef4444'
                             }}>
-                              {isPending ? '🟡 İşleme Alındı' : isApproved ? '🔵 Onaylandı - Yatırım Aşamasında' : isCompleted ? '🟢 Yatırıldı (Tamamlandı)' : '🔴 Reddedildi'}
-                            </div>
-                          </div>
+                              {p.status === 'pending' ? 'ONAY BEKLİYOR' : p.status === 'approved' ? 'YÜKLENDİ' : 'REDDEDİLDİ'}
+                            </span>
+                          </td>
 
-                          {/* Orta Satır: Tutar ve IBAN Bilgisi */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: 'rgba(0,0,0,0.22)', padding: '12px 14px', borderRadius: '12px' }}>
-                            <div>
-                              <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginBottom: '2px' }}>ÖDENECEK TUTAR</div>
-                              <div style={{ fontSize: '1.3rem', fontWeight: '900', color: '#2ecc71' }}>
-                                {withdrawalMoney(item)}
-                                <span style={{ fontSize: '0.84rem', color: '#00f2fe', marginLeft: '6px', fontWeight: '700' }}>
-                                  ({item.amount_diamonds.toLocaleString()} 💎)
-                                </span>
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>ALICI & IBAN</div>
-                                <div style={{ fontSize: '0.88rem', color: '#fff', fontWeight: 'bold' }}>
-                                  <code>{item.iban}</code>
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => copyIban(item.iban, item.id)}
-                                style={{
-                                  background: copiedIbanId === item.id ? '#2ecc71' : 'rgba(255,255,255,0.1)',
-                                  border: '1px solid rgba(255,255,255,0.2)',
-                                  color: copiedIbanId === item.id ? '#000' : '#fff',
-                                  padding: '7px 12px', borderRadius: '10px',
-                                  fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer',
-                                  display: 'flex', alignItems: 'center', gap: '4px',
-                                  transition: 'all 0.2s'
-                                }}
-                              >
-                                {copiedIbanId === item.id ? <Check size={14} /> : <Copy size={14} />}
-                                {copiedIbanId === item.id ? 'Kopyalandı!' : 'IBAN Kopyala'}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Alt Satır: Moderatör Aksiyon Butonları */}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center', paddingTop: '4px' }}>
-                            {isPending && (
-                              <>
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                            {p.status === 'pending' && (
+                              <div style={{ display: 'inline-flex', gap: '6px' }}>
                                 <button
-                                  onClick={() => handleRejectWithdrawal(item)}
+                                  onClick={() => handleApprovePayment(p)}
                                   style={{
-                                    padding: '8px 16px', borderRadius: '10px',
-                                    background: 'rgba(231, 76, 60, 0.15)', border: '1px solid #e74c3c',
-                                    color: '#e74c3c', fontWeight: '800', fontSize: '0.80rem', cursor: 'pointer'
+                                    padding: '6px 12px', borderRadius: '6px',
+                                    background: isLight ? '#0f172a' : '#fff', border: 'none',
+                                    color: isLight ? '#fff' : '#090a10', fontWeight: '700', fontSize: '0.76rem', cursor: 'pointer'
                                   }}
                                 >
-                                  ❌ Reddet & Elmas İade Et
+                                  Onayla
                                 </button>
                                 <button
-                                  onClick={() => handleApproveWithdrawal(item)}
+                                  onClick={() => handleRejectPayment(p)}
                                   style={{
-                                    padding: '8px 20px', borderRadius: '10px',
-                                    background: 'linear-gradient(135deg, #3498db, #2980b9)', border: 'none',
-                                    color: '#fff', fontWeight: '900', fontSize: '0.82rem', cursor: 'pointer',
-                                    boxShadow: '0 4px 12px rgba(52, 152, 219, 0.35)'
+                                    padding: '6px 10px', borderRadius: '6px',
+                                    background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    color: '#ef4444', fontWeight: '600', fontSize: '0.76rem', cursor: 'pointer'
                                   }}
                                 >
-                                  ✅ Onayla (Yatırım Aşamasına Al)
+                                  Reddet
                                 </button>
-                              </>
-                            )}
-
-                            {isApproved && (
-                              <>
-                                <button
-                                  onClick={() => handleRejectWithdrawal(item)}
-                                  style={{
-                                    padding: '8px 14px', borderRadius: '10px',
-                                    background: 'rgba(231, 76, 60, 0.15)', border: '1px solid #e74c3c',
-                                    color: '#e74c3c', fontWeight: '800', fontSize: '0.78rem', cursor: 'pointer'
-                                  }}
-                                >
-                                  ❌ İptal Et & İade Et
-                                </button>
-                                <button
-                                  onClick={() => handleCompleteWithdrawal(item)}
-                                  style={{
-                                    padding: '9px 24px', borderRadius: '10px',
-                                    background: 'linear-gradient(135deg, #2ecc71, #27ae60)', border: 'none',
-                                    color: '#fff', fontWeight: '900', fontSize: '0.84rem', cursor: 'pointer',
-                                    boxShadow: '0 4px 14px rgba(46, 204, 113, 0.45)'
-                                  }}
-                                >
-                                  💰 Parayı Gönderdim (Yatırıldı Yap)
-                                </button>
-                              </>
-                            )}
-
-                            {isCompleted && (
-                              <div style={{ color: '#2ecc71', fontWeight: '800', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <CheckCircle2 size={16} /> Ödeme Başarıyla Hesaba Aktarıldı
                               </div>
                             )}
-
-                            {isRejected && (
-                              <div style={{ color: '#e74c3c', fontWeight: '700', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <XCircle size={16} /> Talep Reddedildi ve Elmaslar İade Edildi
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{
-              padding: '16px 24px',
-              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex', justifyContent: 'flex-end',
-              background: 'rgba(255, 255, 255, 0.02)'
-            }}>
-              <button
-                type="button"
-                onClick={() => setShowWithdrawalModal(false)}
-                style={{
-                  padding: '9px 22px', borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.1)', border: 'none',
-                  color: '#fff', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem'
-                }}
-              >
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🪙 ALTIN ÖDEME BİLDİRİMLERİ (HAVALE / FAST & KRİPTO) MODALI (SADECE ADMİN) */}
-      {isAdmin && showPaymentModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(10px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, padding: '20px'
-        }}>
-          <div style={{
-            background: '#121324', border: '1.5px solid rgba(255, 170, 0, 0.45)',
-            borderRadius: '24px', width: '100%', maxWidth: '950px',
-            maxHeight: '90vh', overflowY: 'auto', padding: '28px',
-            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(255, 170, 0, 0.15)',
-            color: '#fff', display: 'flex', flexDirection: 'column', gap: '20px'
-          }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '44px', height: '44px', borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #ffaa00, #ff7700)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 4px 15px rgba(255, 170, 0, 0.4)',
-                  fontSize: '1.4rem'
-                }}>
-                  🪙
-                </div>
-                <div>
-                  <h2 style={{ fontSize: '1.35rem', fontWeight: '800', margin: 0, color: '#fff' }}>
-                    Altın Ödeme Bildirimleri & Onay
-                  </h2>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#ffaa00', fontWeight: '600' }}>
-                    Havale / FAST & Kripto (USDT TRC-20) Yükleme Talepleri
-                  </p>
-                </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button
-                  type="button"
-                  onClick={fetchPaymentOrders}
-                  disabled={loadingPaymentOrders}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '8px 14px', borderRadius: '10px',
-                    background: 'rgba(255, 170, 0, 0.15)', border: '1px solid rgba(255, 170, 0, 0.3)',
-                    color: '#ffaa00', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer'
-                  }}
-                >
-                  <RefreshCw size={14} className={loadingPaymentOrders ? 'animate-spin' : ''} />
-                  Yenile
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPaymentModal(false)}
-                  style={{
-                    background: 'rgba(255,255,255,0.08)', border: 'none',
-                    width: '36px', height: '36px', borderRadius: '10px',
-                    color: '#aaa', cursor: 'pointer', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center'
-                  }}
-                >
-                  <X size={20} />
-                </button>
-              </div>
+              )}
             </div>
+          )}
 
-            {/* Bilgilendirme Notu */}
-            <div style={{
-              background: 'rgba(255, 170, 0, 0.08)', border: '1px dashed rgba(255, 170, 0, 0.35)',
-              borderRadius: '14px', padding: '12px 16px', fontSize: '0.82rem', color: '#ffdd88',
-              lineHeight: '1.5'
-            }}>
-              💡 <b>Yönetici Güvenlik Talimatı:</b> Kullanıcı bildirim yaptığında önce banka hesabınızı (VakıfBank Havale/FAST) veya Binance cüzdanınızı kontrol edin. Ödemeyi teyit ettikten sonra <b>"Ödemeyi Onayla & Altını Yükle"</b> butonuna basmanız yeterlidir. Altınlar anında kullanıcının hesabına aktarılır ve Telegram grubunuza onay kaydı iletilir.
-            </div>
-
-            {/* Filtreler ve Arama */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {[
-                  { key: 'pending', label: '🟡 Bekleyenler', count: paymentOrders.filter(o => o.status === 'pending').length },
-                  { key: 'approved', label: '🟢 Onaylananlar', count: paymentOrders.filter(o => o.status === 'approved').length },
-                  { key: 'rejected', label: '🔴 Reddedilenler', count: paymentOrders.filter(o => o.status === 'rejected').length },
-                  { key: 'all', label: 'Tümü', count: paymentOrders.length },
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setPaymentFilter(tab.key as any)}
-                    style={{
-                      padding: '7px 14px', borderRadius: '10px',
-                      background: paymentFilter === tab.key ? 'rgba(255, 170, 0, 0.25)' : 'rgba(255,255,255,0.05)',
-                      border: paymentFilter === tab.key ? '1.5px solid #ffaa00' : '1px solid rgba(255,255,255,0.1)',
-                      color: paymentFilter === tab.key ? '#ffaa00' : 'rgba(255,255,255,0.7)',
-                      fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '6px'
-                    }}
-                  >
-                    <span>{tab.label}</span>
-                    <span style={{
-                      background: paymentFilter === tab.key ? '#ffaa00' : 'rgba(255,255,255,0.15)',
-                      color: paymentFilter === tab.key ? '#000' : '#fff',
-                      fontSize: '0.7rem', padding: '1px 6px', borderRadius: '8px', fontWeight: '800'
-                    }}>
-                      {tab.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Arama Input */}
-              <div style={{ position: 'relative', minWidth: '240px' }}>
-                <Search size={14} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                  type="text"
-                  placeholder="Kod, İsim, TXID ile ara..."
-                  value={paymentSearch}
-                  onChange={(e) => setPaymentSearch(e.target.value)}
-                  style={{
-                    width: '100%', padding: '7px 12px 7px 32px', borderRadius: '10px',
-                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#fff', fontSize: '0.82rem', outline: 'none'
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Sipariş Listesi */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minHeight: '200px' }}>
-              {(() => {
-                const filtered = paymentOrders.filter(item => {
-                  if (paymentFilter !== 'all' && item.status !== paymentFilter) return false;
-                  if (paymentSearch.trim()) {
-                    const q = paymentSearch.toLowerCase();
-                    const inCode = (item.order_code || '').toLowerCase().includes(q);
-                    const inName = (item.user_name || '').toLowerCase().includes(q);
-                    const inSender = (item.sender_name || '').toLowerCase().includes(q);
-                    const inTx = (item.crypto_txid || '').toLowerCase().includes(q);
-                    const inUser = (item.user_id || '').toLowerCase().includes(q);
-                    return inCode || inName || inSender || inTx || inUser;
-                  }
-                  return true;
-                });
-
-                if (loadingPaymentOrders) {
-                  return (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#ffaa00' }}>
-                      <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px auto' }} />
-                      <div>Ödeme bildirimleri yükleniyor...</div>
-                    </div>
-                  );
-                }
-
-                if (filtered.length === 0) {
-                  return (
-                    <div style={{
-                      padding: '40px 20px', textAlign: 'center',
-                      background: 'rgba(255,255,255,0.02)', borderRadius: '16px',
-                      border: '1px dashed rgba(255,255,255,0.1)'
-                    }}>
-                      <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>📭</div>
-                      <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#fff' }}>
-                        Bildirim Bulunamadı
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
-                        {paymentSearch ? 'Aramanıza uygun kayıt bulunamadı.' : 'Bu filtrede herhangi bir ödeme bildirimi bulunmuyor.'}
-                      </div>
-                    </div>
-                  );
-                }
-
-                return filtered.map(item => {
-                  const isPending = item.status === 'pending';
-                  const isApproved = item.status === 'approved';
-                  const isRejected = item.status === 'rejected';
-                  const isCrypto = item.payment_method === 'crypto';
-
-                  const dateObj = new Date(item.created_at);
-                  const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('tr-TR') : '';
-                  const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
-
-                  const borderAccent = isPending ? '#ffaa00' : isApproved ? '#2ecc71' : '#e74c3c';
-
-                  return (
-                    <div
-                      key={item.id}
+          {/* ------------------------------------------ */}
+          {/* TAB 5: YAYINCI PARA ÇEKİM TALEPLERİ        */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'withdrawals' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'pending', label: `Bekleyenler (${pendingWithdrawalCount})` },
+                    { id: 'approved', label: 'Onaylandı (Yatırımda)' },
+                    { id: 'completed', label: 'Tamamlandı (Yatırıldı)' },
+                    { id: 'rejected', label: 'Reddedildi' },
+                    { id: 'all', label: 'Tümü' }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setWithdrawalFilter(f.id as any)}
                       style={{
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: `1.5px solid ${isPending ? 'rgba(255, 170, 0, 0.35)' : isApproved ? 'rgba(46, 204, 113, 0.25)' : 'rgba(231, 76, 60, 0.25)'}`,
-                        borderRadius: '16px', padding: '18px',
-                        display: 'flex', flexDirection: 'column', gap: '14px',
-                        transition: 'all 0.2s ease',
-                        boxShadow: isPending ? '0 4px 18px rgba(255, 170, 0, 0.08)' : 'none'
+                        padding: '7px 12px', borderRadius: '8px',
+                        background: withdrawalFilter === f.id ? (isLight ? '#0f172a' : '#272b3b') : (isLight ? '#ffffff' : 'rgba(255,255,255,0.03)'),
+                        border: withdrawalFilter === f.id ? `1px solid ${theme.borderLight}` : `1px solid ${theme.border}`,
+                        color: withdrawalFilter === f.id ? '#ffffff' : theme.textSecondary,
+                        fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer'
                       }}
                     >
-                      {/* Üst Kısım: Kullanıcı Bilgisi & Rozetler */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{
-                            width: '40px', height: '40px', borderRadius: '50%',
-                            background: isCrypto ? 'linear-gradient(135deg, #00f2fe, #4facfe)' : 'linear-gradient(135deg, #ffaa00, #ff7700)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#000', fontWeight: 'bold', fontSize: '1.1rem'
-                          }}>
-                            {isCrypto ? '🪙' : '🏦'}
-                          </div>
-                          <div>
-                            <div style={{ color: '#fff', fontWeight: '800', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span>{item.user_name || 'Kullanıcı'}</span>
-                              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 'normal' }}>
-                                (ID: <code>{item.user_id?.slice(0, 8)}</code>)
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)', marginTop: '2px' }}>
-                              📅 {dateStr} • {timeStr}
-                            </div>
-                          </div>
-                        </div>
+                      {f.label}
+                    </button>
+                  ))}
 
-                        {/* Rozetler */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{
-                            padding: '4px 10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700',
-                            background: isCrypto ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255, 170, 0, 0.15)',
-                            color: isCrypto ? '#00f2fe' : '#ffaa00',
-                            border: `1px solid ${isCrypto ? 'rgba(0, 242, 254, 0.3)' : 'rgba(255, 170, 0, 0.3)'}`
-                          }}>
-                            {isCrypto ? '🪙 Kripto (USDT TRC-20)' : '🏦 Havale / FAST'}
-                          </span>
+                  <input
+                    type="text"
+                    placeholder="Yayıncı adı veya IBAN ara..."
+                    value={withdrawalSearch}
+                    onChange={(e) => setWithdrawalSearch(e.target.value)}
+                    style={{
+                      padding: '7px 11px', borderRadius: '8px',
+                      background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                      color: theme.textPrimary, fontSize: '0.82rem', outline: 'none'
+                    }}
+                  />
+                </div>
 
-                          <span style={{
-                            padding: '4px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '800',
-                            background: isPending ? 'rgba(255, 170, 0, 0.15)' : isApproved ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
-                            color: borderAccent, border: `1px solid ${borderAccent}`
-                          }}>
-                            {isPending ? '🟡 Onay Bekliyor' : isApproved ? '🟢 Onaylandı' : '🔴 Reddedildi'}
-                          </span>
-                        </div>
-                      </div>
+                <button
+                  onClick={() => exportToCSV('pyngoo_cekim_talepleri', withdrawals)}
+                  style={{
+                    padding: '7px 12px', borderRadius: '8px',
+                    background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)', border: `1px solid ${theme.border}`,
+                    color: theme.textPrimary, fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '6px'
+                  }}
+                >
+                  <Download size={13} /> Dışa Aktar (CSV)
+                </button>
+              </div>
 
-                      {/* Orta Kısım: Tutar & Altın Detayı */}
-                      <div style={{
-                        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                        gap: '12px', background: 'rgba(0,0,0,0.25)', padding: '14px', borderRadius: '12px'
-                      }}>
-                        <div>
-                          <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>
-                            YÜKLENECEK ALTIN
-                          </div>
-                          <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#ffaa00' }}>
-                            +{item.total_gold.toLocaleString()} 🪙
-                            {item.bonus_amount > 0 && (
-                              <span style={{ fontSize: '0.76rem', color: '#2ecc71', marginLeft: '6px', fontWeight: '700' }}>
-                                (+{item.bonus_amount} Hediye)
-                              </span>
-                            )}
-                          </div>
-                        </div>
+              {/* Çekim Tablosu */}
+              {loadingWithdrawals ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: theme.textSecondary }}>Çekim talepleri yükleniyor...</div>
+              ) : (
+              <div style={{
+                background: theme.cardBg, borderRadius: '12px',
+                border: `1px solid ${theme.border}`, overflow: 'hidden',
+                boxShadow: theme.shadow
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
+                  <thead>
+                    <tr style={{ background: theme.tableHeaderBg, borderBottom: `1px solid ${theme.border}`, color: theme.textMuted }}>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>YAYINCI</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>ÇEKİLEN ELMAS</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>ÖDENECEK TUTAR</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>IBAN / HESAP</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px' }}>DURUM</th>
+                      <th style={{ padding: '12px 16px', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.5px', textAlign: 'right' }}>AKSİYON</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withdrawals
+                      .filter(w => {
+                        if (withdrawalFilter !== 'all' && w.status !== withdrawalFilter) return false;
+                        if (withdrawalSearch.trim()) {
+                          const s = withdrawalSearch.toLowerCase();
+                          return (w.full_name || '').toLowerCase().includes(s) ||
+                            (w.profile_name || '').toLowerCase().includes(s) ||
+                            (w.iban || '').toLowerCase().includes(s);
+                        }
+                        return true;
+                      })
+                      .map(w => (
+                        <tr key={w.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: '700', color: theme.textPrimary }}>{w.full_name}</div>
+                            <div style={{ fontSize: '0.72rem', color: theme.textSecondary }}>@{w.profile_name}</div>
+                          </td>
 
-                        <div>
-                          <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>
-                            ÖDENEN TUTAR
-                          </div>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#fff' }}>
-                            {item.price_text}
-                          </div>
-                        </div>
+                          <td style={{ padding: '12px 16px', fontWeight: '700', color: theme.textSecondary }}>
+                            💎 {Number(w.amount_diamonds || 0).toLocaleString()} Elmas
+                          </td>
 
-                        <div>
-                          <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>
-                            SİPARİŞ KODU
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <code style={{ fontSize: '0.95rem', fontWeight: '900', color: '#00f2fe' }}>
-                              {item.order_code}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => copyPaymentField(item.order_code, `code_${item.id}`)}
-                              style={{
-                                background: 'transparent', border: 'none', color: '#aaa',
-                                cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center'
-                              }}
-                              title="Kodu Kopyala"
-                            >
-                              {copiedPaymentId === `code_${item.id}` ? <Check size={14} color="#2ecc71" /> : <Copy size={14} />}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+                          <td style={{ padding: '12px 16px', fontWeight: '800', color: '#10b981', fontSize: '0.92rem' }}>
+                            {withdrawalMoney(w)}
+                          </td>
 
-                      {/* Özel Bilgiler: Gönderen Adı veya TXID */}
-                      <div style={{
-                        background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '10px',
-                        display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem'
-                      }}>
-                        {item.sender_name && (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: 'rgba(255,255,255,0.6)' }}>
-                              👤 <b>Gönderen Adı Soyadı:</b> <span style={{ color: '#fff', fontWeight: '700' }}>{item.sender_name}</span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => copyPaymentField(item.sender_name || '', `name_${item.id}`)}
-                              style={{
-                                background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff',
-                                padding: '3px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem',
-                                display: 'flex', alignItems: 'center', gap: '4px'
-                              }}
-                            >
-                              {copiedPaymentId === `name_${item.id}` ? <Check size={12} color="#2ecc71" /> : <Copy size={12} />}
-                              Kopyala
-                            </button>
-                          </div>
-                        )}
-
-                        {item.crypto_txid && (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                              <span style={{ color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>🔗 <b>TXID / Cüzdan:</b></span>
-                              <code style={{ color: '#00f2fe', fontSize: '0.76rem', wordBreak: 'break-all' }}>
-                                {item.crypto_txid}
-                              </code>
-                            </div>
-                            <div style={{ display: 'flex', gap: '6px' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontFamily: 'monospace', fontWeight: '600', color: theme.textPrimary }}>{w.iban}</span>
                               <button
-                                type="button"
-                                onClick={() => copyPaymentField(item.crypto_txid || '', `tx_${item.id}`)}
-                                style={{
-                                  background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff',
-                                  padding: '3px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem',
-                                  display: 'flex', alignItems: 'center', gap: '4px'
+                                onClick={() => {
+                                  navigator.clipboard.writeText(w.iban);
+                                  setCopiedIbanId(w.id);
+                                  setTimeout(() => setCopiedIbanId(null), 2000);
                                 }}
+                                style={{
+                                  background: 'transparent', border: 'none', color: copiedIbanId === w.id ? '#10b981' : theme.textMuted,
+                                  cursor: 'pointer'
+                                }}
+                                title="IBAN Kopyala"
                               >
-                                {copiedPaymentId === `tx_${item.id}` ? <Check size={12} color="#2ecc71" /> : <Copy size={12} />}
-                                Kopyala
+                                {copiedIbanId === w.id ? <Check size={14} /> : <Copy size={14} />}
                               </button>
-                              {item.crypto_txid.trim().length === 64 && (
-                                <a
-                                  href={`https://tronscan.org/#/transaction/${item.crypto_txid.trim()}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{
+                              padding: '2px 7px', borderRadius: '5px', fontSize: '0.7rem', fontWeight: '700',
+                              background: w.status === 'pending' ? 'rgba(245, 158, 11, 0.15)' : w.status === 'approved' ? 'rgba(99, 102, 241, 0.15)' : w.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                              color: w.status === 'pending' ? '#f59e0b' : w.status === 'approved' ? '#6366f1' : w.status === 'completed' ? '#10b981' : '#ef4444'
+                            }}>
+                              {w.status === 'pending' ? 'TALEP GELDİ' : w.status === 'approved' ? 'YATIRIM AŞAMASINDA' : w.status === 'completed' ? 'YATIRILDI' : 'REDDEDİLDİ'}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '6px' }}>
+                              {w.status === 'pending' && (
+                                <button
+                                  onClick={() => handleApproveWithdrawal(w)}
                                   style={{
-                                    background: 'rgba(0, 242, 254, 0.15)', border: '1px solid rgba(0, 242, 254, 0.3)',
-                                    color: '#00f2fe', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem',
-                                    textDecoration: 'none', fontWeight: '700'
+                                    padding: '6px 11px', borderRadius: '6px',
+                                    background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)',
+                                    color: '#6366f1', fontWeight: '700', fontSize: '0.76rem', cursor: 'pointer'
                                   }}
                                 >
-                                  TronScan'de Gör ↗
-                                </a>
+                                  Onayla
+                                </button>
+                              )}
+
+                              {(w.status === 'pending' || w.status === 'approved') && (
+                                <button
+                                  onClick={() => handleCompleteWithdrawal(w)}
+                                  style={{
+                                    padding: '6px 11px', borderRadius: '6px',
+                                    background: '#10b981', border: 'none',
+                                    color: '#ffffff', fontWeight: '700', fontSize: '0.76rem', cursor: 'pointer'
+                                  }}
+                                >
+                                  Yatırıldı Yap
+                                </button>
+                              )}
+
+                              {w.status === 'pending' && (
+                                <button
+                                  onClick={() => handleRejectWithdrawal(w)}
+                                  style={{
+                                    padding: '6px 9px', borderRadius: '6px',
+                                    background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    color: '#ef4444', fontWeight: '600', fontSize: '0.76rem', cursor: 'pointer'
+                                  }}
+                                >
+                                  Reddet
+                                </button>
                               )}
                             </div>
-                          </div>
-                        )}
-
-                        {item.admin_notes && (
-                          <div style={{ color: '#ff7777', fontSize: '0.78rem', marginTop: '4px' }}>
-                            📝 <b>Not:</b> {item.admin_notes}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Aksiyon Butonları */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', paddingTop: '4px' }}>
-                        {isPending && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleRejectPaymentOrder(item)}
-                              disabled={processingOrderId === item.id}
-                              style={{
-                                padding: '9px 18px', borderRadius: '10px',
-                                background: 'rgba(231, 76, 60, 0.12)', border: '1px solid #e74c3c',
-                                color: '#e74c3c', fontWeight: '700', fontSize: '0.84rem',
-                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                                opacity: processingOrderId === item.id ? 0.5 : 1
-                              }}
-                            >
-                              <XCircle size={15} /> Reddet
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleApprovePaymentOrder(item)}
-                              disabled={processingOrderId === item.id}
-                              style={{
-                                padding: '9px 24px', borderRadius: '10px',
-                                background: 'linear-gradient(135deg, #2ecc71, #27ae60)',
-                                border: 'none', color: '#fff', fontWeight: '900', fontSize: '0.85rem',
-                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                                boxShadow: '0 4px 15px rgba(46, 204, 113, 0.4)',
-                                opacity: processingOrderId === item.id ? 0.5 : 1
-                              }}
-                            >
-                              {processingOrderId === item.id ? (
-                                <>
-                                  <RefreshCw size={15} className="animate-spin" /> İşleniyor...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 size={16} /> ✅ Ödemeyi Onayla & Altını Yükle
-                                </>
-                              )}
-                            </button>
-                          </>
-                        )}
-
-                        {isApproved && (
-                          <div style={{ color: '#2ecc71', fontWeight: '800', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <CheckCircle2 size={16} /> Ödeme Onaylandı & +{item.total_gold.toLocaleString()} Altın Hesaba Yüklendi
-                          </div>
-                        )}
-
-                        {isRejected && (
-                          <div style={{ color: '#e74c3c', fontWeight: '700', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <XCircle size={16} /> Ödeme Reddedildi
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{
-              paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}>
-              <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
-                Toplam <b>{paymentOrders.length}</b> ödeme bildirimi (<b>{pendingPaymentCount}</b> bekliyor)
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                style={{
-                  padding: '9px 24px', borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.1)', border: 'none',
-                  color: '#fff', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem'
-                }}
-              >
-                Kapat
-              </button>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* KAYITLI KULLANICILAR TABLOSU MODAL (SADECE ADMİN) */}
-      {isAdmin && showUsersModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, padding: '20px'
-        }}>
-          <div style={{
-            width: '100%', maxWidth: '1050px', maxHeight: '90vh',
-            background: '#0d0f1d', borderRadius: '24px',
-            border: '1px solid rgba(0, 242, 254, 0.4)',
-            boxShadow: '0 25px 70px rgba(0,0,0,0.8), 0 0 30px rgba(0, 242, 254, 0.15)',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
-            color: '#fff'
-          }}>
-            {/* Modal Header */}
-            <div style={{
-              padding: '22px 26px', borderBottom: '1px solid rgba(255,255,255,0.1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: 'rgba(255,255,255,0.02)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '42px', height: '42px', borderRadius: '12px',
-                  background: 'rgba(0, 242, 254, 0.15)', border: '1px solid #00f2fe',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <Users size={22} color="#00f2fe" />
-                </div>
+          {/* ------------------------------------------ */}
+          {/* TAB 6: CANLI ODALAR & YAYINLAR             */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'live_rooms' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{
+                background: theme.cardBg, padding: '16px 20px', borderRadius: '12px',
+                border: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                boxShadow: theme.shadow
+              }}>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0 }}>
-                    Kayıtlı Kullanıcılar Tablosu ({allUsersList.length})
-                  </h2>
-                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.55)', margin: '2px 0 0 0' }}>
-                    Sisteme kayıtlı tüm kullanıcılar, kullanıcı adları, bakiyeleri ve durumları
-                  </p>
+                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: theme.textPrimary }}>
+                    Canlı Yayın Presence Kanalı (pyngoo_live_rooms_directory)
+                  </h3>
+                  <div style={{ fontSize: '0.76rem', color: theme.textMuted, marginTop: '3px' }}>
+                    Şu anda canlı yayın yapan kullanıcılar presence üzerinden sıfır veritabanı yüküyle anlık izleniyor.
+                  </div>
+                </div>
+                <div style={{
+                  padding: '6px 12px', borderRadius: '8px', background: isLight ? '#f1f5f9' : '#1e2438', color: theme.textSecondary,
+                  fontWeight: '700', fontSize: '0.8rem', border: `1px solid ${theme.border}`
+                }}>
+                  {liveRooms.length} Aktif Yayıncı
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <button
-                  onClick={fetchAllUsers}
-                  style={{
-                    padding: '8px 14px', borderRadius: '10px',
-                    background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#fff', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '5px'
-                  }}
-                >
-                  <RefreshCw size={13} /> Yenile
-                </button>
-                <button
-                  onClick={() => setShowUsersModal(false)}
-                  style={{
-                    width: '36px', height: '36px', borderRadius: '50%',
-                    background: 'rgba(255,255,255,0.06)', border: 'none',
-                    color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Arama & Filtre Çubuğu */}
-            <div style={{
-              padding: '16px 26px', borderBottom: '1px solid rgba(255,255,255,0.06)',
-              display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between',
-              background: 'rgba(0,0,0,0.2)'
-            }}>
-              {/* Arama Kutusu */}
-              <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
-                <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
-                <input
-                  type="text"
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  placeholder="Kullanıcı adı veya ID ile ara..."
-                  style={{
-                    width: '100%', padding: '10px 14px 10px 38px',
-                    borderRadius: '12px', background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.12)', color: '#fff',
-                    fontSize: '0.85rem', outline: 'none'
-                  }}
-                />
-              </div>
-
-              {/* Filtre Butonları */}
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {[
-                  { key: 'all', label: `Tümü (${allUsersList.length})` },
-                  { key: 'female', label: `Kadın / Yayıncı (${allUsersList.filter(u => u.gender === 'kadin' || u.role === 'streamer').length})` },
-                  { key: 'male', label: `Erkek (${allUsersList.filter(u => u.gender === 'erkek').length})` },
-                  { key: 'banned', label: `Yasaklı (${allUsersList.filter(u => u.is_banned).length})` }
-                ].map((f) => (
-                  <button
-                    key={f.key}
-                    onClick={() => setUserRoleFilter(f.key as any)}
-                    style={{
-                      padding: '7px 14px', borderRadius: '12px',
-                      background: userRoleFilter === f.key ? 'rgba(0, 242, 254, 0.2)' : 'rgba(255,255,255,0.04)',
-                      border: userRoleFilter === f.key ? '1px solid #00f2fe' : '1px solid rgba(255,255,255,0.08)',
-                      color: userRoleFilter === f.key ? '#00f2fe' : 'rgba(255,255,255,0.7)',
-                      fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer'
-                    }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Kullanıcılar Tablosu */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 26px' }}>
-              {loadingUsers ? (
-                <div style={{ textAlign: 'center', padding: '50px', color: 'rgba(255,255,255,0.5)' }}>
-                  Kullanıcı listesi yükleniyor...
-                </div>
-              ) : allUsersList.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '50px', color: 'rgba(255,255,255,0.5)' }}>
-                  Henüz kayıtlı kullanıcı bulunmuyor.
+              {liveRooms.length === 0 ? (
+                <div style={{
+                  padding: '50px', textAlign: 'center', background: theme.cardBg,
+                  borderRadius: '12px', border: `1px solid ${theme.border}`,
+                  boxShadow: theme.shadow
+                }}>
+                  <Radio size={40} color={theme.textMuted} style={{ margin: '0 auto 10px auto' }} />
+                  <div style={{ fontSize: '0.95rem', fontWeight: '700', color: theme.textPrimary }}>Şu anda açık canlı oda bulunmuyor.</div>
+                  <div style={{ fontSize: '0.78rem', color: theme.textMuted, marginTop: '4px' }}>
+                    Yayıncı kadınlar yayına başladığında burada anlık listelenecektir.
+                  </div>
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
+                  {liveRooms.map(room => (
+                    <div
+                      key={room.id}
+                      style={{
+                        background: theme.cardBg, padding: '16px', borderRadius: '12px',
+                        border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: '10px',
+                        boxShadow: theme.shadow
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '44px', height: '44px', borderRadius: '10px',
+                          background: isLight ? '#f1f5f9' : '#1a1d2e',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontWeight: '700', fontSize: '1rem', color: theme.textSecondary
+                        }}>
+                          {room.avatar ? (
+                            <img src={room.avatar} alt={room.name} style={{ width: '100%', height: '100%', borderRadius: '10px', objectFit: 'cover' }} />
+                          ) : (
+                            room.name[0].toUpperCase()
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.92rem', fontWeight: '700', color: theme.textPrimary }}>@{room.name}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#10b981', fontWeight: '600' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                            YAYINDA (CANLI)
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.7rem', color: theme.textMuted, fontFamily: 'monospace' }}>
+                        Oda ID: {room.id}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ------------------------------------------ */}
+          {/* TAB 7: SİSTEM DUYURU & BİLDİRİM MASASI     */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'broadcast' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '800px' }}>
+              <div style={{
+                background: theme.cardBg, padding: '20px 22px', borderRadius: '12px',
+                border: `1px solid ${theme.border}`,
+                boxShadow: theme.shadow
+              }}>
+                <h3 style={{ margin: '0 0 14px 0', fontSize: '0.95rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', color: theme.textPrimary }}>
+                  <Send size={16} color={theme.textSecondary} /> Yeni Sistem Duyurusu Fırlat
+                </h3>
+
+                <form onSubmit={handleSendBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.76rem', color: theme.textSecondary, marginBottom: '6px', fontWeight: '600' }}>
+                      Hedef Kitle:
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {[
+                        { id: 'all', label: 'Tüm Kullanıcılar' },
+                        { id: 'female', label: 'Sadece Kadınlar / Yayıncılar' },
+                        { id: 'male', label: 'Sadece Erkekler' }
+                      ].map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setBroadcastTarget(t.id as any)}
+                          style={{
+                            padding: '7px 12px', borderRadius: '8px',
+                            background: broadcastTarget === t.id ? (isLight ? '#0f172a' : '#272b3b') : (isLight ? '#ffffff' : 'rgba(255,255,255,0.03)'),
+                            border: broadcastTarget === t.id ? `1px solid ${theme.borderLight}` : `1px solid ${theme.border}`,
+                            color: broadcastTarget === t.id ? '#ffffff' : theme.textSecondary,
+                            fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer'
+                          }}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.76rem', color: theme.textSecondary, marginBottom: '6px', fontWeight: '600' }}>
+                      Duyuru Başlığı:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Örnek: Bu Gece 21:00'de Hediye Festivali Başlıyor! 🎉"
+                      value={broadcastTitle}
+                      onChange={(e) => setBroadcastTitle(e.target.value)}
+                      style={{
+                        width: '100%', padding: '10px 12px', borderRadius: '8px',
+                        background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                        color: theme.textPrimary, fontSize: '0.86rem', outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.76rem', color: theme.textSecondary, marginBottom: '6px', fontWeight: '600' }}>
+                      Duyuru Metni:
+                    </label>
+                    <textarea
+                      rows={4}
+                      placeholder="Kullanıcılara iletilecek mesajı yazın..."
+                      value={broadcastContent}
+                      onChange={(e) => setBroadcastContent(e.target.value)}
+                      style={{
+                        width: '100%', padding: '10px 12px', borderRadius: '8px',
+                        background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                        color: theme.textPrimary, fontSize: '0.86rem', outline: 'none', resize: 'vertical'
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '11px', borderRadius: '8px',
+                      background: isLight ? '#0f172a' : '#fff',
+                      border: 'none', color: isLight ? '#fff' : '#090a10', fontWeight: '700', fontSize: '0.88rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Duyuruyu Şimdi Yayınla
+                  </button>
+                </form>
+              </div>
+
+              {/* Geçmiş Duyurular */}
+              <div style={{
+                background: theme.cardBg, padding: '18px 20px', borderRadius: '12px',
+                border: `1px solid ${theme.border}`,
+                boxShadow: theme.shadow
+              }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.88rem', fontWeight: '700', color: theme.textPrimary }}>Geçmiş Duyurular</h4>
+                {broadcastHistory.length === 0 ? (
+                  <div style={{ color: theme.textMuted, fontSize: '0.78rem' }}>Henüz geçmiş duyuru kaydı yok.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {broadcastHistory.map(b => (
+                      <div key={b.id} style={{
+                        padding: '10px 14px', borderRadius: '8px', background: theme.cardHeaderBg,
+                        border: `1px solid ${theme.border}`
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: '700', color: theme.textPrimary, fontSize: '0.84rem' }}>{b.title}</span>
+                          <span style={{ fontSize: '0.7rem', color: theme.textMuted }}>
+                            {new Date(b.sent_at).toLocaleString('tr-TR')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '3px' }}>
+                          {b.content}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '5px' }}>
+                          Hedef: {b.target.toUpperCase()} • Gönderen: {b.sent_by}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ------------------------------------------ */}
+          {/* TAB 8: ALTYAPI, KOTA & METRİKLER           */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'infra' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {quotaLoading ? (
+                <div style={{ padding: '60px', textAlign: 'center', color: theme.textSecondary }}>Altyapı metrikleri sorgulanıyor...</div>
+              ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                {/* Supabase Kartı */}
+                <div style={{
+                  background: theme.cardBg, padding: '20px', borderRadius: '12px',
+                  border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: '12px',
+                  boxShadow: theme.shadow
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: '700', color: '#10b981', fontSize: '0.92rem' }}>⚡ Supabase Veritabanı</span>
+                    <span style={{ fontSize: '0.72rem', color: theme.textMuted }}>Ücretsiz Kota: 500 MB</span>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: '800', color: theme.textPrimary }}>
+                      {quotaMetrics?.supabase?.dbMb !== null && quotaMetrics?.supabase?.dbMb !== undefined ? `${quotaMetrics.supabase.dbMb} MB` : '...'}
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: isLight ? '#e2e8f0' : 'rgba(255,255,255,0.08)', borderRadius: '10px', marginTop: '6px', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${quotaMetrics?.supabase?.dbPercent || 5}%`,
+                        height: '100%', background: '#10b981'
+                      }} />
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.76rem', color: theme.textSecondary, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div>👥 Toplam Profil: {quotaMetrics?.supabase?.profiles || 0}</div>
+                    <div>💬 Mesajlar: {quotaMetrics?.supabase?.messages || 0}</div>
+                    <div>📶 Ping Gecikmesi: {quotaMetrics?.supabase?.pingMs || 0} ms</div>
+                  </div>
+                </div>
+
+                {/* Agora Dakikaları Kartı */}
+                <div style={{
+                  background: theme.cardBg, padding: '20px', borderRadius: '12px',
+                  border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: '12px',
+                  boxShadow: theme.shadow
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: '700', color: theme.textPrimary, fontSize: '0.92rem' }}>📹 Agora Ses & Video</span>
+                    <span style={{ fontSize: '0.72rem', color: theme.textMuted }}>Aylık Kota: 10.000 Dk</span>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: '800', color: theme.textPrimary }}>
+                      {quotaMetrics?.agora?.totalMinutes !== undefined ? `${quotaMetrics.agora.totalMinutes} Dk` : '...'}
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: isLight ? '#e2e8f0' : 'rgba(255,255,255,0.08)', borderRadius: '10px', marginTop: '6px', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${quotaMetrics?.agora?.percentUsed || 2}%`,
+                        height: '100%', background: '#64748b'
+                      }} />
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.76rem', color: theme.textSecondary, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div>🎙️ Ses Dakikaları: {quotaMetrics?.agora?.voiceMinutes || 0} Dk</div>
+                    <div>🎥 Video Dakikaları: {quotaMetrics?.agora?.videoMinutes || 0} Dk</div>
+                    <div>⏳ Kalan Ücretsiz Kota: {quotaMetrics?.agora?.remainingMinutes || 10000} Dk</div>
+                  </div>
+                </div>
+              </div>
+              )}
+            </div>
+          )}
+
+          {/* ------------------------------------------ */}
+          {/* TAB 9: KULLANICI HESAP EKSTRESİ & DENETİM  */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'audit' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{
+                background: theme.cardBg, padding: '16px 20px', borderRadius: '12px',
+                border: `1px solid ${theme.border}`, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap',
+                boxShadow: theme.shadow
+              }}>
+                <input
+                  type="text"
+                  placeholder="Kullanıcı Rumuzu veya UUID..."
+                  value={auditQuery}
+                  onChange={(e) => setAuditQuery(e.target.value)}
+                  style={{
+                    padding: '9px 12px', borderRadius: '8px',
+                    background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                    color: theme.textPrimary, fontSize: '0.86rem', outline: 'none', flex: 1, minWidth: '220px'
+                  }}
+                />
+
+                <input
+                  type="date"
+                  value={auditStartDate}
+                  onChange={(e) => setAuditStartDate(e.target.value)}
+                  style={{
+                    padding: '9px 12px', borderRadius: '8px',
+                    background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                    color: theme.textPrimary, fontSize: '0.82rem', outline: 'none'
+                  }}
+                />
+
+                <input
+                  type="date"
+                  value={auditEndDate}
+                  onChange={(e) => setAuditEndDate(e.target.value)}
+                  style={{
+                    padding: '9px 12px', borderRadius: '8px',
+                    background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                    color: theme.textPrimary, fontSize: '0.82rem', outline: 'none'
+                  }}
+                />
+
+                <button
+                  onClick={handleFetchAuditReport}
+                  style={{
+                    padding: '9px 16px', borderRadius: '8px',
+                    background: isLight ? '#0f172a' : '#fff', border: 'none',
+                    color: isLight ? '#fff' : '#090a10', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer'
+                  }}
+                >
+                  {auditLoading ? 'Aranıyor...' : 'Ekstre Çek'}
+                </button>
+              </div>
+
+              {auditError && (
+                <div style={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: '600' }}>{auditError}</div>
+              )}
+
+              {auditUser && (
+                <div style={{
+                  background: theme.cardBg, padding: '16px 20px', borderRadius: '12px',
+                  border: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  boxShadow: theme.shadow
+                }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '700', color: theme.textPrimary }}>@{auditUser.display_name}</h3>
+                    <div style={{ fontSize: '0.74rem', color: theme.textMuted, marginTop: '3px' }}>
+                      ID: {auditUser.id} • {auditUser.gender === 'kadin' ? 'Kadın Yayıncı' : 'Erkek Üye'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: '700', color: '#eab308' }}>🪙 {auditUser.total_gold.toLocaleString()} Altın</div>
+                    <div style={{ fontSize: '0.84rem', fontWeight: '600', color: theme.textSecondary }}>💎 {auditUser.total_diamonds.toLocaleString()} Elmas</div>
+                  </div>
+                </div>
+              )}
+
+              {auditItems.length > 0 && (
+                <div style={{
+                  background: theme.cardBg, borderRadius: '12px',
+                  border: `1px solid ${theme.border}`, overflow: 'hidden',
+                  boxShadow: theme.shadow
+                }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
                     <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        <th style={{ padding: '12px 14px' }}>Kullanıcı</th>
-                        <th style={{ padding: '12px 14px' }}>Cinsiyet & Rol</th>
-                        <th style={{ padding: '12px 14px' }}>Bakiye</th>
-                        <th style={{ padding: '12px 14px' }}>Kayıt Tarihi</th>
-                        <th style={{ padding: '12px 14px' }}>Durum</th>
-                        <th style={{ padding: '12px 14px', textAlign: 'right' }}>İşlemler</th>
+                      <tr style={{ background: theme.tableHeaderBg, borderBottom: `1px solid ${theme.border}`, color: theme.textMuted }}>
+                        <th style={{ padding: '10px 14px', fontSize: '0.72rem', fontWeight: '700' }}>TARİH</th>
+                        <th style={{ padding: '10px 14px', fontSize: '0.72rem', fontWeight: '700' }}>İŞLEM TÜRÜ</th>
+                        <th style={{ padding: '10px 14px', fontSize: '0.72rem', fontWeight: '700' }}>MİKTAR</th>
+                        <th style={{ padding: '10px 14px', fontSize: '0.72rem', fontWeight: '700' }}>AÇIKLAMA</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {allUsersList
-                        .filter(u => {
-                          if (userRoleFilter === 'female') return u.gender === 'kadin' || u.role === 'streamer';
-                          if (userRoleFilter === 'male') return u.gender === 'erkek';
-                          if (userRoleFilter === 'banned') return u.is_banned === true;
-                          return true;
-                        })
-                        .filter(u => {
-                          if (!userSearchQuery.trim()) return true;
-                          const q = userSearchQuery.toLowerCase().trim();
-                          return (u.display_name || '').toLowerCase().includes(q) || (u.id || '').toLowerCase().includes(q);
-                        })
-                        .map((user) => {
-                          const isKadin = user.gender === 'kadin' || user.role === 'streamer';
-                          const isSilinmis = (user.display_name || '').toLowerCase().includes('silinmiş') || user.role === 'deleted';
-                          return (
-                            <tr
-                              key={user.id}
-                              style={{
-                                borderBottom: '1px solid rgba(255,255,255,0.04)',
-                                background: user.is_banned ? 'rgba(255, 45, 85, 0.05)' : 'transparent',
-                                transition: 'background 0.2s'
-                              }}
-                            >
-                              {/* Kullanıcı */}
-                              <td style={{ padding: '12px 14px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                  <div style={{
-                                    width: '36px', height: '36px', borderRadius: '50%',
-                                    background: isKadin ? 'linear-gradient(135deg, #ff416c, #ff4b2b)' : 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontWeight: '800', fontSize: '0.85rem', flexShrink: 0
-                                  }}>
-                                    {(user.display_name || 'U')[0].toUpperCase()}
-                                  </div>
-                                  <div>
-                                    <div style={{ fontWeight: '700', color: isSilinmis ? '#999' : '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      {user.display_name || 'İsimsiz'}
-                                      {(user.id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || (user.display_name || '').toLowerCase() === 'omer') && (
-                                        <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '6px', background: 'rgba(255, 215, 0, 0.2)', color: '#ffd700', border: '1px solid #ffd700' }}>Admin</span>
-                                      )}
-                                      {(user.id !== 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' && (user.display_name || '').toLowerCase() !== 'omer' && (user.is_moderator || user.role === 'moderator' || user.id === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4')) && (
-                                        <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '6px', background: 'rgba(243, 156, 18, 0.2)', color: '#f39c12', border: '1px solid #f39c12' }}>Mod</span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
-                                      ID: {user.id.slice(0, 13)}...
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* Cinsiyet & Rol */}
-                              <td style={{ padding: '12px 14px' }}>
-                                <span style={{
-                                  padding: '3px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700',
-                                  background: isKadin ? 'rgba(255, 65, 108, 0.15)' : 'rgba(79, 172, 254, 0.15)',
-                                  color: isKadin ? '#ff6b8b' : '#4facfe',
-                                  border: isKadin ? '1px solid rgba(255, 65, 108, 0.3)' : '1px solid rgba(79, 172, 254, 0.3)'
-                                }}>
-                                  {isKadin ? '♀️ Kadın (Yayıncı)' : '♂️ Erkek (Kullanıcı)'}
-                                </span>
-                              </td>
-
-                              {/* Bakiye */}
-                              <td style={{ padding: '12px 14px' }}>
-                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '0.8rem' }}>
-                                  <span style={{ color: '#ffd700', fontWeight: '700' }}>
-                                    🟡 {user.total_gold ?? 0}
-                                  </span>
-                                  <span style={{ color: '#00f2fe', fontWeight: '700' }}>
-                                    💎 {user.total_diamonds ?? 0}
-                                  </span>
-                                </div>
-                              </td>
-
-                              {/* Kayıt Tarihi */}
-                              <td style={{ padding: '12px 14px', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>
-                                {user.created_at ? new Date(user.created_at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
-                              </td>
-
-                              {/* Durum */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {user.is_banned ? (
-                                  <span style={{ color: '#ff2d55', fontSize: '0.75rem', fontWeight: '800', background: 'rgba(255,45,85,0.15)', padding: '3px 8px', borderRadius: '6px', border: '1px solid #ff2d55' }}>
-                                    🚫 Yasaklı
-                                  </span>
-                                ) : isSilinmis ? (
-                                  <span style={{ color: '#999', fontSize: '0.75rem', fontWeight: '700', background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '6px' }}>
-                                    Silinmiş
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#2ecc71', fontSize: '0.75rem', fontWeight: '800', background: 'rgba(46,204,113,0.15)', padding: '3px 8px', borderRadius: '6px', border: '1px solid #2ecc71' }}>
-                                    ● Aktif
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* İşlemler */}
-                              <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                                  <button
-                                    onClick={() => handleOpenAuditForUser(user.display_name || user.id)}
-                                    title="Altın ve aktivite ekstresini incele"
-                                    style={{
-                                      padding: '5px 9px', borderRadius: '8px',
-                                      background: 'rgba(0, 242, 254, 0.15)', border: '1px solid rgba(0, 242, 254, 0.4)',
-                                      color: '#00f2fe', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer'
-                                    }}
-                                  >
-                                    📊 Ekstre
-                                  </button>
-
-                                  <button
-                                    onClick={() => handleToggleBanUser(user)}
-                                    title={user.is_banned ? 'Yasağı kaldır' : 'Kullanıcıyı yasakla'}
-                                    style={{
-                                      padding: '5px 9px', borderRadius: '8px',
-                                      background: user.is_banned ? 'rgba(46, 204, 113, 0.2)' : 'rgba(255, 45, 85, 0.2)',
-                                      border: user.is_banned ? '1px solid #2ecc71' : '1px solid #ff2d55',
-                                      color: user.is_banned ? '#2ecc71' : '#ff2d55',
-                                      fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer'
-                                    }}
-                                  >
-                                    {user.is_banned ? 'Yasağı Aç' : 'Yasakla'}
-                                  </button>
-
-                                  <button
-                                    disabled={deletingUserId === user.id}
-                                    onClick={() => handleDeleteUserProfile(user)}
-                                    title="Kullanıcı profilini sil ve kullanıcı adını boşa çıkar"
-                                    style={{
-                                      padding: '5px 9px', borderRadius: '8px',
-                                      background: 'rgba(255, 45, 85, 0.1)', border: '1px solid rgba(255, 45, 85, 0.3)',
-                                      color: '#ff6b8b', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer'
-                                    }}
-                                  >
-                                    <Trash2 size={13} style={{ display: 'inline', marginRight: '3px' }} />
-                                    {deletingUserId === user.id ? 'Siliniyor...' : 'Sil'}
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                      {auditItems.map((item, idx) => (
+                        <tr key={item.id || idx} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                          <td style={{ padding: '10px 14px', color: theme.textMuted, fontSize: '0.76rem' }}>
+                            {new Date(item.created_at).toLocaleString('tr-TR')}
+                          </td>
+                          <td style={{ padding: '10px 14px', fontWeight: '700', color: theme.textPrimary }}>
+                            {item.type || 'Transfer'}
+                          </td>
+                          <td style={{ padding: '10px 14px', fontWeight: '700', color: item.amount > 0 ? '#10b981' : '#ef4444' }}>
+                            {item.amount > 0 ? `+${item.amount}` : item.amount}
+                          </td>
+                          <td style={{ padding: '10px 14px', color: theme.textSecondary }}>
+                            {item.description || '-'}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               )}
             </div>
+          )}
 
-            {/* Modal Footer */}
-            <div style={{
-              padding: '16px 26px', borderTop: '1px solid rgba(255,255,255,0.1)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: 'rgba(255,255,255,0.02)'
-            }}>
-              <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
-                💡 <i>Not: Bir kullanıcıyı sildiğinizde o kişinin kullanıcı adı tamamen serbest kalır ve başka biri tarafından alınabilir.</i>
+          {/* ------------------------------------------ */}
+          {/* TAB 10: PERSONEL & MODERATÖR YÖNETİMİ      */}
+          {/* ------------------------------------------ */}
+          {activeTab === 'staff' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Yeni Moderatör Ekleme */}
+              {isAdmin && (
+                <div style={{
+                  background: theme.cardBg, padding: '18px 20px', borderRadius: '12px',
+                  border: `1px solid ${theme.border}`,
+                  boxShadow: theme.shadow
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '0.92rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', color: theme.textPrimary }}>
+                    <Award size={16} color={theme.textSecondary} /> Yeni Moderatör Tanımla
+                  </h3>
+                  <form onSubmit={handleAssignModerator} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Moderatör yapılacak kullanıcının tam rumuzu..."
+                      value={modUsernameInput}
+                      onChange={(e) => setModUsernameInput(e.target.value)}
+                      style={{
+                        padding: '9px 12px', borderRadius: '8px',
+                        background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                        color: theme.textPrimary, fontSize: '0.86rem', outline: 'none', flex: 1, maxWidth: '380px'
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      style={{
+                        padding: '9px 16px', borderRadius: '8px',
+                        background: isLight ? '#0f172a' : '#fff', border: 'none',
+                        color: isLight ? '#fff' : '#090a10', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer'
+                      }}
+                    >
+                      Yetki Ver
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Moderatör Listesi */}
+              {loadingMods ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: theme.textSecondary }}>Personel listesi yükleniyor...</div>
+              ) : (
+              <div style={{
+                background: theme.cardBg, borderRadius: '12px',
+                border: `1px solid ${theme.border}`, overflow: 'hidden',
+                boxShadow: theme.shadow
+              }}>
+                <div style={{ padding: '14px 18px', borderBottom: `1px solid ${theme.border}`, fontWeight: '700', fontSize: '0.88rem', color: theme.textPrimary }}>
+                  Yetkili Personel Listesi
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
+                  <thead>
+                    <tr style={{ background: theme.tableHeaderBg, borderBottom: `1px solid ${theme.border}`, color: theme.textMuted }}>
+                      <th style={{ padding: '10px 16px', fontSize: '0.72rem', fontWeight: '700' }}>YETKİLİ</th>
+                      <th style={{ padding: '10px 16px', fontSize: '0.72rem', fontWeight: '700' }}>ROL</th>
+                      <th style={{ padding: '10px 16px', fontSize: '0.72rem', fontWeight: '700', textAlign: 'right' }}>İŞLEM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {moderatorsList.map(mod => (
+                      <tr key={mod.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                        <td style={{ padding: '12px 16px', fontWeight: '700', color: theme.textPrimary }}>
+                          @{mod.display_name}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{
+                            padding: '2px 7px', borderRadius: '5px', fontSize: '0.7rem', fontWeight: '700',
+                            background: mod.role === 'admin' ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.15)',
+                            color: mod.role === 'admin' ? '#ef4444' : '#6366f1'
+                          }}>
+                            {mod.role === 'admin' ? 'SÜPER ADMİN' : 'MODERATÖR'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          {isAdmin && mod.role !== 'admin' && (
+                            <button
+                              onClick={() => handleRevokeModerator(mod.id, mod.display_name)}
+                              style={{
+                                padding: '5px 10px', borderRadius: '6px',
+                                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+                                color: '#ef4444', fontWeight: '600', fontSize: '0.74rem', cursor: 'pointer'
+                              }}
+                            >
+                              Yetkiyi Geri Al
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <button
-                onClick={() => setShowUsersModal(false)}
-                style={{
-                  padding: '10px 24px', borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.1)', border: 'none',
-                  color: '#fff', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem'
-                }}
-              >
-                Kapat
-              </button>
+              )}
+
+              {/* Denetim Günlüğü */}
+              <div style={{
+                background: theme.cardBg, padding: '18px 20px', borderRadius: '12px',
+                border: `1px solid ${theme.border}`,
+                boxShadow: theme.shadow
+              }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.88rem', fontWeight: '700', color: theme.textPrimary }}>Moderatör İşlem Günlüğü (Audit Trail)</h4>
+                {auditLogsList.length === 0 ? (
+                  <div style={{ color: theme.textMuted, fontSize: '0.78rem' }}>Henüz işlem kaydı bulunmuyor.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '280px', overflowY: 'auto' }}>
+                    {auditLogsList.slice(0, 50).map(log => (
+                      <div key={log.id} style={{
+                        padding: '8px 12px', borderRadius: '8px', background: theme.cardHeaderBg,
+                        border: `1px solid ${theme.border}`,
+                        fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                      }}>
+                        <div>
+                          <span style={{ color: theme.textPrimary, fontWeight: '700' }}>[{log.moderator}]</span>{' '}
+                          <span style={{ color: theme.textSecondary }}>{log.details}</span>
+                        </div>
+                        <span style={{ fontSize: '0.68rem', color: theme.textMuted }}>
+                          {new Date(log.timestamp).toLocaleTimeString('tr-TR')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+          )}
+
+        </div>
+      </main>
+
+      {/* ========================================== */}
+      {/* KANIT GÖRSELİ ÖNİZLEME (LIGHTBOX)          */}
+      {/* ========================================== */}
+      {previewImage && (
+        <div
+          onClick={() => setPreviewImage(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 100, padding: '20px'
+          }}
+        >
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+            <img src={previewImage} alt="Kanıt Görseli" style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px', objectFit: 'contain' }} />
+            <button
+              onClick={() => setPreviewImage(null)}
+              style={{
+                position: 'absolute', top: '-12px', right: '-12px',
+                width: '32px', height: '32px', borderRadius: '50%',
+                background: isLight ? '#ffffff' : '#1e2438', border: `1px solid ${theme.borderLight}`, color: theme.textPrimary,
+                fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}
 
-      {/* MODERATÖR DENETİM GÜNLÜĞÜ MODALI (SADECE ADMİN) */}
-      {isAdmin && showModLogModal && (
-        <div
-          onClick={() => setShowModLogModal(false)}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: '20px'
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'linear-gradient(180deg, #181c2f 0%, #0d0f1b 100%)',
-              borderRadius: '24px', border: '1px solid rgba(243, 156, 18, 0.4)',
-              width: '100%', maxWidth: '650px', maxHeight: '85vh', overflowY: 'auto',
-              padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.8)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: '800', margin: 0, color: '#f39c12', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                📜 Moderatör İşlem & Denetim Günlüğü ({auditLogsList.length})
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {isOmer && auditLogsList.length > 0 && (
-                  <button
-                    onClick={handleClearAuditLogs}
-                    title="Tüm denetim kayıtlarını kalıcı olarak sil"
-                    style={{ background: 'rgba(255, 45, 85, 0.15)', border: '1px solid rgba(255, 45, 85, 0.4)', color: '#ff2d55', padding: '6px 12px', borderRadius: '10px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Trash2 size={13} /> Temizle
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowModLogModal(false)}
-                  style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer' }}
-                >
-                  ✕
-                </button>
-                </div>
-            </div>
-
-            <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.6)', marginBottom: '16px' }}>
-              Moderatörlerin panel üzerinde gerçekleştirdiği banlama, silme ve onaylama işlemleri burada zaman damgasıyla şeffaf şekilde listelenir.
+      {/* ========================================== */}
+      {/* ÖZEL DİYALOG PENCERESİ (CONFIRM / PROMPT)  */}
+      {/* ========================================== */}
+      {dialogState.isOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(15px)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 200, padding: '20px'
+        }}>
+          <div style={{
+            width: '100%', maxWidth: '420px', background: theme.cardBg,
+            borderRadius: '16px', border: dialogState.isDanger ? '1px solid #ef4444' : `1px solid ${theme.border}`,
+            padding: '24px 22px', textAlign: 'center',
+            boxShadow: isLight ? '0 20px 40px rgba(0,0,0,0.1)' : '0 25px 60px rgba(0,0,0,0.85)'
+          }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: '800', margin: '0 0 8px 0', color: dialogState.isDanger ? '#ef4444' : theme.textPrimary }}>
+              {dialogState.title || 'İşlem Onayı'}
+            </h3>
+            <p style={{ fontSize: '0.84rem', color: theme.textSecondary, margin: '0 0 16px 0', whiteSpace: 'pre-line' }}>
+              {dialogState.message}
             </p>
 
-            {auditLogsList.length === 0 ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
-                Henüz kayıtlı bir denetim hareketi bulunmuyor.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {auditLogsList.map((log: any) => (
-                  <div key={log.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: '800', color: '#00f2fe', fontSize: '0.88rem' }}>
-                        👤 {log.moderator}
-                      </span>
-                      <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)' }}>
-                        {new Date(log.timestamp).toLocaleString('tr-TR')}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.83rem', color: '#fff', fontWeight: '600' }}>
-                      {log.details}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {dialogState.type === 'prompt' && (
+              <input
+                type="text"
+                value={dialogInput}
+                onChange={(e) => setDialogInput(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  background: theme.inputBg, border: `1px solid ${theme.inputBorder}`,
+                  color: theme.textPrimary, fontSize: '0.86rem', marginBottom: '16px', outline: 'none'
+                }}
+                autoFocus
+              />
             )}
-          </div>
-        </div>
-      )}
 
-      {/* ÖZEL PYNGOO TEMALI ONAY / UYARI / İPUCU DİYALOGU */}
-      {dialogState.isOpen && (
-        <div
-          onClick={handleDialogDismiss}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.85)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 99999,
-            padding: '20px'
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'linear-gradient(180deg, #181c2f 0%, #0d0f1b 100%)',
-              borderRadius: '24px',
-              border: dialogState.isDanger 
-                ? '1px solid rgba(255, 45, 85, 0.5)' 
-                : '1px solid rgba(0, 242, 254, 0.3)',
-              boxShadow: dialogState.isDanger 
-                ? '0 20px 60px rgba(255, 45, 85, 0.25)' 
-                : '0 20px 60px rgba(0, 242, 254, 0.15)',
-              width: '100%',
-              maxWidth: '520px',
-              padding: '26px 28px',
-              color: '#fff',
-              animation: 'fadeIn 0.2s ease-out'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '40px', height: '40px', borderRadius: '12px',
-                  background: dialogState.isDanger ? 'rgba(255, 45, 85, 0.15)' : 'rgba(0, 242, 254, 0.15)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  {dialogState.isDanger 
-                    ? <ShieldAlert size={22} color="#ff2d55" /> 
-                    : <ShieldCheck size={22} color="#00f2fe" />}
-                </div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800' }}>
-                  {dialogState.title}
-                </h3>
-              </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                type="button"
                 onClick={handleDialogDismiss}
                 style={{
-                  background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)',
-                  cursor: 'pointer', padding: '4px', display: 'flex'
+                  flex: 1, padding: '10px', borderRadius: '8px',
+                  background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)', border: `1px solid ${theme.border}`,
+                  color: theme.textSecondary, fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer'
                 }}
               >
-                <X size={20} />
+                {dialogState.cancelText || 'Vazgeç'}
               </button>
-            </div>
-
-            <div style={{
-              fontSize: '0.92rem',
-              color: 'rgba(255,255,255,0.85)',
-              lineHeight: 1.6,
-              whiteSpace: 'pre-line',
-              marginBottom: dialogState.type === 'prompt' ? '16px' : '24px',
-              maxHeight: '55vh',
-              overflowY: 'auto'
-            }}>
-              {dialogState.message}
-            </div>
-
-            {dialogState.type === 'prompt' && (
-              <div style={{ marginBottom: '22px' }}>
-                <textarea
-                  value={dialogInput}
-                  onChange={(e) => setDialogInput(e.target.value)}
-                  rows={3}
-                  placeholder="Gerekçenizi buraya yazabilirsiniz..."
-                  autoFocus
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    padding: '12px 14px',
-                    borderRadius: '12px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
-                    fontSize: '0.9rem',
-                    outline: 'none',
-                    resize: 'vertical'
-                  }}
-                />
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              {(dialogState.type === 'confirm' || dialogState.type === 'prompt') && (
-                <button
-                  type="button"
-                  onClick={handleDialogDismiss}
-                  style={{
-                    padding: '10px 18px',
-                    borderRadius: '12px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#fff',
-                    fontWeight: '700',
-                    fontSize: '0.88rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {dialogState.cancelText || 'Vazgeç'}
-                </button>
-              )}
               <button
-                type="button"
                 onClick={handleDialogSubmit}
                 style={{
-                  padding: '10px 22px',
-                  borderRadius: '12px',
-                  background: dialogState.isDanger
-                    ? 'linear-gradient(135deg, #ff2d55, #c0392b)'
-                    : 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                  border: 'none',
-                  color: dialogState.isDanger ? '#fff' : '#000',
-                  fontWeight: '800',
-                  fontSize: '0.88rem',
-                  cursor: 'pointer',
-                  boxShadow: dialogState.isDanger 
-                    ? '0 4px 14px rgba(255, 45, 85, 0.4)' 
-                    : '0 4px 14px rgba(0, 242, 254, 0.3)'
+                  flex: 1, padding: '10px', borderRadius: '8px',
+                  background: dialogState.isDanger ? '#ef4444' : (isLight ? '#0f172a' : '#fff'),
+                  border: 'none', color: dialogState.isDanger ? '#fff' : (isLight ? '#fff' : '#090a10'),
+                  fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer'
                 }}
               >
-                {dialogState.confirmText || (dialogState.type === 'alert' ? 'Tamam' : 'Onayla')}
+                {dialogState.confirmText || 'Onayla'}
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

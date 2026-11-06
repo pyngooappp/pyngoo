@@ -57,7 +57,8 @@ const parseJwt = (token: string) => {
 function App() {
   const isAdminHost = typeof window !== 'undefined' && (
     window.location.hostname.startsWith('admin.') || 
-    window.location.hostname === 'admin.pyngoo.app'
+    window.location.hostname === 'admin.pyngoo.app' ||
+    window.location.search.includes('panel=admin')
   );
 
   if (isAdminHost) {
