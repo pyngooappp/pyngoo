@@ -704,8 +704,9 @@ export default function ModeratorPanel() {
     try {
       const { data: users, error } = await supabase
         .from('profiles')
-        .select('id, gender, role, created_at')
-        .neq('role', 'deleted');
+        .select('id, display_name, gender, role, created_at, avatar_url')
+        .neq('role', 'deleted')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -724,6 +725,12 @@ export default function ModeratorPanel() {
         onlineNow: prev?.onlineNow ?? 0,
         lastChecked: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       }));
+
+      // 145 kullanıcının tamamını listeye aktar
+      if (users && users.length > 0) {
+        setAllUsersList(users as any);
+        setSingleTargetSearchResults(users as any);
+      }
     } catch (err) {
       console.warn('Analytics stats fetch error:', err);
     }
@@ -1147,32 +1154,51 @@ export default function ModeratorPanel() {
   // Tek Kullanıcı Arama & Açılır Liste Doldurma
   const fetchTargetUsersList = async (query = '') => {
     setIsSearchingTargetUser(true);
-    try {
-      const q = query.trim().replace(/^@/, '');
-      // 1. Edge Function üzerinden (service_role garantili arama — RLS kısıtlamalarına takılmaz)
-      const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('send-broadcast', {
-        body: {
-          action: 'search_users',
-          query: q
-        }
-      });
+    const q = query.trim().replace(/^@/, '').toLowerCase();
 
-      if (!edgeErr && edgeRes?.users) {
-        setSingleTargetSearchResults(edgeRes.users as UserProfileItem[]);
-        // Eğer tek bir sonuç tam eşleşiyorsa otomatik seç
-        if (edgeRes.users.length === 1 && q.length >= 2) {
-          setSingleTargetUser(edgeRes.users[0]);
+    try {
+      // 1. Eğer yerel allUsersList boşsa doğrudan profiles'tan çek
+      let sourceList = allUsersList;
+      if (sourceList.length === 0) {
+        const { data: dbProfs } = await supabase
+          .from('profiles')
+          .select('id, display_name, gender, role, created_at, avatar_url')
+          .neq('role', 'deleted')
+          .order('created_at', { ascending: false });
+
+        if (dbProfs && dbProfs.length > 0) {
+          sourceList = dbProfs as any;
+          setAllUsersList(dbProfs as any);
         }
-        return;
       }
 
-      // 2. Yedek: Yerel listeden filtrele
-      const localMatches = allUsersList.filter(u => 
-        !q || u.display_name?.toLowerCase().includes(q.toLowerCase()) || u.id.toLowerCase() === q.toLowerCase()
-      ).slice(0, 50);
-      setSingleTargetSearchResults(localMatches);
-      if (localMatches.length === 1 && q.length >= 2) {
-        setSingleTargetUser(localMatches[0]);
+      // 2. Filtrele (rumuz veya UUID)
+      let matches = q
+        ? sourceList.filter(u => 
+            u.display_name?.toLowerCase().includes(q) || 
+            u.id.toLowerCase() === q
+          )
+        : sourceList;
+
+      // 3. Eğer yerelde bulunamadıysa veritabanından ilike ile ara
+      if (matches.length === 0 && q) {
+        const { data: searchProfs } = await supabase
+          .from('profiles')
+          .select('id, display_name, gender, role, created_at, avatar_url')
+          .neq('role', 'deleted')
+          .ilike('display_name', `%${q}%`)
+          .limit(20);
+
+        if (searchProfs && searchProfs.length > 0) {
+          matches = searchProfs as any;
+        }
+      }
+
+      setSingleTargetSearchResults(matches);
+
+      // Tek bir tam eşleşme varsa otomatik seç
+      if (matches.length === 1 && q.length >= 2) {
+        setSingleTargetUser(matches[0]);
       }
     } catch (err) {
       console.warn('Hedef kullanıcı arama hatası:', err);
