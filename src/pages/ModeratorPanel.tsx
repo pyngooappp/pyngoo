@@ -354,7 +354,6 @@ export default function ModeratorPanel() {
   const [singleTargetSearch, setSingleTargetSearch] = useState('');
   const [singleTargetSearchResults, setSingleTargetSearchResults] = useState<UserProfileItem[]>([]);
   const [isSearchingTargetUser, setIsSearchingTargetUser] = useState(false);
-  const [showTargetDropdown, setShowTargetDropdown] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState<BroadcastMessage[]>(() => {
     try {
       const raw = localStorage.getItem('pyngoo_broadcast_history');
@@ -1145,39 +1144,35 @@ export default function ModeratorPanel() {
     }
   };
 
-  // ==========================================
-  // SİSTEM DUYURU AKSİYONLARI
-  // ==========================================
-  const handleSearchSingleTargetUser = async (query: string) => {
-    setSingleTargetSearch(query);
-    if (!query.trim()) {
-      setSingleTargetSearchResults([]);
-      setShowTargetDropdown(false);
-      return;
-    }
+  // Tek Kullanıcı Arama & Açılır Liste Doldurma
+  const fetchTargetUsersList = async (query = '') => {
     setIsSearchingTargetUser(true);
-    setShowTargetDropdown(true);
-
     try {
       const q = query.trim().replace(/^@/, '');
-      // 1. Önce yerel listeden hızlı eşleşme
-      const localMatches = allUsersList.filter(u => 
-        u.display_name?.toLowerCase().includes(q.toLowerCase()) || u.id.toLowerCase() === q.toLowerCase()
-      ).slice(0, 8);
+      // 1. Edge Function üzerinden (service_role garantili arama — RLS kısıtlamalarına takılmaz)
+      const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke('send-broadcast', {
+        body: {
+          action: 'search_users',
+          query: q
+        }
+      });
 
-      if (localMatches.length > 0) {
-        setSingleTargetSearchResults(localMatches);
+      if (!edgeErr && edgeRes?.users) {
+        setSingleTargetSearchResults(edgeRes.users as UserProfileItem[]);
+        // Eğer tek bir sonuç tam eşleşiyorsa otomatik seç
+        if (edgeRes.users.length === 1 && q.length >= 2) {
+          setSingleTargetUser(edgeRes.users[0]);
+        }
+        return;
       }
 
-      // 2. Veritabanından kesin ara
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
-      let dbQuery = supabase.from('profiles').select('id, display_name, gender, role, total_gold, total_diamonds, is_banned, is_moderator, is_verified, avatar_url, created_at').neq('role', 'deleted');
-      if (isUuid) dbQuery = dbQuery.eq('id', q);
-      else dbQuery = dbQuery.ilike('display_name', `%${q}%`).limit(10);
-
-      const { data: dbData } = await dbQuery;
-      if (dbData && dbData.length > 0) {
-        setSingleTargetSearchResults(dbData as UserProfileItem[]);
+      // 2. Yedek: Yerel listeden filtrele
+      const localMatches = allUsersList.filter(u => 
+        !q || u.display_name?.toLowerCase().includes(q.toLowerCase()) || u.id.toLowerCase() === q.toLowerCase()
+      ).slice(0, 50);
+      setSingleTargetSearchResults(localMatches);
+      if (localMatches.length === 1 && q.length >= 2) {
+        setSingleTargetUser(localMatches[0]);
       }
     } catch (err) {
       console.warn('Hedef kullanıcı arama hatası:', err);
@@ -2913,8 +2908,8 @@ export default function ModeratorPanel() {
                           type="button"
                           onClick={() => {
                             setBroadcastTarget(t.id as any);
-                            if (t.id === 'single' && allUsersList.length > 0 && singleTargetSearchResults.length === 0) {
-                              setSingleTargetSearchResults(allUsersList.slice(0, 10));
+                            if (t.id === 'single') {
+                              fetchTargetUsersList(singleTargetSearch);
                             }
                           }}
                           style={{
@@ -2930,31 +2925,117 @@ export default function ModeratorPanel() {
                       ))}
                     </div>
 
-                    {/* Tek Kullanıcı Seçim / Arama Alanı */}
+                    {/* Tek Kullanıcı Seçim / Açılır Liste & Arama Alanı */}
                     {broadcastTarget === 'single' && (
-                      <div style={{ position: 'relative', marginTop: '10px' }}>
-                        <label style={{ display: 'block', fontSize: '0.74rem', color: '#8b5cf6', marginBottom: '5px', fontWeight: '700' }}>
-                          Hedef Kullanıcıyı Seçin veya Rumuzunu Arayın:
-                        </label>
+                      <div style={{
+                        marginTop: '12px', padding: '16px', borderRadius: '12px',
+                        background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.03)',
+                        border: '1.5px solid rgba(139, 92, 246, 0.4)',
+                        display: 'flex', flexDirection: 'column', gap: '12px'
+                      }}>
+                        
+                        {/* 1. YÖNTEM: GERÇEK AÇILIR LİSTE (SELECT DROPDOWN) */}
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', color: '#8b5cf6', marginBottom: '6px', fontWeight: '800' }}>
+                            ▼ 1. Seçenek: Açılır Listeden Seçin ({singleTargetSearchResults.length} Kullanıcı Listelendi):
+                          </label>
+                          <select
+                            value={singleTargetUser?.id || ''}
+                            onChange={(e) => {
+                              const found = singleTargetSearchResults.find(u => u.id === e.target.value);
+                              if (found) {
+                                setSingleTargetUser(found);
+                                setSingleTargetSearch(found.display_name);
+                              } else {
+                                setSingleTargetUser(null);
+                              }
+                            }}
+                            style={{
+                              width: '100%', padding: '11px 14px', borderRadius: '8px',
+                              background: theme.inputBg, border: '1px solid rgba(139, 92, 246, 0.5)',
+                              color: theme.textPrimary, fontSize: '0.88rem', fontWeight: '600',
+                              outline: 'none', cursor: 'pointer'
+                            }}
+                          >
+                            <option value="" style={{ background: theme.cardBg, color: theme.textPrimary }}>
+                              -- Lütfen açılır listeden bir kullanıcı seçin --
+                            </option>
+                            {singleTargetSearchResults.map(u => (
+                              <option key={u.id} value={u.id} style={{ background: theme.cardBg, color: theme.textPrimary }}>
+                                @{u.display_name} ({u.gender === 'kadin' ? 'Kadın' : 'Erkek'}) {u.role === 'admin' ? '[Yönetici]' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                        {singleTargetUser ? (
+                        {/* Araya Ayraç Çizgisi */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ flex: 1, height: '1px', background: theme.border }} />
+                          <span style={{ fontSize: '0.7rem', color: theme.textMuted, fontWeight: '700' }}>VEYA RUMUZ İLE ARAYIN</span>
+                          <div style={{ flex: 1, height: '1px', background: theme.border }} />
+                        </div>
+
+                        {/* 2. YÖNTEM: İSİM YAZARAK ARAMA */}
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', color: '#8b5cf6', marginBottom: '6px', fontWeight: '800' }}>
+                            🔍 2. Seçenek: Kullanıcı Rumuzunu Yazarak Arayın:
+                          </label>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                              type="text"
+                              placeholder="Kullanıcı rumuzu yazın (Örn: apoo, emre, Deli5353)..."
+                              value={singleTargetSearch}
+                              onChange={(e) => {
+                                setSingleTargetSearch(e.target.value);
+                                fetchTargetUsersList(e.target.value);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  fetchTargetUsersList(singleTargetSearch);
+                                }
+                              }}
+                              style={{
+                                flex: 1, padding: '10px 12px', borderRadius: '8px',
+                                background: theme.inputBg, border: '1px solid rgba(139, 92, 246, 0.4)',
+                                color: theme.textPrimary, fontSize: '0.86rem', outline: 'none'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => fetchTargetUsersList(singleTargetSearch)}
+                              style={{
+                                padding: '10px 16px', borderRadius: '8px',
+                                background: '#8b5cf6', border: 'none',
+                                color: '#fff', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer'
+                              }}
+                            >
+                              {isSearchingTargetUser ? 'Aranıyor...' : 'Kullanıcıyı Ara'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Seçili Kullanıcı Onay Rozeti */}
+                        {singleTargetUser && (
                           <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '10px 14px', borderRadius: '8px',
-                            background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)'
+                            padding: '12px 16px', borderRadius: '10px',
+                            background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{
-                                width: '32px', height: '32px', borderRadius: '50%', background: singleTargetUser.gender === 'kadin' ? '#ec4899' : '#3b82f6',
-                                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.85rem'
+                                width: '36px', height: '36px', borderRadius: '50%',
+                                background: singleTargetUser.gender === 'kadin' ? '#ec4899' : '#3b82f6',
+                                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontWeight: '800', fontSize: '0.9rem'
                               }}>
                                 {singleTargetUser.display_name?.charAt(0).toUpperCase()}
                               </div>
                               <div>
-                                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: theme.textPrimary }}>
-                                  @{singleTargetUser.display_name}
+                                <div style={{ fontSize: '0.92rem', fontWeight: '800', color: '#10b981' }}>
+                                  ✓ Seçildi: @{singleTargetUser.display_name}
                                 </div>
-                                <div style={{ fontSize: '0.68rem', color: theme.textMuted }}>
+                                <div style={{ fontSize: '0.7rem', color: theme.textMuted }}>
                                   ID: {singleTargetUser.id} • {singleTargetUser.gender === 'kadin' ? '👩 Kadın' : '👨 Erkek'}
                                 </div>
                               </div>
@@ -2964,87 +3045,16 @@ export default function ModeratorPanel() {
                               onClick={() => {
                                 setSingleTargetUser(null);
                                 setSingleTargetSearch('');
-                                setSingleTargetSearchResults(allUsersList.slice(0, 10));
-                                setShowTargetDropdown(true);
+                                fetchTargetUsersList('');
                               }}
                               style={{
-                                padding: '5px 10px', borderRadius: '6px',
+                                padding: '6px 12px', borderRadius: '6px',
                                 background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)',
-                                color: '#ef4444', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer'
+                                color: '#ef4444', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer'
                               }}
                             >
-                              Değiştir
+                              Seçimi Kaldır
                             </button>
-                          </div>
-                        ) : (
-                          <div style={{ position: 'relative' }}>
-                            <input
-                              type="text"
-                              placeholder="Kullanıcı rumuzu yazın (Örn: Deli5353 veya emre)..."
-                              value={singleTargetSearch}
-                              onChange={(e) => handleSearchSingleTargetUser(e.target.value)}
-                              onFocus={() => {
-                                if (singleTargetSearchResults.length === 0 && allUsersList.length > 0) {
-                                  setSingleTargetSearchResults(allUsersList.slice(0, 10));
-                                }
-                                setShowTargetDropdown(true);
-                              }}
-                              style={{
-                                width: '100%', padding: '10px 12px', borderRadius: '8px',
-                                background: theme.inputBg, border: '1px solid rgba(139, 92, 246, 0.4)',
-                                color: theme.textPrimary, fontSize: '0.86rem', outline: 'none'
-                              }}
-                            />
-
-                            {/* Açılır Arama Sonuçları Listesi */}
-                            {showTargetDropdown && (
-                              <div style={{
-                                position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
-                                background: theme.cardBg, borderRadius: '8px', border: `1px solid ${theme.borderLight}`,
-                                boxShadow: '0 10px 25px rgba(0,0,0,0.4)', maxHeight: '220px', overflowY: 'auto',
-                                zIndex: 100, display: 'flex', flexDirection: 'column'
-                              }}>
-                                {isSearchingTargetUser ? (
-                                  <div style={{ padding: '12px', fontSize: '0.78rem', color: theme.textMuted, textAlign: 'center' }}>
-                                    Kullanıcılar taranıyor...
-                                  </div>
-                                ) : singleTargetSearchResults.length === 0 ? (
-                                  <div style={{ padding: '12px', fontSize: '0.78rem', color: theme.textMuted, textAlign: 'center' }}>
-                                    Kullanıcı bulunamadı.
-                                  </div>
-                                ) : (
-                                  singleTargetSearchResults.map(u => (
-                                    <div
-                                      key={u.id}
-                                      onClick={() => {
-                                        setSingleTargetUser(u);
-                                        setShowTargetDropdown(false);
-                                      }}
-                                      style={{
-                                        padding: '9px 12px', borderBottom: `1px solid ${theme.border}`,
-                                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                                      }}
-                                    >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <div style={{
-                                          width: '24px', height: '24px', borderRadius: '50%',
-                                          background: u.gender === 'kadin' ? '#ec4899' : '#3b82f6',
-                                          color: '#fff', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700'
-                                        }}>
-                                          {u.display_name?.charAt(0).toUpperCase()}
-                                        </div>
-                                        <span style={{ fontSize: '0.84rem', fontWeight: '700', color: theme.textPrimary }}>
-                                          @{u.display_name}
-                                        </span>
-                                      </div>
-                                      <span style={{ fontSize: '0.7rem', color: theme.textMuted }}>
-                                        {u.gender === 'kadin' ? '👩 Kadın' : '👨 Erkek'}
-                                      </span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>

@@ -88,6 +88,8 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
   let body: {
+    action?: "send" | "search_users";
+    query?: string;
     title?: string;
     content?: string;
     target?: "all" | "female" | "male" | "single";
@@ -101,6 +103,35 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Geçersiz JSON gövdesi" }, 400);
   }
 
+  // A) Kullanıcı Arama / Listeleme Modu (Admin Panel Açılır Listesi İçin)
+  if (body.action === "search_users") {
+    const q = (body.query || "").trim().replace(/^@/, "");
+    let query = admin
+      .from("profiles")
+      .select("id, display_name, gender, avatar_url, role, created_at")
+      .neq("role", "deleted");
+
+    if (q) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
+      if (isUuid) {
+        query = query.eq("id", q);
+      } else {
+        query = query.ilike("display_name", `%${q}%`);
+      }
+    }
+
+    const { data: users, error: uErr } = await query
+      .order("created_at", { ascending: false })
+      .limit(60);
+
+    if (uErr) {
+      return json({ error: "Kullanıcılar listelenemedi: " + uErr.message }, 500);
+    }
+
+    return json({ success: true, users: users || [] });
+  }
+
+  // B) Duyuru Gönderim Modu
   const title = (body.title || "").trim();
   const content = (body.content || "").trim();
   const target = body.target || "all";
