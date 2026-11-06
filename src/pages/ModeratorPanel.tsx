@@ -66,8 +66,7 @@ export interface UserProfileItem {
   total_diamonds: number;
   is_banned: boolean;
   is_moderator?: boolean;
-  is_verified?: boolean;
-  avatar_url?: string;
+  avatar?: string;
   created_at: string;
   active_device_id?: string;
 }
@@ -702,20 +701,33 @@ export default function ModeratorPanel() {
 
   const fetchAnalyticsStats = async () => {
     try {
-      const { data: users, error } = await supabase
+      let users: any[] | null = null;
+
+      // 1. Önce doğrudan profiles tablosundan dene
+      const { data: dbUsers, error: dbErr } = await supabase
         .from('profiles')
-        .select('id, display_name, gender, role, created_at, avatar_url')
+        .select('id, display_name, gender, role, created_at, avatar')
         .neq('role', 'deleted')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (!dbErr && dbUsers && dbUsers.length > 0) {
+        users = dbUsers;
+      } else {
+        // 2. Tablo izni yoksa RPC üzerinden dene (SECURITY DEFINER)
+        const { data: rpcUsers } = await supabase.rpc('get_broadcast_target_users', { p_search: '' });
+        if (rpcUsers && rpcUsers.length > 0) {
+          users = rpcUsers;
+        }
+      }
 
-      const total = users?.length || 0;
-      const female = users?.filter((u) => u.gender === 'kadin').length || 0;
-      const male = users?.filter((u) => u.gender === 'erkek').length || 0;
+      if (!users || users.length === 0) return;
+
+      const total = users.length;
+      const female = users.filter((u) => u.gender === 'kadin').length;
+      const male = users.filter((u) => u.gender === 'erkek').length;
 
       const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-      const new24h = users?.filter((u) => u.created_at && new Date(u.created_at).getTime() >= oneDayAgo).length || 0;
+      const new24h = users.filter((u) => u.created_at && new Date(u.created_at).getTime() >= oneDayAgo).length;
 
       setAnalyticsStats(prev => ({
         totalUsers: total,
@@ -727,10 +739,8 @@ export default function ModeratorPanel() {
       }));
 
       // 145 kullanıcının tamamını listeye aktar
-      if (users && users.length > 0) {
-        setAllUsersList(users as any);
-        setSingleTargetSearchResults(users as any);
-      }
+      setAllUsersList(users as any);
+      setSingleTargetSearchResults(users as any);
     } catch (err) {
       console.warn('Analytics stats fetch error:', err);
     }
@@ -741,13 +751,20 @@ export default function ModeratorPanel() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, display_name, gender, role, total_gold, total_diamonds, is_banned, is_moderator, is_verified, avatar_url, created_at')
+        .select('id, display_name, gender, role, total_gold, total_diamonds, is_banned, is_moderator, avatar, created_at')
         .neq('role', 'deleted')
         .order('created_at', { ascending: false })
         .limit(500);
 
-      if (error) throw error;
-      setAllUsersList((data as UserProfileItem[]) || []);
+      if (!error && data && data.length > 0) {
+        setAllUsersList((data as UserProfileItem[]) || []);
+      } else {
+        // Tablo erişilemezse RPC fallback
+        const { data: rpcUsers } = await supabase.rpc('get_broadcast_target_users', { p_search: '' });
+        if (rpcUsers && rpcUsers.length > 0) {
+          setAllUsersList(rpcUsers as any);
+        }
+      }
     } catch (err) {
       console.error('Kullanıcılar çekilemedi:', err);
     } finally {
@@ -1157,41 +1174,53 @@ export default function ModeratorPanel() {
     const q = query.trim().replace(/^@/, '').toLowerCase();
 
     try {
-      // 1. Eğer yerel allUsersList boşsa doğrudan profiles'tan çek
-      let sourceList = allUsersList;
-      if (sourceList.length === 0) {
-        const { data: dbProfs } = await supabase
-          .from('profiles')
-          .select('id, display_name, gender, role, created_at, avatar_url')
-          .neq('role', 'deleted')
-          .order('created_at', { ascending: false });
+      let matches: any[] = [];
 
-        if (dbProfs && dbProfs.length > 0) {
-          sourceList = dbProfs as any;
-          setAllUsersList(dbProfs as any);
-        }
+      // 1. Önce doğrudan profiles tablosundan veya yerel allUsersList'ten filtrele
+      if (allUsersList.length > 0) {
+        matches = q
+          ? allUsersList.filter(u => 
+              u.display_name?.toLowerCase().includes(q) || 
+              u.id.toLowerCase() === q
+            )
+          : allUsersList;
       }
 
-      // 2. Filtrele (rumuz veya UUID)
-      let matches = q
-        ? sourceList.filter(u => 
-            u.display_name?.toLowerCase().includes(q) || 
-            u.id.toLowerCase() === q
-          )
-        : sourceList;
+      // 2. Yerel liste boşsa veya aranan kullanıcı yerelde yoksa doğrudan profiles tablosundan çek
+      if (matches.length === 0) {
+        try {
+          let queryBuilder = supabase
+            .from('profiles')
+            .select('id, display_name, gender, role, created_at, avatar')
+            .neq('role', 'deleted');
 
-      // 3. Eğer yerelde bulunamadıysa veritabanından ilike ile ara
-      if (matches.length === 0 && q) {
-        const { data: searchProfs } = await supabase
-          .from('profiles')
-          .select('id, display_name, gender, role, created_at, avatar_url')
-          .neq('role', 'deleted')
-          .ilike('display_name', `%${q}%`)
-          .limit(20);
+          if (q) {
+            queryBuilder = queryBuilder.ilike('display_name', `%${q}%`);
+          } else {
+            queryBuilder = queryBuilder.order('created_at', { ascending: false }).limit(500);
+          }
 
-        if (searchProfs && searchProfs.length > 0) {
-          matches = searchProfs as any;
-        }
+          const { data: dbProfs, error: dbErr } = await queryBuilder;
+          if (!dbErr && dbProfs && dbProfs.length > 0) {
+            matches = dbProfs;
+            if (allUsersList.length === 0 && !q) {
+              setAllUsersList(dbProfs as any);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. İkisi de boşsa RPC üzerinden yedek dene
+      if (matches.length === 0) {
+        try {
+          const { data: rpcUsers, error: rpcErr } = await supabase.rpc('get_broadcast_target_users', { p_search: q });
+          if (!rpcErr && rpcUsers && rpcUsers.length > 0) {
+            matches = rpcUsers;
+            if (allUsersList.length === 0 && !q) {
+              setAllUsersList(rpcUsers as any);
+            }
+          }
+        } catch (_) {}
       }
 
       setSingleTargetSearchResults(matches);
@@ -2992,6 +3021,38 @@ export default function ModeratorPanel() {
                               </option>
                             ))}
                           </select>
+                          {singleTargetSearchResults.length === 0 && !isSearchingTargetUser && (
+                            <div style={{
+                              marginTop: '8px',
+                              padding: '8px 12px',
+                              borderRadius: '8px',
+                              background: 'rgba(245, 158, 11, 0.1)',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              color: '#f59e0b',
+                              fontSize: '0.76rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between'
+                            }}>
+                              <span>⚠️ Henüz kullanıcı listelenmedi veya arama sonucu bulunamadı.</span>
+                              <button
+                                type="button"
+                                onClick={() => fetchTargetUsersList('')}
+                                style={{
+                                  background: '#f59e0b',
+                                  color: '#000',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '4px 10px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  fontSize: '0.72rem'
+                                }}
+                              >
+                                Yeniden Yükle
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Araya Ayraç Çizgisi */}
