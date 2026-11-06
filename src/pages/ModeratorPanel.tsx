@@ -6,10 +6,9 @@ import {
   FileText, Search, Copy, Check,
   Radio, Send, Activity, DollarSign,
   Download, LogOut, Sparkles, Cpu, Award, ChevronLeft, ChevronRight, AlertTriangle,
-  Sun, Moon
+  Sun, Moon, Eye, UserCheck, UserPlus, X
 } from 'lucide-react';
 import { sendTelegramAlert } from '../utils/telegramAlert';
-import LiveRealAnalyticsBanner from '../components/LiveRealAnalyticsBanner';
 import EconomyHealthBanner from '../components/EconomyHealthBanner';
 
 // ==========================================
@@ -300,6 +299,17 @@ export default function ModeratorPanel() {
   const [loadingReports, setLoadingReports] = useState(false);
   const [reportFilter, setReportFilter] = useState<'all' | 'pending' | 'banned' | 'resolved' | 'dismissed'>('pending');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
+
+  // Gerçek zamanlı analitik istatistikleri (KPI Sayaçları)
+  const [analyticsStats, setAnalyticsStats] = useState<{
+    totalUsers: number;
+    femaleCount: number;
+    maleCount: number;
+    newUsers24h: number;
+    onlineNow: number;
+    lastChecked: string;
+  } | null>(null);
 
   // ==========================================
   // PARA ÇEKİM TALEPLERİ
@@ -684,12 +694,42 @@ export default function ModeratorPanel() {
     }
   };
 
+  const fetchAnalyticsStats = async () => {
+    try {
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('id, gender, role, created_at')
+        .neq('role', 'deleted');
+
+      if (error) throw error;
+
+      const total = users?.length || 0;
+      const female = users?.filter((u) => u.gender === 'kadin').length || 0;
+      const male = users?.filter((u) => u.gender === 'erkek').length || 0;
+
+      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const new24h = users?.filter((u) => u.created_at && new Date(u.created_at).getTime() >= oneDayAgo).length || 0;
+
+      setAnalyticsStats(prev => ({
+        totalUsers: total,
+        femaleCount: female,
+        maleCount: male,
+        newUsers24h: new24h,
+        onlineNow: prev?.onlineNow ?? 0,
+        lastChecked: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      }));
+    } catch (err) {
+      console.warn('Analytics stats fetch error:', err);
+    }
+  };
+
   const fetchAllUsers = async () => {
     setLoadingUsers(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, display_name, gender, role, total_gold, total_diamonds, is_banned, is_moderator, is_verified, avatar_url, created_at, active_device_id')
+        .select('id, display_name, gender, role, total_gold, total_diamonds, is_banned, is_moderator, is_verified, avatar_url, created_at')
+        .neq('role', 'deleted')
         .order('created_at', { ascending: false })
         .limit(500);
 
@@ -782,6 +822,7 @@ export default function ModeratorPanel() {
 
   // Tüm Verileri Senkronize Et
   const refreshAllData = () => {
+    fetchAnalyticsStats();
     fetchReports();
     fetchWithdrawals();
     fetchPaymentOrders();
@@ -795,6 +836,23 @@ export default function ModeratorPanel() {
   // Realtime Dinleyiciler (Presence & Postgres Changes)
   useEffect(() => {
     if (!isAuthenticated) return;
+
+    // 0. pyngoo_presence Kanalı (Çevrimiçi Sayaç)
+    const presenceCh = supabase.channel('pyngoo_presence');
+    const readPresence = () => {
+      try {
+        const st = presenceCh.presenceState() as Record<string, any[]>;
+        const count = Object.keys(st).length;
+        setAnalyticsStats(prev => prev ? { ...prev, onlineNow: count } : { totalUsers: 0, femaleCount: 0, maleCount: 0, newUsers24h: 0, onlineNow: count, lastChecked: '' });
+      } catch (_) {}
+    };
+    presenceCh
+      .on('presence', { event: 'sync' }, readPresence)
+      .on('presence', { event: 'join' }, readPresence)
+      .on('presence', { event: 'leave' }, readPresence)
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') readPresence();
+      });
 
     // 1. Canlı Yayın Presence Kanalı Dinleyicisi
     const liveDir = supabase.channel('pyngoo_live_rooms_directory');
@@ -835,6 +893,7 @@ export default function ModeratorPanel() {
     refreshAllData();
 
     return () => {
+      supabase.removeChannel(presenceCh);
       supabase.removeChannel(liveDir);
       supabase.removeChannel(changesChannel);
     };
@@ -1657,10 +1716,10 @@ export default function ModeratorPanel() {
           {activeTab === 'dashboard' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               
-              {/* Canlı KPI Sayaç Kartları */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+              {/* Canlı KPI Sayaç Kartları (Tüm Metrikler Eşit Ebatta Kurumsal Kartlar) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
                 
-                {/* Toplam Kullanıcı */}
+                {/* 1. Toplam Kullanıcı */}
                 <div style={{
                   background: theme.cardBg, padding: '18px', borderRadius: '12px',
                   border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: '6px',
@@ -1671,14 +1730,92 @@ export default function ModeratorPanel() {
                     <Users size={16} color={theme.textMuted} />
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: '800', color: theme.textPrimary }}>
-                    {allUsersList.length > 0 ? allUsersList.length.toLocaleString() : '...'}
+                    {(analyticsStats?.totalUsers ?? (allUsersList.length > 0 ? allUsersList.length : 0)).toLocaleString()}
                   </div>
                   <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
-                    {allUsersList.filter(u => u.gender === 'kadin').length} Kadın • {allUsersList.filter(u => u.gender === 'erkek').length} Erkek
+                    {(analyticsStats?.femaleCount ?? allUsersList.filter(u => u.gender === 'kadin').length)} Kadın • {(analyticsStats?.maleCount ?? allUsersList.filter(u => u.gender === 'erkek').length)} Erkek
                   </div>
                 </div>
 
-                {/* Bekleyen Şikayetler */}
+                {/* 2. Kadın Kullanıcılar */}
+                <div 
+                  onClick={() => { setUserRoleFilter('female'); setActiveTab('users'); }}
+                  style={{
+                    background: theme.cardBg, padding: '18px', borderRadius: '12px',
+                    border: '1px solid rgba(236, 72, 153, 0.3)', display: 'flex', flexDirection: 'column', gap: '6px',
+                    boxShadow: theme.shadow, cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ec4899', fontSize: '0.78rem', fontWeight: '700' }}>
+                    <span>Kadın Üyeler</span>
+                    <UserCheck size={16} color="#ec4899" />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#ec4899' }}>
+                    {(analyticsStats?.femaleCount ?? allUsersList.filter(u => u.gender === 'kadin').length).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    👩 Doğrulanmış Kadın Profili
+                  </div>
+                </div>
+
+                {/* 3. Erkek Kullanıcılar */}
+                <div 
+                  onClick={() => { setUserRoleFilter('male'); setActiveTab('users'); }}
+                  style={{
+                    background: theme.cardBg, padding: '18px', borderRadius: '12px',
+                    border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', flexDirection: 'column', gap: '6px',
+                    boxShadow: theme.shadow, cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#3b82f6', fontSize: '0.78rem', fontWeight: '700' }}>
+                    <span>Erkek Üyeler</span>
+                    <Users size={16} color="#3b82f6" />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#3b82f6' }}>
+                    {(analyticsStats?.maleCount ?? allUsersList.filter(u => u.gender === 'erkek').length).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    👨 Aktif Erkek Üye
+                  </div>
+                </div>
+
+                {/* 4. Anlık Çevrimiçi */}
+                <div style={{
+                  background: theme.cardBg, padding: '18px', borderRadius: '12px',
+                  border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', flexDirection: 'column', gap: '6px',
+                  boxShadow: theme.shadow
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#10b981', fontSize: '0.78rem', fontWeight: '700' }}>
+                    <span>Anlık Çevrimiçi</span>
+                    <Radio size={16} color="#10b981" />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#10b981' }}>
+                    {(analyticsStats?.onlineNow ?? 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    🟢 Canlı Aktif Kullanıcı
+                  </div>
+                </div>
+
+                {/* 5. Bugün Yeni Üye */}
+                <div style={{
+                  background: theme.cardBg, padding: '18px', borderRadius: '12px',
+                  border: '1px solid rgba(139, 92, 246, 0.3)', display: 'flex', flexDirection: 'column', gap: '6px',
+                  boxShadow: theme.shadow
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8b5cf6', fontSize: '0.78rem', fontWeight: '700' }}>
+                    <span>Bugün Yeni Üye</span>
+                    <UserPlus size={16} color="#8b5cf6" />
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#8b5cf6' }}>
+                    +{(analyticsStats?.newUsers24h ?? 0)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted }}>
+                    ✨ Son 24 saatte katılan
+                  </div>
+                </div>
+
+                {/* 6. Bekleyen Şikayetler */}
                 <div 
                   onClick={() => setActiveTab('reports')}
                   style={{
@@ -1701,7 +1838,7 @@ export default function ModeratorPanel() {
                   </div>
                 </div>
 
-                {/* Bekleyen Para Çekimleri */}
+                {/* 7. Bekleyen Para Çekimleri */}
                 <div 
                   onClick={() => setActiveTab('withdrawals')}
                   style={{
@@ -1724,7 +1861,7 @@ export default function ModeratorPanel() {
                   </div>
                 </div>
 
-                {/* Bekleyen Altın Siparişleri */}
+                {/* 8. Bekleyen Altın Siparişleri */}
                 <div 
                   onClick={() => setActiveTab('payments')}
                   style={{
@@ -1747,7 +1884,7 @@ export default function ModeratorPanel() {
                   </div>
                 </div>
 
-                {/* Canlı Yayınlar / Odalar */}
+                {/* 9. Canlı Yayınlar / Odalar */}
                 <div 
                   onClick={() => setActiveTab('live_rooms')}
                   style={{
@@ -1769,8 +1906,7 @@ export default function ModeratorPanel() {
                 </div>
               </div>
 
-              {/* Canlı Kullanıcı & Ekonomi Takip Bannerları */}
-              <LiveRealAnalyticsBanner isAdmin={isAdmin} isLight={theme.isLight} />
+              {/* Ekonomi ve Kur Takip Bannerı */}
               <EconomyHealthBanner isAdmin={isAdmin} isLight={theme.isLight} />
 
               {/* Hızlı İşlem Masası */}
@@ -1893,19 +2029,21 @@ export default function ModeratorPanel() {
                     .map(r => (
                       <div
                         key={r.id}
+                        onClick={() => setSelectedReport(r)}
                         style={{
                           background: theme.cardBg,
                           padding: '16px 20px', borderRadius: '12px',
                           border: r.status === 'pending' ? '1px solid rgba(239, 68, 68, 0.4)' : `1px solid ${theme.border}`,
                           boxShadow: theme.shadow,
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap'
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap',
+                          cursor: 'pointer', transition: 'all 0.15s ease'
                         }}
                       >
                         <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
                           {/* Kanıt Görseli Varsa Önizleme */}
                           {r.snapshot_data ? (
                             <div
-                              onClick={() => setPreviewImage(r.snapshot_data!)}
+                              onClick={(e) => { e.stopPropagation(); setPreviewImage(r.snapshot_data!); }}
                               style={{
                                 width: '56px', height: '56px', borderRadius: '8px',
                                 overflow: 'hidden', cursor: 'pointer', border: '1px solid rgba(239, 68, 68, 0.4)',
@@ -1954,10 +2092,26 @@ export default function ModeratorPanel() {
 
                         {/* Aksiyon Butonları */}
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedReport(r);
+                            }}
+                            style={{
+                              padding: '8px 13px', borderRadius: '8px',
+                              background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.06)',
+                              border: `1px solid ${theme.borderLight}`,
+                              color: theme.textPrimary, fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: '6px'
+                            }}
+                          >
+                            <Eye size={14} /> Detay
+                          </button>
+
                           {r.status === 'pending' && (
                             <>
                               <button
-                                onClick={() => handleBanUserFromReport(r)}
+                                onClick={(e) => { e.stopPropagation(); handleBanUserFromReport(r); }}
                                 style={{
                                   padding: '8px 14px', borderRadius: '8px',
                                   background: '#ef4444', border: 'none',
@@ -1967,7 +2121,7 @@ export default function ModeratorPanel() {
                                 Kullanıcıyı Banla
                               </button>
                               <button
-                                onClick={() => handleResolveReport(r.id)}
+                                onClick={(e) => { e.stopPropagation(); handleResolveReport(r.id); }}
                                 style={{
                                   padding: '8px 12px', borderRadius: '8px',
                                   background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)',
@@ -1977,7 +2131,7 @@ export default function ModeratorPanel() {
                                 Çözüldü
                               </button>
                               <button
-                                onClick={() => handleDismissReport(r.id)}
+                                onClick={(e) => { e.stopPropagation(); handleDismissReport(r.id); }}
                                 style={{
                                   padding: '8px 12px', borderRadius: '8px',
                                   background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
@@ -3075,6 +3229,236 @@ export default function ModeratorPanel() {
 
         </div>
       </main>
+
+      {/* ========================================== */}
+      {/* ŞİKAYET DETAY & İNCELEME MODALI            */}
+      {/* ========================================== */}
+      {selectedReport && (
+        <div
+          onClick={() => setSelectedReport(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 120, padding: '20px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: '640px', maxHeight: '90vh',
+              background: theme.cardBg, borderRadius: '16px',
+              border: `1px solid ${theme.borderLight}`,
+              boxShadow: isLight ? '0 20px 50px rgba(0,0,0,0.15)' : '0 25px 60px rgba(0,0,0,0.85)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden'
+            }}
+          >
+            {/* Modal Başlık Çubuğu */}
+            <div style={{
+              padding: '16px 20px', background: theme.cardHeaderBg,
+              borderBottom: `1px solid ${theme.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShieldAlert size={20} color="#ef4444" />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: theme.textPrimary }}>
+                  Şikayet & İhbar İnceleme
+                </h3>
+                <span style={{
+                  padding: '2px 8px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700',
+                  background: selectedReport.status === 'pending' ? 'rgba(239, 68, 68, 0.15)' : selectedReport.status === 'banned' ? '#7f1d1d' : 'rgba(16, 185, 129, 0.15)',
+                  color: selectedReport.status === 'pending' ? '#ef4444' : selectedReport.status === 'banned' ? '#fca5a5' : '#10b981'
+                }}>
+                  {selectedReport.status === 'pending' ? 'BEKLİYOR' : selectedReport.status === 'banned' ? 'YASAKLANDI' : 'ÇÖZÜLDÜ'}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                style={{
+                  width: '32px', height: '32px', borderRadius: '8px',
+                  background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${theme.border}`,
+                  color: theme.textSecondary, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Gövde İçeriği */}
+            <div style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Taraflar: Şikayet Eden & Şikayet Edilen */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {/* Şikayet Eden */}
+                <div style={{
+                  padding: '12px 14px', borderRadius: '10px',
+                  background: isLight ? '#f8fafc' : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${theme.border}`
+                }}>
+                  <div style={{ fontSize: '0.72rem', color: theme.textMuted, fontWeight: '600' }}>ŞİKAYET EDEN (İHBARCI)</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: '700', color: theme.textPrimary, marginTop: '2px' }}>
+                    @{selectedReport.reporter_name}
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: theme.textMuted, marginTop: '4px', wordBreak: 'break-all' }}>
+                    ID: {selectedReport.reporter_id}
+                  </div>
+                </div>
+
+                {/* Şikayet Edilen */}
+                <div style={{
+                  padding: '12px 14px', borderRadius: '10px',
+                  background: 'rgba(239, 68, 68, 0.05)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)'
+                }}>
+                  <div style={{ fontSize: '0.72rem', color: '#ef4444', fontWeight: '700' }}>ŞİKAYET EDİLEN (ŞÜPHELİ)</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#ef4444', marginTop: '2px' }}>
+                    @{selectedReport.reported_name}
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: theme.textMuted, marginTop: '4px', wordBreak: 'break-all' }}>
+                    ID: {selectedReport.reported_user_id}
+                  </div>
+                </div>
+              </div>
+
+              {/* Meta Bilgileri */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 14px', borderRadius: '8px',
+                background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${theme.border}`, fontSize: '0.78rem'
+              }}>
+                <div>
+                  <span style={{ color: theme.textMuted }}>Kategori: </span>
+                  <span style={{ color: theme.textPrimary, fontWeight: '700' }}>
+                    {selectedReport.category || 'Belirtilmemiş'}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ color: theme.textMuted }}>Tarih: </span>
+                  <span style={{ color: theme.textPrimary, fontWeight: '600' }}>
+                    {new Date(selectedReport.created_at).toLocaleString('tr-TR')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Şikayet / Geri Bildirim Detay Açıklaması */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: '700', color: theme.textSecondary }}>
+                  📝 Kullanıcı Açıklaması & Mesaj Detayı:
+                </div>
+                <div style={{
+                  padding: '14px 16px', borderRadius: '10px',
+                  background: isLight ? '#f8fafc' : '#141726',
+                  border: `1px solid ${theme.borderLight}`,
+                  color: theme.textPrimary, fontSize: '0.9rem', lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '80px'
+                }}>
+                  {selectedReport.reason || selectedReport.category || 'Kullanıcı ek bir açıklama belirtmedi.'}
+                </div>
+              </div>
+
+              {/* Kanıt Görseli (Varsa) */}
+              {selectedReport.snapshot_data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#ef4444' }}>
+                    📷 Olay Anı Kanıt Fotoğrafı:
+                  </div>
+                  <div
+                    onClick={() => setPreviewImage(selectedReport.snapshot_data!)}
+                    style={{
+                      borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(239, 68, 68, 0.4)',
+                      maxHeight: '260px', cursor: 'pointer', position: 'relative', background: '#000'
+                    }}
+                  >
+                    <img
+                      src={selectedReport.snapshot_data}
+                      alt="Kanıt Görseli"
+                      style={{ width: '100%', height: '100%', maxHeight: '260px', objectFit: 'contain' }}
+                    />
+                    <div style={{
+                      position: 'absolute', bottom: 8, right: 8,
+                      background: 'rgba(0,0,0,0.75)', color: '#fff',
+                      padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '600'
+                    }}>
+                      Büyütmek için tıklayın
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Alt Aksiyon Butonları */}
+            <div style={{
+              padding: '14px 20px', background: theme.cardHeaderBg,
+              borderTop: `1px solid ${theme.border}`,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {selectedReport.status === 'pending' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const target = selectedReport;
+                        setSelectedReport(null);
+                        handleBanUserFromReport(target);
+                      }}
+                      style={{
+                        padding: '8px 14px', borderRadius: '8px',
+                        background: '#ef4444', border: 'none',
+                        color: '#fff', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer'
+                      }}
+                    >
+                      Kullanıcıyı Banla
+                    </button>
+                    <button
+                      onClick={() => {
+                        const id = selectedReport.id;
+                        setSelectedReport(null);
+                        handleResolveReport(id);
+                      }}
+                      style={{
+                        padding: '8px 14px', borderRadius: '8px',
+                        background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)',
+                        color: '#10b981', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer'
+                      }}
+                    >
+                      Çözüldü
+                    </button>
+                    <button
+                      onClick={() => {
+                        const id = selectedReport.id;
+                        setSelectedReport(null);
+                        handleDismissReport(id);
+                      }}
+                      style={{
+                        padding: '8px 14px', borderRadius: '8px',
+                        background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${theme.border}`,
+                        color: theme.textSecondary, fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer'
+                      }}
+                    >
+                      Asılsız Arşivle
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => setSelectedReport(null)}
+                style={{
+                  padding: '8px 16px', borderRadius: '8px',
+                  background: isLight ? '#e2e8f0' : 'rgba(255,255,255,0.08)',
+                  border: `1px solid ${theme.border}`,
+                  color: theme.textPrimary, fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer'
+                }}
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================== */}
       {/* KANIT GÖRSELİ ÖNİZLEME (LIGHTBOX)          */}
