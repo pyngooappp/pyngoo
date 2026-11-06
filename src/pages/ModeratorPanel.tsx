@@ -1716,8 +1716,8 @@ export default function ModeratorPanel() {
           {activeTab === 'dashboard' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               
-              {/* Canlı KPI Sayaç Kartları (Tüm Metrikler Eşit Ebatta Kurumsal Kartlar) */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
+              {/* 1. KULLANICI & ÜYE METRİKLERİ (ÜST SIRADAKİ KARTLAR) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
                 
                 {/* 1. Toplam Kullanıcı */}
                 <div style={{
@@ -1814,7 +1814,11 @@ export default function ModeratorPanel() {
                     ✨ Son 24 saatte katılan
                   </div>
                 </div>
+              </div>
 
+              {/* 2. OPERASYON & MODERASYON METRİKLERİ (ALT SIRADAKİ KARTLAR) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
+                
                 {/* 6. Bekleyen Şikayetler */}
                 <div 
                   onClick={() => setActiveTab('reports')}
