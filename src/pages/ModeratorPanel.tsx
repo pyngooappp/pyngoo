@@ -76,7 +76,9 @@ export interface BroadcastMessage {
   id: string;
   title: string;
   content: string;
-  target: 'all' | 'female' | 'male';
+  target: 'all' | 'female' | 'male' | 'single';
+  target_user_id?: string;
+  target_user_name?: string;
   sent_at: string;
   sent_by: string;
 }
@@ -347,7 +349,12 @@ export default function ModeratorPanel() {
   // ==========================================
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastContent, setBroadcastContent] = useState('');
-  const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'female' | 'male'>('all');
+  const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'female' | 'male' | 'single'>('all');
+  const [singleTargetUser, setSingleTargetUser] = useState<UserProfileItem | null>(null);
+  const [singleTargetSearch, setSingleTargetSearch] = useState('');
+  const [singleTargetSearchResults, setSingleTargetSearchResults] = useState<UserProfileItem[]>([]);
+  const [isSearchingTargetUser, setIsSearchingTargetUser] = useState(false);
+  const [showTargetDropdown, setShowTargetDropdown] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState<BroadcastMessage[]>(() => {
     try {
       const raw = localStorage.getItem('pyngoo_broadcast_history');
@@ -1141,14 +1148,68 @@ export default function ModeratorPanel() {
   // ==========================================
   // SİSTEM DUYURU AKSİYONLARI
   // ==========================================
+  const handleSearchSingleTargetUser = async (query: string) => {
+    setSingleTargetSearch(query);
+    if (!query.trim()) {
+      setSingleTargetSearchResults([]);
+      setShowTargetDropdown(false);
+      return;
+    }
+    setIsSearchingTargetUser(true);
+    setShowTargetDropdown(true);
+
+    try {
+      const q = query.trim().replace(/^@/, '');
+      // 1. Önce yerel listeden hızlı eşleşme
+      const localMatches = allUsersList.filter(u => 
+        u.display_name?.toLowerCase().includes(q.toLowerCase()) || u.id.toLowerCase() === q.toLowerCase()
+      ).slice(0, 8);
+
+      if (localMatches.length > 0) {
+        setSingleTargetSearchResults(localMatches);
+      }
+
+      // 2. Veritabanından kesin ara
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
+      let dbQuery = supabase.from('profiles').select('id, display_name, gender, role, total_gold, total_diamonds, is_banned, is_moderator, is_verified, avatar_url, created_at').neq('role', 'deleted');
+      if (isUuid) dbQuery = dbQuery.eq('id', q);
+      else dbQuery = dbQuery.ilike('display_name', `%${q}%`).limit(10);
+
+      const { data: dbData } = await dbQuery;
+      if (dbData && dbData.length > 0) {
+        setSingleTargetSearchResults(dbData as UserProfileItem[]);
+      }
+    } catch (err) {
+      console.warn('Hedef kullanıcı arama hatası:', err);
+    } finally {
+      setIsSearchingTargetUser(false);
+    }
+  };
+
   const handleSendBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!broadcastTitle.trim() || !broadcastContent.trim()) {
       await showAlert('Lütfen duyuru başlığı ve içeriğini eksiksiz doldurun.', 'Eksik Bilgi');
       return;
     }
+
+    if (broadcastTarget === 'single') {
+      if (!singleTargetUser) {
+        await showAlert('Lütfen duyuru göndermek istediğiniz kullanıcıyı seçin veya rumuzunu yazın.', 'Hedef Kullanıcı Eksik');
+        return;
+      }
+    }
+
+    const targetLabel = broadcastTarget === 'all' 
+      ? 'Tüm Kullanıcılar' 
+      : broadcastTarget === 'female' 
+      ? 'Sadece Kadınlar / Yayıncılar' 
+      : broadcastTarget === 'male'
+      ? 'Sadece Erkekler'
+      : `🎯 Özel Kullanıcı (@${singleTargetUser?.display_name})`;
+
     const ok = await showConfirm(
-      `Hedef: ${broadcastTarget === 'all' ? 'Tüm Kullanıcılar' : broadcastTarget === 'female' ? 'Sadece Kadınlar / Yayıncılar' : 'Sadece Erkekler'}\nBaşlık: ${broadcastTitle}\n\nBu duyuruyu göndermek istiyor musunuz?`,
+      `Hedef: ${targetLabel}\nBaşlık: ${broadcastTitle}\n\nBu duyuruyu göndermek istiyor musunuz?`,
       'Duyuru Fırlat',
       false,
       'Duyuruyu Yayınla'
@@ -1160,6 +1221,8 @@ export default function ModeratorPanel() {
       title: broadcastTitle.trim(),
       content: broadcastContent.trim(),
       target: broadcastTarget,
+      target_user_id: broadcastTarget === 'single' ? singleTargetUser?.id : undefined,
+      target_user_name: broadcastTarget === 'single' ? singleTargetUser?.display_name : undefined,
       sent_at: new Date().toISOString(),
       sent_by: activeModUser?.username || 'Admin'
     };
@@ -1190,6 +1253,7 @@ export default function ModeratorPanel() {
           title: newMsg.title,
           content: newMsg.content,
           target: newMsg.target,
+          target_user_id: newMsg.target_user_id,
           sent_by: newMsg.sent_by
         }
       });
@@ -1203,7 +1267,7 @@ export default function ModeratorPanel() {
     }
 
     // 3. Telegram'a ilet
-    sendTelegramAlert(`📢 <b>SİSTEM DUYURUSU YAYINLANDI!</b>\n🎯 <b>Hedef Kitle:</b> ${broadcastTarget.toUpperCase()}\n📌 <b>Başlık:</b> ${newMsg.title}\n💬 <b>İçerik:</b> ${newMsg.content}\n👑 <b>Yayınlayan:</b> ${newMsg.sent_by}`);
+    sendTelegramAlert(`📢 <b>SİSTEM DUYURUSU YAYINLANDI!</b>\n🎯 <b>Hedef Kitle:</b> ${broadcastTarget === 'single' ? `@${singleTargetUser?.display_name} (ÖZEL)` : broadcastTarget.toUpperCase()}\n📌 <b>Başlık:</b> ${newMsg.title}\n💬 <b>İçerik:</b> ${newMsg.content}\n👑 <b>Yayınlayan:</b> ${newMsg.sent_by}`);
 
     setBroadcastTitle('');
     setBroadcastContent('');
@@ -2837,16 +2901,22 @@ export default function ModeratorPanel() {
                     <label style={{ display: 'block', fontSize: '0.76rem', color: theme.textSecondary, marginBottom: '6px', fontWeight: '600' }}>
                       Hedef Kitle:
                     </label>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {[
                         { id: 'all', label: 'Tüm Kullanıcılar' },
                         { id: 'female', label: 'Sadece Kadınlar / Yayıncılar' },
-                        { id: 'male', label: 'Sadece Erkekler' }
+                        { id: 'male', label: 'Sadece Erkekler' },
+                        { id: 'single', label: '🎯 Tek Kullanıcıya Özel' }
                       ].map(t => (
                         <button
                           key={t.id}
                           type="button"
-                          onClick={() => setBroadcastTarget(t.id as any)}
+                          onClick={() => {
+                            setBroadcastTarget(t.id as any);
+                            if (t.id === 'single' && allUsersList.length > 0 && singleTargetSearchResults.length === 0) {
+                              setSingleTargetSearchResults(allUsersList.slice(0, 10));
+                            }
+                          }}
                           style={{
                             padding: '7px 12px', borderRadius: '8px',
                             background: broadcastTarget === t.id ? (isLight ? '#0f172a' : '#272b3b') : (isLight ? '#ffffff' : 'rgba(255,255,255,0.03)'),
@@ -2859,6 +2929,126 @@ export default function ModeratorPanel() {
                         </button>
                       ))}
                     </div>
+
+                    {/* Tek Kullanıcı Seçim / Arama Alanı */}
+                    {broadcastTarget === 'single' && (
+                      <div style={{ position: 'relative', marginTop: '10px' }}>
+                        <label style={{ display: 'block', fontSize: '0.74rem', color: '#8b5cf6', marginBottom: '5px', fontWeight: '700' }}>
+                          Hedef Kullanıcıyı Seçin veya Rumuzunu Arayın:
+                        </label>
+
+                        {singleTargetUser ? (
+                          <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '10px 14px', borderRadius: '8px',
+                            background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{
+                                width: '32px', height: '32px', borderRadius: '50%', background: singleTargetUser.gender === 'kadin' ? '#ec4899' : '#3b82f6',
+                                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.85rem'
+                              }}>
+                                {singleTargetUser.display_name?.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: theme.textPrimary }}>
+                                  @{singleTargetUser.display_name}
+                                </div>
+                                <div style={{ fontSize: '0.68rem', color: theme.textMuted }}>
+                                  ID: {singleTargetUser.id} • {singleTargetUser.gender === 'kadin' ? '👩 Kadın' : '👨 Erkek'}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSingleTargetUser(null);
+                                setSingleTargetSearch('');
+                                setSingleTargetSearchResults(allUsersList.slice(0, 10));
+                                setShowTargetDropdown(true);
+                              }}
+                              style={{
+                                padding: '5px 10px', borderRadius: '6px',
+                                background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)',
+                                color: '#ef4444', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer'
+                              }}
+                            >
+                              Değiştir
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="text"
+                              placeholder="Kullanıcı rumuzu yazın (Örn: Deli5353 veya emre)..."
+                              value={singleTargetSearch}
+                              onChange={(e) => handleSearchSingleTargetUser(e.target.value)}
+                              onFocus={() => {
+                                if (singleTargetSearchResults.length === 0 && allUsersList.length > 0) {
+                                  setSingleTargetSearchResults(allUsersList.slice(0, 10));
+                                }
+                                setShowTargetDropdown(true);
+                              }}
+                              style={{
+                                width: '100%', padding: '10px 12px', borderRadius: '8px',
+                                background: theme.inputBg, border: '1px solid rgba(139, 92, 246, 0.4)',
+                                color: theme.textPrimary, fontSize: '0.86rem', outline: 'none'
+                              }}
+                            />
+
+                            {/* Açılır Arama Sonuçları Listesi */}
+                            {showTargetDropdown && (
+                              <div style={{
+                                position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+                                background: theme.cardBg, borderRadius: '8px', border: `1px solid ${theme.borderLight}`,
+                                boxShadow: '0 10px 25px rgba(0,0,0,0.4)', maxHeight: '220px', overflowY: 'auto',
+                                zIndex: 100, display: 'flex', flexDirection: 'column'
+                              }}>
+                                {isSearchingTargetUser ? (
+                                  <div style={{ padding: '12px', fontSize: '0.78rem', color: theme.textMuted, textAlign: 'center' }}>
+                                    Kullanıcılar taranıyor...
+                                  </div>
+                                ) : singleTargetSearchResults.length === 0 ? (
+                                  <div style={{ padding: '12px', fontSize: '0.78rem', color: theme.textMuted, textAlign: 'center' }}>
+                                    Kullanıcı bulunamadı.
+                                  </div>
+                                ) : (
+                                  singleTargetSearchResults.map(u => (
+                                    <div
+                                      key={u.id}
+                                      onClick={() => {
+                                        setSingleTargetUser(u);
+                                        setShowTargetDropdown(false);
+                                      }}
+                                      style={{
+                                        padding: '9px 12px', borderBottom: `1px solid ${theme.border}`,
+                                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{
+                                          width: '24px', height: '24px', borderRadius: '50%',
+                                          background: u.gender === 'kadin' ? '#ec4899' : '#3b82f6',
+                                          color: '#fff', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700'
+                                        }}>
+                                          {u.display_name?.charAt(0).toUpperCase()}
+                                        </div>
+                                        <span style={{ fontSize: '0.84rem', fontWeight: '700', color: theme.textPrimary }}>
+                                          @{u.display_name}
+                                        </span>
+                                      </div>
+                                      <span style={{ fontSize: '0.7rem', color: theme.textMuted }}>
+                                        {u.gender === 'kadin' ? '👩 Kadın' : '👨 Erkek'}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -2935,7 +3125,7 @@ export default function ModeratorPanel() {
                           {b.content}
                         </div>
                         <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '5px' }}>
-                          Hedef: {b.target.toUpperCase()} • Gönderen: {b.sent_by}
+                          Hedef: {b.target === 'single' ? `🎯 @${b.target_user_name || 'Özel Kullanıcı'}` : b.target === 'female' ? 'KADINLAR' : b.target === 'male' ? 'ERKEKLER' : 'TÜMÜ'} • Gönderen: {b.sent_by}
                         </div>
                       </div>
                     ))}

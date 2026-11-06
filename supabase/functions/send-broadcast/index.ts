@@ -90,7 +90,8 @@ Deno.serve(async (req: Request) => {
   let body: {
     title?: string;
     content?: string;
-    target?: "all" | "female" | "male";
+    target?: "all" | "female" | "male" | "single";
+    target_user_id?: string;
     sent_by?: string;
   } = {};
 
@@ -110,7 +111,12 @@ Deno.serve(async (req: Request) => {
 
   // 1. Hedef Kullanıcı Kimliklerini Belirle
   let targetUserIds: string[] | null = null;
-  if (target === "female" || target === "male") {
+  if (target === "single") {
+    if (!body.target_user_id) {
+      return json({ error: "Hedef kullanıcı ID'si (target_user_id) belirtilmedi" }, 400);
+    }
+    targetUserIds = [body.target_user_id];
+  } else if (target === "female" || target === "male") {
     const genderVal = target === "female" ? "kadin" : "erkek";
     const { data: profs } = await admin
       .from("profiles")
@@ -249,3 +255,4 @@ Deno.serve(async (req: Request) => {
     removed_dead: deadTokens.length,
   });
 });
+

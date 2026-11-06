@@ -666,6 +666,7 @@ export default function Layout({ userId }: LayoutProps) {
       .on('broadcast', { event: 'new_system_broadcast' }, ({ payload }: any) => {
         if (!payload) return;
         const currentGender = profileForPresenceRef.current?.gender;
+        if (payload.target === 'single' && payload.target_user_id !== userId) return;
         if (payload.target === 'female' && currentGender !== 'kadin') return;
         if (payload.target === 'male' && currentGender !== 'erkek') return;
 
