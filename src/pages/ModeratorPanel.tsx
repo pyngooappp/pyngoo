@@ -475,8 +475,7 @@ export default function ModeratorPanel() {
             } catch (err) {
               console.warn('Panel hash token kurma hatası:', err);
             }
-            const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
-            window.history.replaceState({}, document.title, window.location.pathname + keepSearch);
+            window.history.replaceState({}, document.title, window.location.pathname);
           }
         }
 
@@ -489,12 +488,10 @@ export default function ModeratorPanel() {
           } catch (err) {
             console.warn('Panel OAuth takas hatası:', err);
           }
-          const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
-          window.history.replaceState({}, document.title, window.location.pathname + keepSearch);
+          window.history.replaceState({}, document.title, window.location.pathname);
         } else if (params.get('error')) {
           setAuthMessage('⚠️ Giriş tamamlanamadı, lütfen tekrar deneyin.');
-          const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
-          window.history.replaceState({}, document.title, window.location.pathname + keepSearch);
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
 
         // 3. Oturumu panele uygula
@@ -582,8 +579,7 @@ export default function ModeratorPanel() {
   const handleGoogleLogin = async () => {
     try {
       setAuthMessage(null);
-      const keepSearch = window.location.search.includes('panel=admin') ? '?panel=admin' : '';
-      const redirectUrl = window.location.origin + window.location.pathname + keepSearch;
+      const redirectUrl = window.location.origin + window.location.pathname;
       await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

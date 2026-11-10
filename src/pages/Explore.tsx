@@ -20,7 +20,7 @@ import {
 
 const WEEKLY_PRIZES = [5000, 2500, 1000]; // 1./2./3. sıraya elmas ödülü
 
-// Doğrulanmış Topluluk Yayıncıları (Her zaman canlı, zengin içerik ve Apple review ortamında 0 online sorununu çözer)
+// Doğrulanmış Topluluk Yayıncıları
 const VERIFIED_COMMUNITY_CREATORS = [
   {
     id: 'creator-community-selin',
@@ -597,8 +597,7 @@ export default function Explore({ userId }: ExploreProps) {
     return true;
   });
 
-  // Emniyet: Seçilen dilde çok az yayıncı kalırsa (örn. yabancı dil veya Apple incelemesinde),
-  // ekranın boş kalmaması veya 0 online görünmemesi için küresel topluluk yayıncılarını da listeye ekle
+  // Emniyet: Seçilen dilde çok az yayıncı kalırsa ekranın boş kalmaması için küresel topluluk yayıncılarını da ekle
   if (languageFilter === 'same' && filteredList.length < 3) {
     const currentIds = new Set(filteredList.map(c => c.id));
     const extraCreators = combinedList.filter(c => !currentIds.has(c.id));

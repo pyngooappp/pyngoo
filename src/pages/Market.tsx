@@ -686,10 +686,6 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
   // Profil Verisini Çek & Canlı Bakiye Takibi
   useEffect(() => {
     const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
-    if (!isOmer && profile?.gender === 'kadin') {
-      navigate('/wallet', { replace: true });
-      return;
-    }
     const fetchProfile = async () => {
       if (!userId) return;
       try {
@@ -704,10 +700,6 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
             data.role = 'admin';
           }
           setProfile(data);
-          if (!isOmer && data.gender === 'kadin') {
-            navigate('/wallet', { replace: true });
-            return;
-          }
         }
       } catch (e) {
         console.warn('Market fetchProfile error:', e);
@@ -1335,13 +1327,12 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
             </div>
 
             {isIosNative() ? (
-              /* iOS: Apple App Store Review 3.1.1 uyarınca dış ödeme yöntemleri (kart/kripto/havale)
-                 TAMAMEN GİZLENİR; yerine yalnızca Apple'ın kendi satın alma akışı gösterilir. */
+              // iOS Platform StoreKit In-App Purchase Panel
               <div style={{ marginBottom: '16px' }}>
                 {renderApplePurchasePanel()}
               </div>
             ) : isAndroidNative() ? (
-              /* Android: Google Play politikası — Play Billing kurulana kadar dış ödeme gizli. */
+              // Android Platform Panel
               <div style={{
                 marginBottom: '16px', background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '16px',

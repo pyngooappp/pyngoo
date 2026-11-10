@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
@@ -19,7 +19,7 @@ import Layout from './components/Layout';
 import HostCenter from './pages/HostCenter';
 import LiveRoom from './pages/LiveRoom';
 import LiveRoomsList from './pages/LiveRoomsList';
-import ModeratorPanel from './pages/ModeratorPanel';
+const ModeratorPanel = lazy(() => import('./pages/ModeratorPanel'));
 import { updateSeoForLanguage } from './utils/seoService';
 import { detectUserDefaultLanguage } from './utils/i18n';
 import { sendNewRegistrationToTelegram } from './utils/telegramAlert';
@@ -55,18 +55,19 @@ const parseJwt = (token: string) => {
 };
 
 function App() {
-  const isAdminHost = typeof window !== 'undefined' && (
+  const isAdminHost = typeof window !== 'undefined' && !Capacitor.isNativePlatform() && (
     window.location.hostname.startsWith('admin.') || 
-    window.location.hostname === 'admin.pyngoo.app' ||
-    window.location.search.includes('panel=admin')
+    window.location.hostname === 'admin.pyngoo.app'
   );
 
   if (isAdminHost) {
     return (
       <BrowserRouter>
-        <Routes>
-          <Route path="*" element={<ModeratorPanel />} />
-        </Routes>
+        <Suspense fallback={<div style={{ minHeight: '100vh', background: '#090a10' }} />}>
+          <Routes>
+            <Route path="*" element={<ModeratorPanel />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     );
   }
@@ -934,17 +935,6 @@ function App() {
           localStorage.setItem('i18nextLng', profileLang);
           localStorage.setItem('pending_language', profileLang);
           document.documentElement.lang = profileLang;
-        }
-
-        const isAppleReviewAccount = 
-          session.user?.email?.toLowerCase().includes('apple') || 
-          session.user?.email?.toLowerCase().includes('test') || 
-          currentProfile?.display_name?.toLowerCase().includes('appletest');
-
-        if (isAppleReviewAccount && currentProfile) {
-          if (!currentProfile.total_gold || currentProfile.total_gold < 5000) {
-            currentProfile.total_gold = 5000;
-          }
         }
 
         setUserProfile(currentProfile);

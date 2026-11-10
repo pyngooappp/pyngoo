@@ -93,7 +93,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [showKvkkModal, setShowKvkkModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
 
-  // Kadınlar İçin Apple Face ID Biyometrik Doğrulama
+  // Kadınlar İçin AI Yüz Doğrulama
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiStep, setAiStep] = useState<'info' | 'camera'>('info');
   const [faceStep, setFaceStep] = useState<'center' | 'right' | 'left' | 'smile' | 'success'>('center');
@@ -1729,7 +1729,7 @@ export default function Login({ onLogin }: LoginProps) {
                   <span>{t('login_ai_cam_notice', '🔴 Canlı Yayın Değildir • Görüntünüz Kaydedilmez')}</span>
                 </div>
 
-                {/* APPLE FACE ID DAİRESEL KAMERA ÇERÇEVESİ */}
+                {/* AI DAİRESEL KAMERA ÇERÇEVESİ */}
                 <div style={{
                   position: 'relative',
                   width: '230px',
@@ -1780,7 +1780,7 @@ export default function Login({ onLogin }: LoginProps) {
                     />
                   </svg>
 
-                  {/* 4 Köşeli Apple Face ID Çerçeve Köşebentleri */}
+                  {/* 4 Köşeli Kamera Çerçeve Köşebentleri */}
                   <div style={{ position: 'absolute', top: '10px', left: '10px', width: '22px', height: '22px', borderTop: '3px solid #ff416c', borderLeft: '3px solid #ff416c', borderTopLeftRadius: '8px', zIndex: 5, pointerEvents: 'none' }}></div>
                   <div style={{ position: 'absolute', top: '10px', right: '10px', width: '22px', height: '22px', borderTop: '3px solid #ff416c', borderRight: '3px solid #ff416c', borderTopRightRadius: '8px', zIndex: 5, pointerEvents: 'none' }}></div>
                   <div style={{ position: 'absolute', bottom: '10px', left: '10px', width: '22px', height: '22px', borderBottom: '3px solid #ff416c', borderLeft: '3px solid #ff416c', borderBottomLeftRadius: '8px', zIndex: 5, pointerEvents: 'none' }}></div>

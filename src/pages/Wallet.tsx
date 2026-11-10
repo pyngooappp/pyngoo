@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Gem, CheckCircle2, TrendingUp, History, Clock, Sparkles, Award, Building2, CreditCard, Globe, Coins } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +10,7 @@ import { diamondValue, isTurkishLang, useEconomyConfig } from '../utils/economy'
 type PayoutMethod = 'bank' | 'crypto' | 'paypal' | 'swift';
 
 const Wallet = () => {
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const eco = useEconomyConfig();
   const [profile, setProfile] = useState<any>(null);
@@ -226,11 +228,42 @@ const Wallet = () => {
     return <div style={{ color: 'white', textAlign: 'center', marginTop: '50px' }}>{t('wallet_loading')}</div>;
   }
 
-  // Erkek kullanıcılar bu sayfaya girememeli (İsteğe bağlı güvenlik)
+  // Yayıncı olmayan kullanıcılar için bilgilendirici yayıncı stüdyosu kartı
   if (profile?.gender === 'erkek') {
     return (
-      <div style={{ padding: '20px', textAlign: 'center', color: 'white', paddingTop: '100px' }}>
-        <h2>{t('wallet_creators_only')}</h2>
+      <div style={{ padding: '24px', textAlign: 'center', color: 'white', maxWidth: '440px', margin: '40px auto', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '24px',
+          padding: '32px 24px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.4)'
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: '14px' }}>💎</div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '10px', color: '#fff' }}>
+            {t('wallet_creators_only')}
+          </h2>
+          <p style={{ fontSize: '0.86rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6', marginBottom: '24px' }}>
+            {t('wallet_creators_info', { defaultValue: 'Cüzdan ve elmas ödülleri, Pyngoo platformunda canlı yayın ve görüntülü sohbet gerçekleştiren onaylı yayıncılarımıza özeldir.' })}
+          </p>
+          <button
+            onClick={() => navigate('/host-center')}
+            style={{
+              width: '100%',
+              padding: '13px 20px',
+              borderRadius: '14px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #ff2d55 0%, #ff5252 100%)',
+              color: '#fff',
+              fontWeight: '800',
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+              boxShadow: '0 6px 20px rgba(255,45,85,0.4)'
+            }}
+          >
+            {t('host_center_title', { defaultValue: 'Yayıncı Merkezi & Başvuru' })}
+          </button>
+        </div>
       </div>
     );
   }

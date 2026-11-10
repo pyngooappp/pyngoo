@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { MessageCircle, Phone, User, Wallet as WalletIcon, Coins, PhoneIncoming, PhoneOff, PhoneCall, Compass } from 'lucide-react';
+import { MessageCircle, Phone, User, Coins, PhoneIncoming, PhoneOff, PhoneCall, Compass } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +36,7 @@ export default function Layout({ userId }: LayoutProps) {
   const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
   const isApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
 
-  const [gender, setGender] = useState<string>(() => {
+  const [_gender, setGender] = useState<string>(() => {
     if (isOmer || isApoo) return 'erkek';
     const isKadin = localStorage.getItem('pyngoo_gender') === 'kadin' || localStorage.getItem(`pyngoo_role_${userId}`) === 'streamer';
     return isKadin ? 'kadin' : (localStorage.getItem('pyngoo_gender') || 'erkek');
@@ -167,12 +167,6 @@ export default function Layout({ userId }: LayoutProps) {
           } catch (_) {}
         }
 
-        const isAppleTestUser = 
-          (data.display_name && data.display_name.toLowerCase().includes('apple')) ||
-          localStorage.getItem('pyngoo_user_email')?.includes('apple');
-        if (isAppleTestUser && (!data.total_gold || data.total_gold < 5000)) {
-          data.total_gold = 5000;
-        }
         setProfile(data);
         const effectiveGender = isThisOmer ? 'erkek' : (data.gender || 'erkek');
         setGender(effectiveGender);
@@ -1058,49 +1052,31 @@ export default function Layout({ userId }: LayoutProps) {
               )}
             </NavLink>
             
-            {(gender === 'kadin' || profile?.gender === 'kadin') && (
-              <NavLink 
-                to="/wallet" 
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              >
-                {({ isActive }) => (
-                  <>
-                    <div className={`nav-icon-wrap`}>
-                      <WalletIcon size={22} fill={isActive ? '#fff' : 'none'} />
+            <NavLink 
+              to="/market" 
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            >
+              {({ isActive }) => (
+                <>
+                  <div className={`nav-icon-wrap`}>
+                    <Coins size={22} color="#ffd700" fill={isActive ? '#ffd700' : 'none'} />
+                    <div style={{
+                      position: 'absolute', top: '-4px', right: '-8px',
+                      background: 'linear-gradient(135deg, #ff0844, #ffb199)',
+                      color: 'white', fontSize: '9px', fontWeight: '800',
+                      padding: '0 4px', lineHeight: '13px', borderRadius: '6px',
+                      boxShadow: '0 2px 5px rgba(255,8,68,0.5)',
+                      animation: 'pulse 1.8s infinite'
+                    }}>
+                      %80
                     </div>
-                    <span>{t('nav_wallet')}</span>
-                  </>
-                )}
-              </NavLink>
-            )}
-            
-            {!(gender === 'kadin' || profile?.gender === 'kadin') && (
-              <NavLink 
-                to="/market" 
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              >
-                {({ isActive }) => (
-                  <>
-                    <div className={`nav-icon-wrap`}>
-                      <Coins size={22} color="#ffd700" fill={isActive ? '#ffd700' : 'none'} />
-                      <div style={{
-                        position: 'absolute', top: '-4px', right: '-8px',
-                        background: 'linear-gradient(135deg, #ff0844, #ffb199)',
-                        color: 'white', fontSize: '9px', fontWeight: '800',
-                        padding: '0 4px', lineHeight: '13px', borderRadius: '6px',
-                        boxShadow: '0 2px 5px rgba(255,8,68,0.5)',
-                        animation: 'pulse 1.8s infinite'
-                      }}>
-                        %80
-                      </div>
-                    </div>
-                    <span >
-                      {t('profile_gold_market', 'Market')}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            )}
+                  </div>
+                  <span>
+                    {t('profile_gold_market', 'Market')}
+                  </span>
+                </>
+              )}
+            </NavLink>
 
             <NavLink 
               to="/profile" 
