@@ -415,8 +415,6 @@ export default function ModeratorPanel() {
     const isOwner = uid === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || 
                     uid === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c' ||
                     uEmail === 'omersahin1623@hotmail.com' || 
-                    uEmail === 'cosmicdreamersleep@gmail.com' ||
-                    uEmail === 'pyngooappp@gmail.com' ||
                     (prof?.display_name || '').toLowerCase() === 'omer';
 
     if (isOwner) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
@@ -9,25 +9,23 @@ import {
   ShieldCheck, 
   Zap, 
   Check, 
-  CreditCard, 
   ArrowLeft,
   X,
   Clock,
   Gift,
   Play,
-  Copy,
-  Smartphone,
   Volume2,
   VolumeX
 } from 'lucide-react';
 import { soundManager } from '../utils/SoundManager';
 import { sendTelegramAlert } from '../utils/telegramAlert';
 import { logTransaction } from '../utils/transactionService';
-import { processCryptoPayment } from '../utils/cryptoVerifyService';
 import { admobService } from '../utils/admobService';
 import { LegalModal, type LegalModalType } from '../components/LegalModal';
 import { TreasureRewardModal } from '../components/TreasureRewardModal';
 import { isIosNative, isAndroidNative, iapAvailable, purchaseGoldProduct, restoreGoldPurchases } from '../utils/iapService';
+
+const WebPaymentMethods = !__IS_IOS__ ? lazy(() => import('../components/WebPaymentMethods')) : null;
 
 interface MarketProps {
   userId: string;
@@ -65,8 +63,6 @@ export default function Market({ userId }: MarketProps) {
     return null;
   });
   const [selectedPackage, setSelectedPackage] = useState<GoldPackage | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'crypto' | 'havale_papara'>(() => isTr ? 'havale_papara' : 'crypto');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<GoldPackage | null>(null);
   const [legalModalType, setLegalModalType] = useState<LegalModalType>(null);
 
@@ -92,98 +88,14 @@ export default function Market({ userId }: MarketProps) {
     return () => clearTimeout(timer);
   }, [applePurchaseState]);
 
-  // Kripto (USDT - TRC20) Durumları (Binance Global)
-  const CRYPTO_WALLET = 'TDwYUwBrV6mSmJvmcP93VSTnBtWrXnpFsu';
-  const [cryptoTxId, setCryptoTxId] = useState('');
-  const [cryptoSubmitted, setCryptoSubmitted] = useState(false);
-  const [cryptoResult, setCryptoResult] = useState<{ isAutoCredited: boolean; message: string; goldAdded?: number } | null>(null);
-
-  const getUsdtPrice = (pkg: GoldPackage | null) => {
-    if (!pkg) return '1.00';
-    return pkg.priceUsdt || '1.00';
-  };
-
-  // Havale / EFT & Transfer Durumları
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [senderName, setSenderName] = useState('');
-  const [transferSubmitted, setTransferSubmitted] = useState(false);
-  const [cardSubmitted, setCardSubmitted] = useState(false);
   const [orderCode, setOrderCode] = useState(() => `PYN-${Math.floor(1000 + Math.random() * 9000)}`);
-  const [validationError, setValidationError] = useState<string | null>(null);
-
-  // 30 Saniye Spam Engelleme / Rate Limit Geri Sayımı
-  const [cooldownSeconds, setCooldownSeconds] = useState(() => {
-    try {
-      const expire = localStorage.getItem(`pyngoo_payment_cooldown_${userId}`);
-      if (expire) {
-        const remaining = Math.ceil((parseInt(expire, 10) - Date.now()) / 1000);
-        return remaining > 0 ? remaining : 0;
-      }
-    } catch (_) {}
-    return 0;
-  });
-
-  useEffect(() => {
-    if (cooldownSeconds <= 0) return;
-    const interval = setInterval(() => {
-      setCooldownSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [cooldownSeconds]);
-
-  const startCooldown = (sec = 30) => {
-    setCooldownSeconds(sec);
-    try {
-      localStorage.setItem(`pyngoo_payment_cooldown_${userId}`, (Date.now() + sec * 1000).toString());
-    } catch (_) {}
-  };
 
   const handleSelectPackage = (pkg: GoldPackage) => {
-    // Her paket açılışında benzersiz yeni sipariş kodu üret
     setOrderCode(`PYN-${Math.floor(1000 + Math.random() * 9000)}`);
-    setCardSubmitted(false);
-    setTransferSubmitted(false);
-    setCryptoSubmitted(false);
-    setValidationError(null);
     setApplePurchaseState('idle');
     setAppleRestoreMsg(null);
     setAppleErrorDetail(null);
-    if (!isTr && paymentMethod === 'havale_papara') {
-      setPaymentMethod('card');
-    }
     setSelectedPackage(pkg);
-  };
-
-  const handleCopyText = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 1800);
-  };
-
-const SHOPIER_PRODUCT_URLS: Record<string, string> = {
-  pack_650: 'https://www.shopier.com/pyngoo/50771182',
-  pack_1400: 'https://www.shopier.com/pyngoo/50771257',
-  pack_3800: 'https://www.shopier.com/pyngoo/50771291',
-  pack_8500: 'https://www.shopier.com/pyngoo/50771329',
-  pack_18000: 'https://www.shopier.com/pyngoo/50771375',
-  pack_40000: 'https://www.shopier.com/pyngoo/50771402',
-  pack_85000: 'https://www.shopier.com/pyngoo/50771423',
-};
-
-  const openShopierPopup = () => {
-    const targetUrl = (selectedPackage && SHOPIER_PRODUCT_URLS[selectedPackage.id]) || 'https://www.shopier.com/pyngoo';
-    const width = 500;
-    const height = 750;
-    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
-    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
-    const popupFeatures = `width=${width},height=${height},left=${left},top=${top},status=no,menubar=no,toolbar=no,location=no,scrollbars=yes`;
-    window.open(targetUrl, 'PyngooShopierPay', popupFeatures);
   };
 
   // --- iOS: Apple In-App Purchase satın alma akışı (App Store Review 3.1.1) ---
@@ -347,199 +259,6 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
         )}
       </div>
     );
-  };
-
-  const handleCardSubmit = () => {
-    if (!selectedPackage) return;
-    setIsProcessing(true);
-    soundManager.playCoinSound();
-
-    try {
-      const msg = `
-💳 <b>YENİ SHOPIER KART ÖDEME TALEBİ!</b>
-━━━━━━━━━━━━━━━━━━━━━━
-👤 <b>Kullanıcı:</b> ${profile?.display_name || 'Kullanıcı'} (<code>${userId.slice(0, 8)}</code>)
-🪙 <b>Paket:</b> ${selectedPackage.gold} Altın (+${selectedPackage.bonus} Hediye)
-💵 <b>Tutar:</b> ${isTr ? selectedPackage.priceTr : selectedPackage.priceEn}
-🏷️ <b>Sipariş Kodu:</b> <code>${orderCode}</code>
-📅 <b>Tarih:</b> ${new Date().toLocaleDateString('tr-TR')} • ${new Date().toLocaleTimeString('tr-TR')}
-      `.trim();
-      sendTelegramAlert(msg);
-    } catch (_) {}
-
-    openShopierPopup();
-
-    setTimeout(() => {
-      setIsProcessing(false);
-      setCardSubmitted(true);
-    }, 600);
-  };
-
-  const handleTransferSubmit = async () => {
-    setValidationError(null);
-    if (!selectedPackage) return;
-
-    if (cooldownSeconds > 0) {
-      setValidationError(`⚠️ Lütfen tekrar bildirim göndermek için ${cooldownSeconds} saniye bekleyin.`);
-      return;
-    }
-
-    if (!senderName.trim() || senderName.trim().length < 3) {
-      setValidationError('⚠️ Havale/FAST transferlerinde banka dekontundaki "Gönderen Adı Soyadı" zorunludur!');
-      return;
-    }
-
-    setIsProcessing(true);
-    soundManager.playCoinSound();
-    startCooldown(30);
-
-    const totalGold = (selectedPackage.gold || 0) + (selectedPackage.bonus || 0);
-
-    // 1. Veritabanına payment_notifications kaydı ekle (Yönetici Paneli için)
-    try {
-      const { error: insErr } = await supabase.from('payment_notifications').insert([{
-        user_id: userId,
-        user_name: profile?.display_name || 'Kullanıcı',
-        payment_method: 'havale',
-        gold_amount: selectedPackage.gold || 0,
-        bonus_amount: selectedPackage.bonus || 0,
-        total_gold: totalGold,
-        price_text: isTr ? selectedPackage.priceTr : selectedPackage.priceEn,
-        order_code: orderCode,
-        sender_name: senderName.trim(),
-        status: 'pending'
-      }]);
-
-      if (insErr) {
-        console.warn('payment_notifications veritabanı uyarısı (yedek alınıyor):', insErr);
-        const localOrders = JSON.parse(localStorage.getItem('pyngoo_local_payment_notifications') || '[]');
-        localOrders.unshift({
-          id: `local_${Date.now()}`,
-          user_id: userId,
-          user_name: profile?.display_name || 'Kullanıcı',
-          payment_method: 'havale',
-          gold_amount: selectedPackage.gold || 0,
-          bonus_amount: selectedPackage.bonus || 0,
-          total_gold: totalGold,
-          price_text: isTr ? selectedPackage.priceTr : selectedPackage.priceEn,
-          order_code: orderCode,
-          sender_name: senderName.trim(),
-          status: 'pending',
-          created_at: new Date().toISOString()
-        });
-        localStorage.setItem('pyngoo_local_payment_notifications', JSON.stringify(localOrders.slice(0, 100)));
-      }
-    } catch (_) {}
-
-    // 2. Telegram Bildirimi Gönder
-    try {
-      const msg = `
-🏦 <b>YENİ VAKIFBANK HAVALE / FAST BİLDİRİMİ!</b>
-━━━━━━━━━━━━━━━━━━━━━━
-👤 <b>Kullanıcı:</b> ${profile?.display_name || 'Kullanıcı'} (<code>${userId.slice(0, 8)}</code>)
-🪙 <b>Paket:</b> ${selectedPackage.gold} Altın (+${selectedPackage.bonus} Hediye) = <b>${totalGold} Altın</b>
-💵 <b>Tutar:</b> ${isTr ? selectedPackage.priceTr : selectedPackage.priceEn}
-🏷️ <b>Zorunlu Kod:</b> <code>${orderCode}</code>
-✍️ <b>Gönderen Ad Soyad:</b> <b>${senderName.trim()}</b>
-📅 <b>Tarih:</b> ${new Date().toLocaleDateString('tr-TR')} • ${new Date().toLocaleTimeString('tr-TR')}
-
-<i>Lütfen VakıfBank hesabınızı kontrol edip Moderatör Panelinden tek tıkla onaylayınız.</i>
-      `.trim();
-      await sendTelegramAlert(msg);
-    } catch (_) {}
-
-    setIsProcessing(false);
-    setTransferSubmitted(true);
-
-    setTimeout(() => {
-      setTransferSubmitted(false);
-      setSelectedPackage(null);
-      setSenderName('');
-      setOrderCode(`PYN-${Math.floor(1000 + Math.random() * 9000)}`);
-    }, 4000);
-  };
-
-  const handleCryptoSubmit = async () => {
-    setValidationError(null);
-    if (!selectedPackage) return;
-
-    if (cooldownSeconds > 0) {
-      setValidationError(`⚠️ Lütfen tekrar bildirim göndermek için ${cooldownSeconds} saniye bekleyin.`);
-      return;
-    }
-
-    if (!cryptoTxId.trim() || cryptoTxId.trim().length < 8) {
-      setValidationError('⚠️ Kripto transferlerinde "İşlem Kodu (TXID)" veya "Gönderici Cüzdan Adresi" zorunludur!');
-      return;
-    }
-
-    setIsProcessing(true);
-    soundManager.playCoinSound();
-    startCooldown(30);
-
-    const totalGold = (selectedPackage.gold || 0) + (selectedPackage.bonus || 0);
-    const usdtAmt = getUsdtPrice(selectedPackage);
-
-    // 1. Veritabanına payment_notifications kaydı ekle (Yönetici Paneli için)
-    try {
-      const { error: insErr } = await supabase.from('payment_notifications').insert([{
-        user_id: userId,
-        user_name: profile?.display_name || 'Kullanıcı',
-        payment_method: 'crypto',
-        gold_amount: selectedPackage.gold || 0,
-        bonus_amount: selectedPackage.bonus || 0,
-        total_gold: totalGold,
-        price_text: `${usdtAmt} USDT`,
-        order_code: orderCode,
-        crypto_txid: cryptoTxId.trim(),
-        status: 'pending'
-      }]);
-
-      if (insErr) {
-        console.warn('payment_notifications veritabanı uyarısı (yedek alınıyor):', insErr);
-        const localOrders = JSON.parse(localStorage.getItem('pyngoo_local_payment_notifications') || '[]');
-        localOrders.unshift({
-          id: `local_${Date.now()}`,
-          user_id: userId,
-          user_name: profile?.display_name || 'Kullanıcı',
-          payment_method: 'crypto',
-          gold_amount: selectedPackage.gold || 0,
-          bonus_amount: selectedPackage.bonus || 0,
-          total_gold: totalGold,
-          price_text: `${usdtAmt} USDT`,
-          order_code: orderCode,
-          crypto_txid: cryptoTxId.trim(),
-          status: 'pending',
-          created_at: new Date().toISOString()
-        });
-        localStorage.setItem('pyngoo_local_payment_notifications', JSON.stringify(localOrders.slice(0, 100)));
-      }
-    } catch (_) {}
-
-    const result = await processCryptoPayment(
-      userId,
-      profile?.display_name || 'Kullanıcı',
-      cryptoTxId.trim(),
-      selectedPackage,
-      usdtAmt,
-      orderCode
-    );
-
-    setIsProcessing(false);
-    setCryptoSubmitted(true);
-    setCryptoResult(result);
-
-    if (result.isAutoCredited && result.goldAdded) {
-      setProfile((prev: any) => ({ ...prev, total_gold: (prev?.total_gold || 0) + result.goldAdded }));
-      soundManager.playCoinSound();
-    }
-
-    setTimeout(() => {
-      setCryptoSubmitted(false);
-      setCryptoResult(null);
-      setSelectedPackage(null);
-      setCryptoTxId('');
-    }, 5500);
   };
 
   // Flaş Fırsat İçin Canlı Geri Sayım (4 Saat 45 Dakika)
@@ -738,12 +457,6 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       supabase.removeChannel(profileChan);
     };
   }, [userId, navigate]);
-
-  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
-  // Yalnızca profili kesin olarak kadın olan kullanıcılar için Altın Marketi kapalıdır
-  if (!isOmer && profile?.gender === 'kadin') {
-    return null;
-  }
 
   // 7 Aşamalı Yüksek Limitli & Rekabetçi VIP Altın Paketleri
   const packages: GoldPackage[] = [
@@ -1254,7 +967,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
       {selectedPackage && createPortal(
         <div
           onClick={() => {
-            if (!isProcessing && applePurchaseState !== 'processing') setSelectedPackage(null);
+            if (applePurchaseState !== 'processing') setSelectedPackage(null);
           }}
           style={{
             position: 'fixed', inset: 0,
@@ -1286,7 +999,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
                 {t('market_modal_title')}
               </h3>
               <button
-                disabled={isProcessing || applePurchaseState === 'processing'}
+                disabled={applePurchaseState === 'processing'}
                 onClick={() => setSelectedPackage(null)}
                 style={{
                   width: '32px', height: '32px', borderRadius: '50%',
@@ -1326,7 +1039,7 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               </div>
             </div>
 
-            {isIosNative() ? (
+            {isIosNative() || __IS_IOS__ ? (
               // iOS Platform StoreKit In-App Purchase Panel
               <div style={{ marginBottom: '16px' }}>
                 {renderApplePurchasePanel()}
@@ -1340,515 +1053,23 @@ const SHOPIER_PRODUCT_URLS: Record<string, string> = {
               }}>
                 {t('market_android_coming_soon')}
               </div>
-            ) : (
-            <div style={{ marginBottom: '16px' }}>
-              <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '8px' }}>
-                {t('market_modal_select_method', 'Select Payment Method:')}
-              </span>
-              
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: isTr ? '1fr 1fr 1fr' : '1fr 1fr',
-                gap: '8px',
-                marginBottom: '14px'
-              }}>
-                {/* 1. SEÇENEK: KART (SHOPIER - ONAY AŞAMASINDA) */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('card')}
-                  style={{
-                    padding: '10px 6px', borderRadius: '14px', textAlign: 'center',
-                    background: paymentMethod === 'card' ? 'rgba(255, 215, 0, 0.16)' : 'rgba(255,255,255,0.04)',
-                    border: paymentMethod === 'card' ? '2px solid #ffd700' : '1px solid rgba(255,255,255,0.1)',
-                    color: paymentMethod === 'card' ? '#ffd700' : 'rgba(255,255,255,0.8)',
-                    cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px'
+            ) : WebPaymentMethods ? (
+              <Suspense fallback={<div style={{ textAlign: 'center', padding: '16px', color: '#fff' }}>Yükleniyor...</div>}>
+                <WebPaymentMethods
+                  selectedPackage={selectedPackage}
+                  userId={userId}
+                  profile={profile}
+                  orderCode={orderCode}
+                  isTr={Boolean(isTr)}
+                  onClose={() => setSelectedPackage(null)}
+                  onSuccess={() => {
+                    const pkg = selectedPackage;
+                    setSelectedPackage(null);
+                    setPurchaseSuccess(pkg);
                   }}
-                >
-                  <CreditCard size={19} color={paymentMethod === 'card' ? '#ffd700' : '#fff'} />
-                  <span style={{ fontSize: '0.74rem', fontWeight: '800' }}>{t('market_modal_credit_card', 'Credit Card')}</span>
-                  <span style={{ fontSize: '0.58rem', color: '#2ecc71', fontWeight: '800' }}>{t('market_card_3ds_short')}</span>
-                </button>
-
-                {/* 2. SEÇENEK: KRİPTO (USDT - TRC20) */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('crypto')}
-                  style={{
-                    padding: '10px 6px', borderRadius: '14px', textAlign: 'center',
-                    background: paymentMethod === 'crypto' ? 'rgba(0, 230, 118, 0.16)' : 'rgba(255,255,255,0.04)',
-                    border: paymentMethod === 'crypto' ? '2px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
-                    color: paymentMethod === 'crypto' ? '#00e676' : 'rgba(255,255,255,0.8)',
-                    cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px'
-                  }}
-                >
-                  <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>🪙</span>
-                  <span style={{ fontSize: '0.74rem', fontWeight: '800' }}>{t('market_modal_crypto_title', 'Crypto (USDT)')}</span>
-                  <span style={{ fontSize: '0.58rem', color: '#00e676', fontWeight: '700' }}>{t('market_modal_crypto_sub', 'Zero Fee')}</span>
-                </button>
-
-                {/* 3. SEÇENEK: HAVALE / FAST (SADECE TÜRKÇE KULLANICILAR İÇİN GÖRÜNÜR) */}
-                {isTr && (
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('havale_papara')}
-                    style={{
-                      padding: '10px 6px', borderRadius: '14px', textAlign: 'center',
-                      background: paymentMethod === 'havale_papara' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255,255,255,0.04)',
-                      border: paymentMethod === 'havale_papara' ? '2px solid #00f2fe' : '1px solid rgba(255,255,255,0.1)',
-                      color: paymentMethod === 'havale_papara' ? '#00f2fe' : 'rgba(255,255,255,0.8)',
-                      cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px'
-                    }}
-                  >
-                    <Smartphone size={19} color={paymentMethod === 'havale_papara' ? '#00f2fe' : '#fff'} />
-                    <span style={{ fontSize: '0.74rem', fontWeight: '800' }}>{t('market_modal_transfer', 'Havale / EFT')}</span>
-                    <span style={{ fontSize: '0.58rem', color: '#00f2fe', fontWeight: '700' }}>{t('market_modal_transfer_sub', '7/24 FAST & Havale')}</span>
-                  </button>
-                )}
-              </div>
-
-              {/* SEÇİLEN ÖDEME YÖNTEMİNİN İÇERİĞİ */}
-              {paymentMethod === 'card' && (
-                /* 💳 KREDİ / BANKA KARTI (SHOPIER 3D SECURE) */
-                <div style={{
-                  background: 'rgba(255, 215, 0, 0.06)', border: '1.5px solid rgba(255, 215, 0, 0.35)',
-                  borderRadius: '16px', padding: '14px', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <ShieldCheck size={18} color="#ffd700" />
-                      <span style={{ color: '#fff', fontSize: '0.86rem', fontWeight: '800' }}>
-                        {t('market_card_checkout_title')}
-                      </span>
-                    </div>
-                    <span style={{ background: 'rgba(46, 204, 113, 0.2)', border: '1px solid #2ecc71', color: '#2ecc71', fontSize: '0.62rem', fontWeight: '800', padding: '2px 7px', borderRadius: '8px' }}>
-                      {t('market_active_247')}
-                    </span>
-                  </div>
-
-                  <div style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '12px',
-                    padding: '10px 12px',
-                    fontSize: '0.76rem',
-                    color: 'rgba(255, 255, 255, 0.85)',
-                    lineHeight: '1.45'
-                  }}>
-                    {t('market_card_checkout_desc')}
-                  </div>
-
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'rgba(0, 242, 254, 0.08)', border: '1px dashed #00f2fe',
-                    borderRadius: '12px', padding: '9px 12px'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '0.62rem', color: '#00f2fe', fontWeight: '700', textTransform: 'uppercase' }}>
-                        {t('market_order_tracking_code')}
-                      </div>
-                      <div style={{ color: '#fff', fontWeight: '900', fontFamily: 'monospace', fontSize: '0.88rem', marginTop: '1px' }}>
-                        {orderCode}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyText(orderCode, 'code')}
-                      style={{
-                        background: copiedField === 'code' ? '#2ecc71' : 'rgba(0, 242, 254, 0.2)',
-                        border: '1px solid rgba(0, 242, 254, 0.4)',
-                        color: copiedField === 'code' ? '#000' : '#00f2fe',
-                        padding: '5px 10px', borderRadius: '8px',
-                        fontSize: '0.7rem', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                      }}
-                    >
-                      {copiedField === 'code' ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copiedField === 'code' ? t('market_modal_copied', 'Kopyalandı!') : t('market_modal_copy', 'Kopyala')}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {paymentMethod === 'crypto' && (
-                /* 🪙 KRİPTO (USDT - TRC20) DETAYI */
-                <div style={{
-                  background: 'rgba(0, 0, 0, 0.45)', border: '1.5px solid rgba(0, 230, 118, 0.35)',
-                  borderRadius: '16px', padding: '14px', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px'
-                }}>
-                  {/* Ödenecek USDT Tutarı & Ağ Rozeti */}
-                  <div style={{
-                    background: 'linear-gradient(135deg, rgba(0, 230, 118, 0.15), rgba(0, 200, 83, 0.1))',
-                    border: '1px solid rgba(0, 230, 118, 0.3)',
-                    borderRadius: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '0.66rem', color: '#00e676', fontWeight: '700', textTransform: 'uppercase' }}>
-                        {t('market_crypto_amount_label', 'CRYPTO AMOUNT TO PAY')}
-                      </div>
-                      <div style={{ fontSize: '1.2rem', color: '#fff', fontWeight: '900' }}>
-                        {getUsdtPrice(selectedPackage)} USDT
-                      </div>
-                    </div>
-                    <div style={{
-                      background: 'rgba(0, 230, 118, 0.2)', border: '1px solid #00e676',
-                      padding: '3px 8px', borderRadius: '8px', fontSize: '0.70rem', fontWeight: '800', color: '#00e676'
-                    }}>
-                      {t('market_crypto_network_label', 'Network: TRON (TRC-20)')}
-                    </div>
-                  </div>
-
-                  {/* QR Kodu & Cüzdan Adresi */}
-                  <div style={{
-                    display: 'flex', gap: '10px', alignItems: 'center',
-                    background: 'rgba(255, 255, 255, 0.03)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)'
-                  }}>
-                    <div style={{
-                      background: '#fff', padding: '4px', borderRadius: '8px', flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${CRYPTO_WALLET}`}
-                        alt="USDT TRC20 QR Code"
-                        style={{ width: '75px', height: '75px', display: 'block' }}
-                      />
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.66rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '2px' }}>
-                        {t('market_crypto_address_label', 'Binance Global USDT (TRC-20) Deposit Address:')}
-                      </div>
-                      <div style={{
-                        color: '#00e676', fontWeight: '800', fontFamily: 'monospace',
-                        fontSize: '0.70rem', wordBreak: 'break-all', lineHeight: '1.3', marginBottom: '6px'
-                      }}>
-                        {CRYPTO_WALLET}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyText(CRYPTO_WALLET, 'crypto_wallet')}
-                        style={{
-                          background: copiedField === 'crypto_wallet' ? '#00e676' : 'rgba(0, 230, 118, 0.18)',
-                          border: '1px solid #00e676', color: copiedField === 'crypto_wallet' ? '#000' : '#00e676',
-                          padding: '3px 8px', borderRadius: '6px',
-                          fontSize: '0.68rem', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px'
-                        }}
-                      >
-                        {copiedField === 'crypto_wallet' ? <Check size={11} /> : <Copy size={11} />}
-                        <span>{copiedField === 'crypto_wallet' ? t('market_modal_copied', 'Copied!') : t('market_crypto_copy_btn', 'Copy Address')}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Zorunlu Takip Kodu */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'rgba(255, 255, 255, 0.04)', padding: '6px 10px', borderRadius: '10px', fontSize: '0.72rem'
-                  }}>
-                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>{t('market_crypto_order_code_label', 'Your Order Tracking Code:')}</span>
-                    <span style={{ color: '#ffd700', fontWeight: '800', letterSpacing: '1px' }}>{orderCode}</span>
-                  </div>
-
-                  {/* TXID Giriş Kutusu */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.70rem', color: '#fff', fontWeight: '800' }}>
-                        {t('market_crypto_txid_title', 'İşlem Kodu (TXID) veya Cüzdan')} <span style={{ color: '#ff416c' }}>*</span>
-                      </span>
-                      <span style={{ fontSize: '0.64rem', color: '#ff416c', fontWeight: '700' }}>{t('market_required_field')}</span>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder={t('market_crypto_txid_placeholder', 'Transfer İşlem Kodu (TXID) veya Gönderici Cüzdan...')}
-                      value={cryptoTxId}
-                      onChange={(e) => {
-                        setCryptoTxId(e.target.value);
-                        if (validationError) setValidationError(null);
-                      }}
-                      style={{
-                        width: '100%', padding: '9px 12px', borderRadius: '10px',
-                        background: 'rgba(255,255,255,0.06)', 
-                        border: validationError && (!cryptoTxId.trim() || cryptoTxId.trim().length < 8) ? '1.5px solid #ff416c' : '1px solid rgba(0, 230, 118, 0.4)',
-                        color: '#fff', fontSize: '0.78rem', outline: 'none'
-                      }}
-                    />
-                    <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
-                      {t('market_crypto_hint', '💡 Transfer from Binance, Bybit, Trust Wallet etc. and notify.')}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {paymentMethod === 'havale_papara' && (
-                /* 📱 HAVALE / FAST & PAPARA BİLGİ KARTI */
-                <div style={{
-                  background: 'rgba(0, 0, 0, 0.4)', border: '1px solid rgba(0, 242, 254, 0.3)',
-                  borderRadius: '16px', padding: '14px', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px'
-                }}>
-                  {/* Önemli Uyarı Kodu */}
-                  <div style={{
-                    background: 'rgba(255, 8, 68, 0.15)', border: '1px solid #ff0844',
-                    borderRadius: '12px', padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '0.65rem', color: '#ff8899', fontWeight: '700', textTransform: 'uppercase' }}>
-                        {t('market_modal_code_label', 'Açıklamaya Yazılacak Kod')}
-                      </div>
-                      <div style={{ fontSize: '1rem', color: '#fff', fontWeight: '900', letterSpacing: '1px' }}>
-                        {orderCode}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyText(orderCode, 'code')}
-                      style={{
-                        background: copiedField === 'code' ? '#2ecc71' : 'rgba(255,255,255,0.15)',
-                        border: 'none', color: '#fff', padding: '4px 10px', borderRadius: '8px',
-                        fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                      }}
-                    >
-                      {copiedField === 'code' ? <Check size={13} /> : <Copy size={13} />}
-                      <span>{copiedField === 'code' ? t('market_modal_copied', 'Kopyalandı!') : t('market_modal_copy', 'Kopyala')}</span>
-                    </button>
-                  </div>
-
-                  {/* 1. Alıcı Adı Soyadı Satırı (Ayrı Kopyalama Butonlu) */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'rgba(255, 255, 255, 0.04)', padding: '10px 12px', borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.08)'
-                  }}>
-                    <div>
-                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.66rem', fontWeight: '700', textTransform: 'uppercase' }}>
-                        {t('market_modal_receiver_name', 'Alıcı Adı Soyadı')}
-                      </div>
-                      <div style={{ color: '#fff', fontWeight: '800', fontSize: '0.88rem', marginTop: '2px' }}>
-                        Ömer Faruk Şahin
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyText('Ömer Faruk Şahin', 'receiver_name')}
-                      style={{
-                        background: copiedField === 'receiver_name' ? '#2ecc71' : 'rgba(255, 255, 255, 0.12)',
-                        border: 'none', color: copiedField === 'receiver_name' ? '#000' : '#fff',
-                        padding: '6px 12px', borderRadius: '8px',
-                        fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                      }}
-                    >
-                      {copiedField === 'receiver_name' ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copiedField === 'receiver_name' ? t('market_modal_copied', 'Kopyalandı!') : t('market_modal_copy_name', 'İsmi Kopyala')}</span>
-                    </button>
-                  </div>
-
-                  {/* 2. IBAN Bilgisi (VakıfBank - 7/24 FAST) */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'rgba(0, 242, 254, 0.05)', padding: '10px 12px', borderRadius: '12px',
-                    border: '1px solid rgba(0, 242, 254, 0.25)'
-                  }}>
-                    <div>
-                      <div style={{ color: '#00f2fe', fontSize: '0.66rem', fontWeight: '800' }}>
-                        VAKIFBANK IBAN (7/24 FAST)
-                      </div>
-                      <div style={{ color: '#00f2fe', fontWeight: '900', fontFamily: 'monospace', fontSize: '0.86rem', marginTop: '2px', letterSpacing: '0.5px' }}>
-                        TR14 0001 5001 5800 7309 8205 56
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyText('TR140001500158007309820556', 'iban')}
-                      style={{
-                        background: copiedField === 'iban' ? '#2ecc71' : 'rgba(0, 242, 254, 0.2)',
-                        border: '1px solid rgba(0, 242, 254, 0.4)', color: copiedField === 'iban' ? '#000' : '#00f2fe',
-                        padding: '6px 12px', borderRadius: '8px',
-                        fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                      }}
-                    >
-                      {copiedField === 'iban' ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copiedField === 'iban' ? t('market_modal_copied', 'Kopyalandı!') : t('market_modal_copy_iban', 'IBAN Kopyala')}</span>
-                    </button>
-                  </div>
-
-                  {/* Gönderen Adı Soyadı Inputu */}
-                  <div style={{ marginTop: '2px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.70rem', color: '#fff', fontWeight: '800' }}>
-                        {t('market_modal_sender_title', 'Banka Dekontundaki Gönderen Adı Soyadı')} <span style={{ color: '#ff416c' }}>*</span>
-                      </span>
-                      <span style={{ fontSize: '0.64rem', color: '#ff416c', fontWeight: '700' }}>{t('market_required_field')}</span>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder={t('market_modal_sender_placeholder', 'Banka hesabınızdaki adınız ve soyadınız...')}
-                      value={senderName}
-                      onChange={(e) => {
-                        setSenderName(e.target.value);
-                        if (validationError) setValidationError(null);
-                      }}
-                      style={{
-                        width: '100%', padding: '9px 12px', borderRadius: '10px',
-                        background: 'rgba(255,255,255,0.06)', 
-                        border: validationError && (!senderName.trim() || senderName.trim().length < 3) ? '1.5px solid #ff416c' : '1px solid rgba(0, 242, 254, 0.4)',
-                        color: '#fff', fontSize: '0.78rem', outline: 'none'
-                      }}
-                    />
-                    <div style={{
-                      marginTop: '6px', fontSize: '0.66rem', color: '#ffb74d',
-                      background: 'rgba(255, 183, 77, 0.08)', padding: '6px 8px', borderRadius: '8px',
-                      border: '1px solid rgba(255, 183, 77, 0.2)', lineHeight: '1.4'
-                    }}>
-                      💡 <b>7/24 Anında Yükleme:</b> Gece saatlerinde beklemeden hemen konuşmak için <b>Kredi Kartı</b> veya <b>Kripto (USDT)</b> tercih edebilirsiniz. Havale/EFT işlemleri mesai saatlerinde onaylanır.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            )}
-
-            {!isIosNative() && !isAndroidNative() && (cardSubmitted ? (
-              <div style={{
-                background: 'rgba(255, 215, 0, 0.12)', border: '1.5px solid #ffd700',
-                borderRadius: '18px', padding: '16px', textAlign: 'center', animation: 'fadeIn 0.2s ease'
-              }}>
-                <div style={{ fontSize: '2rem', marginBottom: '6px' }}>⚡</div>
-                <h4 style={{ color: '#ffd700', margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: '800' }}>
-                  {t('market_3ds_opened_title')}
-                </h4>
-                <p style={{ color: 'rgba(255,255,255,0.88)', margin: '0 0 14px 0', fontSize: '0.78rem', lineHeight: '1.45' }}>
-                  {t('market_3ds_opened_desc')}
-                </p>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={openShopierPopup}
-                    style={{
-                      background: 'rgba(255, 215, 0, 0.2)', border: '1px solid #ffd700',
-                      color: '#ffd700', padding: '8px 14px', borderRadius: '12px',
-                      fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer'
-                    }}
-                  >
-                    {t('market_reopen_window')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCardSubmitted(false);
-                      setSelectedPackage(null);
-                    }}
-                    style={{
-                      background: 'linear-gradient(135deg, #00f2fe, #4facfe)', border: 'none',
-                      color: '#000', padding: '8px 16px', borderRadius: '12px',
-                      fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer'
-                    }}
-                  >
-                    {t('market_done_btn')}
-                  </button>
-                </div>
-              </div>
-            ) : transferSubmitted ? (
-              <div style={{
-                background: 'rgba(46, 204, 113, 0.2)', border: '1px solid #2ecc71',
-                borderRadius: '16px', padding: '14px', textAlign: 'center', animation: 'fadeIn 0.2s ease'
-              }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🎉</div>
-                <h4 style={{ color: '#2ecc71', margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: '800' }}>
-                  {t('market_modal_transfer_success_title', 'Havale Bildiriminiz Alındı!')}
-                </h4>
-                <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0, fontSize: '0.74rem', lineHeight: '1.4' }}>
-                  {t('market_modal_transfer_success_desc', { code: orderCode })}
-                </p>
-              </div>
-            ) : cryptoSubmitted ? (
-              <div style={{
-                background: cryptoResult?.isAutoCredited ? 'rgba(0, 230, 118, 0.22)' : 'rgba(0, 230, 118, 0.16)',
-                border: '1.5px solid #00e676',
-                borderRadius: '16px', padding: '16px', textAlign: 'center', animation: 'fadeIn 0.2s ease'
-              }}>
-                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{cryptoResult?.isAutoCredited ? '🎉' : '🪙'}</div>
-                <h4 style={{ color: '#00e676', margin: '0 0 4px 0', fontSize: '1rem', fontWeight: '800' }}>
-                  {cryptoResult?.isAutoCredited ? t('market_crypto_success_title', 'Altınlarınız 7/24 Anında Yüklendi!') : t('market_crypto_pending_title', 'Kripto Bildiriminiz Alındı!')}
-                </h4>
-                <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontSize: '0.78rem', lineHeight: '1.4' }}>
-                  {cryptoResult?.message || `${orderCode} - ${getUsdtPrice(selectedPackage)} USDT`}
-                </p>
-              </div>
-            ) : (
-              <div>
-                {/* Doğrulama Hatası Uyarısı */}
-                {validationError && (
-                  <div style={{
-                    background: 'rgba(255, 65, 108, 0.22)',
-                    border: '1.5px solid #ff416c',
-                    borderRadius: '12px',
-                    padding: '10px 14px',
-                    color: '#fff',
-                    fontSize: '0.78rem',
-                    fontWeight: '800',
-                    textAlign: 'center',
-                    marginBottom: '12px',
-                    boxShadow: '0 4px 15px rgba(255, 65, 108, 0.3)'
-                  }}>
-                    {validationError}
-                  </div>
-                )}
-
-                {/* Ödemeyi Tamamla Butonu */}
-                <button
-                  onClick={
-                    paymentMethod === 'card' 
-                      ? handleCardSubmit 
-                      : (paymentMethod === 'crypto' ? handleCryptoSubmit : handleTransferSubmit)
-                  }
-                  disabled={isProcessing || (paymentMethod !== 'card' && cooldownSeconds > 0)}
-                  style={{
-                    width: '100%',
-                    background: (paymentMethod !== 'card' && cooldownSeconds > 0)
-                      ? 'rgba(255,255,255,0.12)'
-                      : (paymentMethod === 'card'
-                          ? 'linear-gradient(135deg, #ffd700 0%, #ff9800 100%)'
-                          : (paymentMethod === 'crypto'
-                              ? 'linear-gradient(135deg, #00e676 0%, #00c853 100%)'
-                              : 'linear-gradient(135deg, #00f2fe 0%, #4facfe 100%)')),
-                    border: (paymentMethod !== 'card' && cooldownSeconds > 0) ? '1px solid rgba(255,255,255,0.2)' : 'none',
-                    color: (paymentMethod !== 'card' && cooldownSeconds > 0) ? '#aaa' : '#000',
-                    padding: '14px', borderRadius: '16px',
-                    fontWeight: '900', fontSize: '0.95rem',
-                    cursor: (isProcessing || (paymentMethod !== 'card' && cooldownSeconds > 0)) ? 'not-allowed' : 'pointer',
-                    boxShadow: (paymentMethod !== 'card' && cooldownSeconds > 0) 
-                      ? 'none' 
-                      : (paymentMethod === 'card' 
-                          ? '0 6px 20px rgba(255, 215, 0, 0.4)' 
-                          : (paymentMethod === 'crypto' ? '0 6px 20px rgba(0, 230, 118, 0.4)' : '0 6px 20px rgba(0, 242, 254, 0.35)')),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }} />
-                      <span>{t('market_modal_processing')}</span>
-                    </>
-                  ) : paymentMethod !== 'card' && cooldownSeconds > 0 ? (
-                    <>
-                      <span>⏳</span>
-                      <span>{t('market_please_wait', { sec: cooldownSeconds })}</span>
-                    </>
-                  ) : (
-                    <>
-                      {paymentMethod === 'card' && <CreditCard size={18} color="#000" />}
-                      {paymentMethod === 'crypto' && <Check size={18} color="#000" />}
-                      {paymentMethod === 'havale_papara' && <Check size={18} color="#000" />}
-                      <span>
-                        {paymentMethod === 'card' 
-                          ? t('market_pay_with_shopier', { price: isTr ? selectedPackage.priceTr : selectedPackage.priceEn })
-                          : (paymentMethod === 'crypto' 
-                              ? t('market_crypto_submit_btn', { amount: getUsdtPrice(selectedPackage) }) 
-                              : t('market_modal_notify_btn'))}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
-            ))}
+                />
+              </Suspense>
+            ) : null}
 
             {/* İade Politikası & Tüketici Güvencesi */}
             <div style={{ marginTop: '12px', textAlign: 'center' }}>

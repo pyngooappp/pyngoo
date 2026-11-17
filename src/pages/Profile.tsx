@@ -470,44 +470,44 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
             </button>
           </div>
           
-          {/* Bakiye Rozeti */}
-          {profile.gender === 'erkek' ? (
+          {/* Bakiye Rozetleri: Hem Altın (Market) hem Elmas (Cüzdan) Herkese Açık */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
             <div 
               onClick={() => navigate('/market')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 18px', borderRadius: '18px',
+                padding: '7px 14px', borderRadius: '18px',
                 background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.18), rgba(255, 140, 0, 0.1))',
                 border: '1.2px solid rgba(255, 215, 0, 0.4)',
                 boxShadow: '0 3px 12px rgba(255, 215, 0, 0.2)',
                 cursor: 'pointer'
               }}
             >
-              <Coins size={18} color="#ffd700" />
-              <span style={{ fontWeight: '900', color: '#ffd700', fontSize: '1.02rem' }}>
-                {profile.total_gold} {t('gold_currency_label')}
+              <Coins size={16} color="#ffd700" />
+              <span style={{ fontWeight: '900', color: '#ffd700', fontSize: '0.96rem' }}>
+                {profile.total_gold ?? 0} {t('gold_currency_label')}
               </span>
-              <ChevronRight size={15} color="rgba(255, 215, 0, 0.7)" />
+              <ChevronRight size={13} color="rgba(255, 215, 0, 0.7)" />
             </div>
-          ) : (
+
             <div 
               onClick={() => navigate('/wallet')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 18px', borderRadius: '18px',
+                padding: '7px 14px', borderRadius: '18px',
                 background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.18), rgba(79, 172, 254, 0.1))',
                 border: '1.2px solid rgba(0, 242, 254, 0.4)',
                 boxShadow: '0 3px 12px rgba(0, 242, 254, 0.2)',
                 cursor: 'pointer'
               }}
             >
-              <span style={{ fontSize: '1.1rem' }}>💎</span>
-              <span style={{ fontWeight: '900', color: '#00f2fe', fontSize: '1.02rem' }}>
+              <span style={{ fontSize: '1rem' }}>💎</span>
+              <span style={{ fontWeight: '900', color: '#00f2fe', fontSize: '0.96rem' }}>
                 {profile.total_diamonds || 0} {t('diamond_currency_label')}
               </span>
-              <ChevronRight size={15} color="rgba(0, 242, 254, 0.7)" />
+              <ChevronRight size={13} color="rgba(0, 242, 254, 0.7)" />
             </div>
-          )}
+          </div>
         </div>
       </header>
 
@@ -644,38 +644,36 @@ export default function Profile({ userId, onLogout }: ProfileProps) {
 
 
 
-        {/* KADIN KULLANICILAR İÇİN CÜZDAN KARTI */}
-        {profile.gender === 'kadin' && (
-          <div 
-            onClick={() => navigate('/wallet')}
-            style={{
-              background: 'linear-gradient(135deg, #09203f 0%, #151833 100%)',
-              border: '1.5px solid rgba(0, 242, 254, 0.4)',
-              borderRadius: '24px', padding: '16px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              cursor: 'pointer', boxShadow: '0 8px 25px rgba(0, 242, 254, 0.2)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '44px', height: '44px', borderRadius: '14px',
-                background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <WalletIcon size={22} color="#000" />
-              </div>
-              <div>
-                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '800', color: '#fff' }}>
-                  {t('profile_wallet_card_title')}
-                </h4>
-                <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>
-                  {t('profile_wallet_card_desc')}
-                </p>
-              </div>
+        {/* CÜZDAN & ELMASLAR KARTI (Herkese Açık) */}
+        <div 
+          onClick={() => navigate('/wallet')}
+          style={{
+            background: 'linear-gradient(135deg, #09203f 0%, #151833 100%)',
+            border: '1.5px solid rgba(0, 242, 254, 0.4)',
+            borderRadius: '24px', padding: '16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            cursor: 'pointer', boxShadow: '0 8px 25px rgba(0, 242, 254, 0.2)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '14px',
+              background: 'linear-gradient(135deg, #00f2fe, #4facfe)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <WalletIcon size={22} color="#000" />
             </div>
-            <ChevronRight size={18} color="#00f2fe" />
+            <div>
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '800', color: '#fff' }}>
+                {t('profile_wallet_card_title')}
+              </h4>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>
+                {t('profile_wallet_card_desc')}
+              </p>
+            </div>
           </div>
-        )}
+          <ChevronRight size={18} color="#00f2fe" />
+        </div>
 
         {/* 3. KULLANICI İSTATİSTİK TABLOSU (Kadınlarda Giriş Serisi Yoktur, Beğeni ve Elmas Kazancı Gösterilir) */}
         {profile.gender === 'kadin' ? (

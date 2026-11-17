@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Gem, CheckCircle2, TrendingUp, History, Clock, Sparkles, Award, Building2, CreditCard, Globe, Coins } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +9,6 @@ import { diamondValue, isTurkishLang, useEconomyConfig } from '../utils/economy'
 type PayoutMethod = 'bank' | 'crypto' | 'paypal' | 'swift';
 
 const Wallet = () => {
-  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const eco = useEconomyConfig();
   const [profile, setProfile] = useState<any>(null);
@@ -228,46 +226,6 @@ const Wallet = () => {
     return <div style={{ color: 'white', textAlign: 'center', marginTop: '50px' }}>{t('wallet_loading')}</div>;
   }
 
-  // Yayıncı olmayan kullanıcılar için bilgilendirici yayıncı stüdyosu kartı
-  if (profile?.gender === 'erkek') {
-    return (
-      <div style={{ padding: '24px', textAlign: 'center', color: 'white', maxWidth: '440px', margin: '40px auto', fontFamily: 'Inter, sans-serif' }}>
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: '24px',
-          padding: '32px 24px',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.4)'
-        }}>
-          <div style={{ fontSize: '3rem', marginBottom: '14px' }}>💎</div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '10px', color: '#fff' }}>
-            {t('wallet_creators_only')}
-          </h2>
-          <p style={{ fontSize: '0.86rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6', marginBottom: '24px' }}>
-            {t('wallet_creators_info', { defaultValue: 'Cüzdan ve elmas ödülleri, Pyngoo platformunda canlı yayın ve görüntülü sohbet gerçekleştiren onaylı yayıncılarımıza özeldir.' })}
-          </p>
-          <button
-            onClick={() => navigate('/host-center')}
-            style={{
-              width: '100%',
-              padding: '13px 20px',
-              borderRadius: '14px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #ff2d55 0%, #ff5252 100%)',
-              color: '#fff',
-              fontWeight: '800',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-              boxShadow: '0 6px 20px rgba(255,45,85,0.4)'
-            }}
-          >
-            {t('host_center_title', { defaultValue: 'Yayıncı Merkezi & Başvuru' })}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ padding: '20px', paddingBottom: '140px', color: 'white', maxWidth: '500px', margin: '0 auto', fontFamily: 'Inter, sans-serif' }}>
       <h1 style={{ textAlign: 'center', marginBottom: '30px', fontWeight: '800', background: 'linear-gradient(to right, #e0c3fc 0%, #8ec5fc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -437,6 +395,35 @@ const Wallet = () => {
             </div>
           )}
 
+          {__IS_IOS__ ? (
+            <div style={{
+              background: 'rgba(255, 215, 0, 0.08)',
+              border: '1px solid rgba(255, 215, 0, 0.35)',
+              borderRadius: '16px',
+              padding: '16px',
+              color: 'rgba(255,255,255,0.92)',
+              fontSize: '0.84rem',
+              lineHeight: '1.55'
+            }}>
+              <p style={{ margin: '0 0 10px 0' }}>
+                {t('wallet_ios_notice', 'Yayıncı elmas ödülleriniz başarıyla hesabınızda birikmektedir. App Store güvenlik politikaları gereğince, banka hesap doğrulaması ve gelir ödemeleri resmi web portalımız üzerinden güvenle gerçekleştirilmektedir.')}
+              </p>
+              <div style={{
+                background: 'rgba(0,0,0,0.35)',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                fontSize: '0.82rem',
+                color: '#ffd700',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span>🌐 https://pyngoo.app</span>
+                <span style={{ fontSize: '0.72rem', color: '#00f2fe' }}>Web Creator Studio</span>
+              </div>
+            </div>
+          ) : (
           <form onSubmit={handleWithdrawal} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Transfer Yöntemi Seçimi */}
             <div>
@@ -648,6 +635,7 @@ const Wallet = () => {
               <span>{t('wallet_withdraw_track_hint')}</span>
             </div>
           </form>
+          )}
         </div>
       )}
 

@@ -133,7 +133,7 @@ export default function Chats({ userId }: ChatsProps) {
     setBuyingPackageId(pkg.id);
     setPurchaseNotice(t('market_apple_processing', { defaultValue: 'Ödeme başlatılıyor...' }));
 
-    if (isIosNative()) {
+    if (__IS_IOS__ || isIosNative()) {
       try {
         const outcome = await purchaseGoldProduct(pkg.appleProductId, userId);
         if (outcome.status === 'success') {
@@ -159,14 +159,7 @@ export default function Chats({ userId }: ChatsProps) {
         setPurchaseNotice(null);
       }
     } else {
-      const SHOPIER_URLS: Record<string, string> = {
-        pack_650: 'https://www.shopier.com/pyngoo/50771182',
-        pack_1400: 'https://www.shopier.com/pyngoo/50771257',
-        pack_3800: 'https://www.shopier.com/pyngoo/50771291',
-        pack_8500: 'https://www.shopier.com/pyngoo/50771329',
-        pack_18000: 'https://www.shopier.com/pyngoo/50771375',
-      };
-      window.open(SHOPIER_URLS[pkg.id] || 'https://www.shopier.com/pyngoo', '_blank');
+      window.location.href = '/market';
       setBuyingPackageId(null);
       setPurchaseNotice(null);
     }

@@ -19,7 +19,7 @@ import Layout from './components/Layout';
 import HostCenter from './pages/HostCenter';
 import LiveRoom from './pages/LiveRoom';
 import LiveRoomsList from './pages/LiveRoomsList';
-const ModeratorPanel = lazy(() => import('./pages/ModeratorPanel'));
+const ModeratorPanel = !__IS_IOS__ ? lazy(() => import('./pages/ModeratorPanel')) : null;
 import { updateSeoForLanguage } from './utils/seoService';
 import { detectUserDefaultLanguage } from './utils/i18n';
 import { sendNewRegistrationToTelegram } from './utils/telegramAlert';
@@ -55,17 +55,18 @@ const parseJwt = (token: string) => {
 };
 
 function App() {
-  const isAdminHost = typeof window !== 'undefined' && !Capacitor.isNativePlatform() && (
+  const isAdminHost = !__IS_IOS__ && typeof window !== 'undefined' && !Capacitor.isNativePlatform() && (
     window.location.hostname.startsWith('admin.') || 
     window.location.hostname === 'admin.pyngoo.app'
   );
 
-  if (isAdminHost) {
+  if (isAdminHost && ModeratorPanel) {
+    const PanelComponent = ModeratorPanel;
     return (
       <BrowserRouter>
         <Suspense fallback={<div style={{ minHeight: '100vh', background: '#090a10' }} />}>
           <Routes>
-            <Route path="*" element={<ModeratorPanel />} />
+            <Route path="*" element={<PanelComponent />} />
           </Routes>
         </Suspense>
       </BrowserRouter>
@@ -547,8 +548,7 @@ function App() {
 
         const isOmer = uid === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || 
                        uid === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c' ||
-                       session.user?.email === 'omersahin1623@hotmail.com' || 
-                       session.user?.email === 'cosmicdreamersleep@gmail.com';
+                       session.user?.email === 'omersahin1623@hotmail.com';
 
         if (isOmer) {
           localStorage.setItem('pyngoo_gender', 'erkek');
