@@ -183,8 +183,6 @@ export default function Explore({ userId }: ExploreProps) {
   const [confirmCallCreator, setConfirmCallCreator] = useState<any | null>(null);
   const [inspectingCreator, setInspectingCreator] = useState<any | null>(null);
 
-  const isFemale = outletContext.profile?.gender === 'kadin' || localStorage.getItem('pyngoo_gender') === 'kadin';
-
   const [followedSet, setFollowedSet] = useState<Set<string>>(() => {
     try {
       const list = JSON.parse(localStorage.getItem(`pyngoo_user_follows_${userId}`) || '[]');
@@ -353,19 +351,13 @@ export default function Explore({ userId }: ExploreProps) {
         .eq('gender', 'kadin')
         .neq('role', 'deleted')
         .neq('is_banned', true)
-        .neq('id', 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b')
-        .neq('id', '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4')
         .not('display_name', 'ilike', '%silinmiş%')
         .not('display_name', 'ilike', '%silinmis%')
-        .not('display_name', 'ilike', '%apoo%')
         .order('total_likes', { ascending: false })
         .limit(30);
 
       if (realUsers) {
         const filteredFemales = realUsers.filter((u: any) => 
-          u.id !== 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' &&
-          u.id !== '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4' &&
-          !u.display_name?.toLowerCase().includes('apoo') &&
           u.gender === 'kadin' &&
           u.is_streamer === true &&
           Boolean(u.avatar && !u.avatar.includes('avatar_female') && u.avatar.length > 20)
@@ -464,14 +456,11 @@ export default function Explore({ userId }: ExploreProps) {
   // A) Eğer giriş yapan kullanıcı kadın yayıncı ise kendisini en başa yerleştir
   const myIsStreamer = 
     outletContext.profile?.role === 'streamer' ||
-    outletContext.profile?.is_streamer || 
-    localStorage.getItem(`pyngoo_is_streamer_${userId}`) === 'true' ||
-    userId === '95eca0cf-3f6f-4c0f-9778-47760f1cd4c2' ||
-    outletContext.profile?.display_name?.toLowerCase().includes('selin');
+    outletContext.profile?.is_streamer === true || 
+    localStorage.getItem(`pyngoo_is_streamer_${userId}`) === 'true';
 
   const isFemaleStreamerUser = 
     (outletContext.profile?.gender === 'kadin' && (myIsStreamer || outletContext.profile?.avatar || streamerAvatar)) ||
-    userId === '95eca0cf-3f6f-4c0f-9778-47760f1cd4c2' ||
     localStorage.getItem(`pyngoo_is_streamer_${userId}`) === 'true';
 
   if (isFemaleStreamerUser) {
@@ -914,31 +903,26 @@ export default function Explore({ userId }: ExploreProps) {
           </span>
         </div>
 
-        {liveRooms.length === 0 && !isFemale ? (
-          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.4 }}>
-            {t('explore_live_rooms_empty_male', 'Yayın açıldığında hemen buradan girebilirsin!')}
-          </p>
-        ) : (
-          <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-            {liveRooms.length === 0 ? (
-              <button
-                onClick={() => navigate(`/room/${userId}`)}
-                style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                  background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
-                }}
-              >
-                <div style={{
-                  width: '58px', height: '58px', borderRadius: '50%',
-                  border: '2px dashed rgba(255, 45, 85, 0.55)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#ff4d6d', fontSize: '1.5rem', fontWeight: '300'
-                }}>+</div>
-                <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 1.2 }}>
-                  {t('explore_live_room_be_first', 'İlk Canlıya Sen Geç')}
-                </span>
-              </button>
-            ) : (
+        <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {liveRooms.length === 0 ? (
+            <button
+              onClick={() => navigate(`/room/${userId}`)}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, width: '64px'
+              }}
+            >
+              <div style={{
+                width: '58px', height: '58px', borderRadius: '50%',
+                border: '2px dashed rgba(255, 45, 85, 0.55)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#ff4d6d', fontSize: '1.5rem', fontWeight: '300'
+              }}>+</div>
+              <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 1.2 }}>
+                {t('explore_live_room_be_first', 'İlk Canlıya Sen Geç')}
+              </span>
+            </button>
+          ) : (
               liveRooms.map((room) => (
                 <button
                   key={room.id}
@@ -975,7 +959,6 @@ export default function Explore({ userId }: ExploreProps) {
               ))
             )}
           </div>
-        )}
 
         {/* Yayıncı sayısı az olsa da her zaman görünür, küçük ve dikkat çekici bir rozet-buton —
             cam (glass) efektli: opak renk yerine yarı saydam + backdrop-blur + ince altın kenarlık. */}
@@ -1029,15 +1012,15 @@ export default function Explore({ userId }: ExploreProps) {
         <h1 style={{
           fontSize: '1.05rem',
           fontWeight: '800',
-          background: isFemale ? 'linear-gradient(135deg, #ffd700 0%, #ff8800 50%, #ff416c 100%)' : 'linear-gradient(135deg, #ffffff 0%, #ff758c 100%)',
+          background: 'linear-gradient(135deg, #ffd700 0%, #ff8800 50%, #ff416c 100%)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           margin: '0 0 3px 0'
         }}>
-          {isFemale ? t('explore_female_title', 'Yayıncı Vitrini & Liderler 👑') : t('explore_title')}
+          {t('explore_title', 'Keşfet & Yayıncı Vitrini 👑')}
         </h1>
         <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.72rem', margin: 0 }}>
-          {isFemale ? t('explore_female_subtitle', 'Zirvedeki yıldız yayıncıların vitrinlerini incele, ilham al ve kendi vitrinini #1 sıraya taşı!') : t('explore_subtitle')}
+          {t('explore_subtitle', 'Zirvedeki yıldız yayıncıların vitrinlerini incele, canlı odalara katıl ve sohbet et!')}
         </p>
 
         {/* Filtre Butonlari */}
@@ -1351,55 +1334,6 @@ export default function Explore({ userId }: ExploreProps) {
                     </>
                   )}
                 </button>
-              ) : isFemale ? (
-                /* KADIN KULLANICI İÇİN: Kadınlar birbirini aramaz ve altın harcamaz! Vitrini inceleme & Trend Sıralaması */
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div
-                    style={{
-                      padding: '11px 13px',
-                      borderRadius: '16px',
-                      background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.16), rgba(255, 170, 0, 0.22))',
-                      border: '1.5px solid rgba(255, 215, 0, 0.4)',
-                      color: '#ffd700',
-                      fontWeight: '800',
-                      fontSize: '0.84rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      flexShrink: 0
-                    }}
-                  >
-                    <Crown size={16} color="#ffd700" />
-                    <span>#{index + 1} Trend</span>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      recordProfileView(creator.id);
-                      setInspectingCreator({ ...creator, rank: index + 1 });
-                    }}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      padding: '12px 14px',
-                      borderRadius: '16px',
-                      background: 'linear-gradient(135deg, rgba(255, 45, 85, 0.18), rgba(255, 82, 82, 0.26))',
-                      border: '1.5px solid rgba(255, 45, 85, 0.45)',
-                      color: '#ff4d6d',
-                      fontWeight: '800',
-                      fontSize: '0.90rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      boxShadow: '0 4px 14px rgba(255, 45, 85, 0.15)'
-                    }}
-                  >
-                    <Eye size={17} />
-                    <span>{t('explore_female_view_showcase', 'Vitrini İncele 👁️')}</span>
-                  </button>
-                </div>
               ) : (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   {/* Takip Et / Takip Ediliyor Butonu */}
@@ -1911,7 +1845,6 @@ export default function Explore({ userId }: ExploreProps) {
                 {t('explore_female_showcase_modal_tip', '💡 İpucu: Işıltılı, estetik vitrin fotoğrafları ve samimi bir selamlama cümlen seni Keşfet\'in en tepesine taşır!')}
               </div>
 
-              {!isFemale && (
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
                   <button
                     onClick={() => {
@@ -1940,7 +1873,6 @@ export default function Explore({ userId }: ExploreProps) {
                     <span>{t('explore_call_btn', 'Hemen Canlı Ara')}</span>
                   </button>
                 </div>
-              )}
 
               {/* UGC Güvenlik & Şikayet Butonu (Guideline 1.2 Uyumluluğu) */}
               <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '14px' }}>

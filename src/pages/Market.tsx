@@ -404,7 +404,7 @@ export default function Market({ userId }: MarketProps) {
 
   // Profil Verisini Çek & Canlı Bakiye Takibi
   useEffect(() => {
-    const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
+    const isOmer = !__IS_IOS__ && (userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c');
     const fetchProfile = async () => {
       if (!userId) return;
       try {

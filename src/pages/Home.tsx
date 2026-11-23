@@ -128,8 +128,8 @@ export default function Home({ userId }: HomeProps) {
     setTimeout(() => setJustWentLive(false), 4500);
   };
 
-  const isOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
-  const isApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
+  const isOmer = !__IS_IOS__ && (userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c');
+  const isApoo = !__IS_IOS__ && (userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4');
 
   const isKadin = !isOmer && !isApoo && (
     profile?.gender 
@@ -141,8 +141,7 @@ export default function Home({ userId }: HomeProps) {
   const hasStreamerActivated = isKadin && (
     Boolean(localStorage.getItem(`pyngoo_streamer_avatar_${userId}`)) ||
     Boolean(profile?.avatar && !profile.avatar.includes('avatar_female') && profile.avatar.length > 20) ||
-    userId === '95eca0cf-3f6f-4c0f-9778-47760f1cd4c2' ||
-    profile?.display_name?.toLowerCase().includes('selin')
+    Boolean(profile?.is_streamer === true)
   );
 
   const isFemaleStreamer = isKadin && hasStreamerActivated;
@@ -169,8 +168,8 @@ export default function Home({ userId }: HomeProps) {
       try {
         const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
         if (data) {
-          const isThisOmer = userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
-          const isThisApoo = userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
+          const isThisOmer = !__IS_IOS__ && (userId === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || userId === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c');
+          const isThisApoo = !__IS_IOS__ && (userId === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4');
 
           if (isThisOmer) {
             data.gender = 'erkek';
@@ -208,9 +207,7 @@ export default function Home({ userId }: HomeProps) {
             const isAlreadyActive = Boolean(
               localStorage.getItem(`pyngoo_streamer_avatar_${userId}`) ||
               data.avatar ||
-              data.is_streamer === true ||
-              userId === '95eca0cf-3f6f-4c0f-9778-47760f1cd4c2' ||
-              data.display_name?.toLowerCase().includes('selin')
+              data.is_streamer === true
             );
 
             if (!isAlreadyActive) {

@@ -403,25 +403,15 @@ const Wallet = () => {
               padding: '16px',
               color: 'rgba(255,255,255,0.92)',
               fontSize: '0.84rem',
-              lineHeight: '1.55'
+              lineHeight: '1.55',
+              textAlign: 'center'
             }}>
-              <p style={{ margin: '0 0 10px 0' }}>
-                {t('wallet_ios_notice', 'Yayıncı elmas ödülleriniz başarıyla hesabınızda birikmektedir. App Store güvenlik politikaları gereğince, banka hesap doğrulaması ve gelir ödemeleri resmi web portalımız üzerinden güvenle gerçekleştirilmektedir.')}
+              <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#ffd700' }}>
+                💎 {t('wallet_creator_rewards_title', 'İçerik Üretici ve Yayıncı Programı')}
               </p>
-              <div style={{
-                background: 'rgba(0,0,0,0.35)',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                fontSize: '0.82rem',
-                color: '#ffd700',
-                fontWeight: '700',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <span>🌐 https://pyngoo.app</span>
-                <span style={{ fontSize: '0.72rem', color: '#00f2fe' }}>Web Creator Studio</span>
-              </div>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.75)' }}>
+                {t('wallet_creator_rewards_desc', 'Canlı yayın ve sohbetlerinizde topladığınız elmaslar profilinizde güvenle saklanır. Seviye hedeflerine ulaştıkça yeni rozetler ve yayıncı ayrıcalıkları kazanırsınız.')}
+              </p>
             </div>
           ) : (
           <form onSubmit={handleWithdrawal} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

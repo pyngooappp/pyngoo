@@ -546,9 +546,11 @@ function App() {
         let savedProfile: any = null;
         try { savedProfile = savedStr ? JSON.parse(savedStr) : null; } catch (_) {}
 
-        const isOmer = uid === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || 
-                       uid === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c' ||
-                       session.user?.email === 'omersahin1623@hotmail.com';
+        const isOmer = !__IS_IOS__ && (
+          uid === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || 
+          uid === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c' ||
+          session.user?.email === 'omersahin1623@hotmail.com'
+        );
 
         if (isOmer) {
           localStorage.setItem('pyngoo_gender', 'erkek');
@@ -568,8 +570,7 @@ function App() {
           localStorage.getItem('pyngoo_gender') === 'kadin' || 
           cookieGen === 'kadin' ||
           metaGender === 'kadin' || 
-          savedProfile?.gender === 'kadin' ||
-          uid === 'cc9587a1-5e24-4162-9be9-8ed7999c5e2a'); // Canlıda yeni kayıt olan kadın kullanıcımızın anında onarılması
+          savedProfile?.gender === 'kadin');
 
         const pendingGender = isOmer ? 'erkek' : (isKadin ? 'kadin' : (urlGender || localStorage.getItem('pending_gender') || localStorage.getItem('pyngoo_gender') || metaGender || savedProfile?.gender || 'erkek'));
         const pendingRole = isOmer ? 'admin' : (isKadin ? 'streamer' : (urlRole || localStorage.getItem('pending_role') || metaRole || 'user'));
@@ -1647,8 +1648,8 @@ function App() {
     let savedProfile: any = null;
     try { savedProfile = savedStr ? JSON.parse(savedStr) : null; } catch (_) {}
 
-    const isOmer = id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || id === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c';
-    const isApoo = id === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4';
+    const isOmer = !__IS_IOS__ && (id === 'd6afbbb7-9a25-4552-a913-e80a1bae7e2b' || id === '22b3c0e7-e1e2-4cb5-9532-990066b5a80c');
+    const isApoo = !__IS_IOS__ && (id === '16cd9b54-a051-4548-a3ad-d34f4b5b9ab4');
 
     const isKadin = !isOmer && !isApoo && (localStorage.getItem('pyngoo_gender') === 'kadin' || 
                     localStorage.getItem('pending_gender') === 'kadin' ||
